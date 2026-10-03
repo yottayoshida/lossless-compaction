@@ -31,7 +31,7 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, PLUGIN, RECALL, STORE_COMMAND, placesOf, recall, recallMeant, type Recalled, type StoreDirs } from '../src/store.ts';
+import { FIND, PLUGIN, RECALL, STORE_COMMAND, configDirFrom, placesOf, recall, recallMeant, type Recalled, type StoreDirs } from '../src/store.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
@@ -286,9 +286,9 @@ async function noteRootOf($: WithEnv & WithFiles & WithSettings & WithSession, s
     const env = await envOf($);
     const taints = await taintsOf($, env, options);
     if (taints === null || placeTaints(taints, {}).length > 0) return;
-    const trimmed = (value: string | undefined) => (value ?? '').trim().replace(/\/+$/, '');
-    const config = trimmed(env.CLAUDE_CONFIG_DIR) || (trimmed(env.HOME) && `${trimmed(env.HOME)}/.claude`);
-    if (!config.startsWith('/')) return;
+    // Read as the store's default place is: transcripts are looked for under the directory results are kept beside.
+    const config = configDirFrom(env);
+    if (config === null) return;
     const root = await rootFor(filesOf($), listOf($), config, sessionId);
     if (root === null) return;
     await noteRoot(filesOf($), store.write, root, Date.now());

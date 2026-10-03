@@ -239,6 +239,31 @@ test('a kept part of the conversation is not looked through for a value: what wa
   assert.match(answer, /^\[not found\] None of the moved-out results has a line holding "4821" as a word of its own/);
 });
 
+test('a long input kept in a part is offered to Jev by the call it is of, not by the result written above it (#72)', async () => {
+  const files = new MemoryFiles();
+  // The Write alone is over PART_BYTES, so its content leaves the part as a ticket of its own, after the Read's result.
+  const talk: Message[] = [
+    ...conversation([{ tool: 'Read', input: { file_path: 'src/a.ts' }, text: output('a', 40) }]),
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'toolu_w', tool: 'Write', input: { file_path: 'src/b.ts', content: 'b'.repeat(PART_BYTES + 1) } }] },
+  ];
+  const now: Message[] = [summary as Message, { role: 'user', text: await kept(files, talk), toolUses: [] }];
+  const offered: string[] = [];
+  const { http } = recordingHttp((request) => {
+    const criteria = (questionsOf(request)['q'] as { criteria?: Record<string, string> }).criteria ?? {};
+    offered.push(...Object.values(criteria));
+    const keys = Object.keys(criteria);
+    return ok({ answers: { q: { type: 'choice', choice: 'none', probabilities: Object.fromEntries(keys.map((key) => [key, key === 'none' ? 0.9 : 0.1 / (keys.length - 1)])) } } });
+  });
+
+  await find({ files, dirs: [DIR], messages: now, provider: TYPESAFE, http, question: 'What did src/a.ts say?' });
+  const written = offered.filter((option) => option.includes('It reads: bbbb'));
+  const read = offered.filter((option) => option.includes('It reads: a line 1'));
+  assert.equal(written.length, 1, offered.join('\n'));
+  assert.match(written[0] ?? '', /^Write called with \{"file_path":"src\/b\.ts"/);
+  assert.equal(read.length, 1, offered.join('\n'));
+  assert.match(read[0] ?? '', /^Read called with \{"file_path":"src\/a\.ts"\}/);
+});
+
 test('find reads at most MAX_PARTS parts', async () => {
   const files = new MemoryFiles();
   const lines: string[] = [];

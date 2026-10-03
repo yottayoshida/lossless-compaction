@@ -277,7 +277,7 @@ test('a collection cut off before its end is tried again a day later, not a week
   const before = await stateIn(files, list(files), [DIR]);
   await noteTried(files, DIR, before, NOW);
   const tried = await stateIn(files, list(files), [DIR]);
-  assert.match(whyNotNow(tried, NOW + RETRY_MS - 1) ?? '', /tried less than a day ago/);
+  assert.match(whyNotNow(tried, NOW + RETRY_MS - 1)?.text ?? '', /tried less than a day ago/);
   assert.equal(whyNotNow(tried, NOW + RETRY_MS), null);
 });
 
@@ -329,19 +329,23 @@ test('the commands are run by absolute path, with -- before every path', async (
 test('nothing is collected until a place is known, for a week after the first was found, or within a week of the last run', async () => {
   const files = new MemoryFiles();
   files.dirs.add(DIR);
-  assert.match(whyNotNow(await stateIn(files, list(files), [DIR]), NOW) ?? '', /no place/);
+  assert.match(whyNotNow(await stateIn(files, list(files), [DIR]), NOW)?.text ?? '', /no place/);
+  assert.equal(whyNotNow(await stateIn(files, list(files), [DIR]), NOW)?.kind, 'no-place');
 
   await noteRoot(files, DIR, ROOT, NOW);
   await noteRoot(files, DIR, ROOT, NOW + DAY); // Written once: the first time stands.
   files.dirs.add(`${DIR}/roots`);
   const state = await stateIn(files, list(files), [DIR]);
   assert.deepEqual(state, { roots: [ROOT], firstSeen: NOW, lastRun: 0, tried: 0, tries: 0, stopped: null });
-  assert.match(whyNotNow(state, NOW + FIRST_WAIT_MS - 1) ?? '', /first week/);
+  assert.match(whyNotNow(state, NOW + FIRST_WAIT_MS - 1)?.text ?? '', /first week/);
+  // /lossless-store tells this one apart to say the day it ends: by its kind, so the words can change.
+  assert.equal(whyNotNow(state, NOW + FIRST_WAIT_MS - 1)?.kind, 'first-week');
   assert.equal(whyNotNow(state, NOW + FIRST_WAIT_MS), null);
 
   await noteRun(files, DIR, NOW + FIRST_WAIT_MS);
   const ran = await stateIn(files, list(files), [DIR]);
-  assert.match(whyNotNow(ran, NOW + FIRST_WAIT_MS + GC_EVERY_MS - 1) ?? '', /less than a week/);
+  assert.match(whyNotNow(ran, NOW + FIRST_WAIT_MS + GC_EVERY_MS - 1)?.text ?? '', /less than a week/);
+  assert.equal(whyNotNow(ran, NOW + FIRST_WAIT_MS + GC_EVERY_MS - 1)?.kind, 'ran');
   assert.equal(whyNotNow(ran, NOW + FIRST_WAIT_MS + GC_EVERY_MS), null);
 });
 

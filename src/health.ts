@@ -5,6 +5,7 @@
 // which hold a size and a tool's name and nothing of a result, and from the
 // clean-up's own record. No stored result is opened.
 
+import { DATE, DAY, blobIdOf, blobsDir, entryIdOf, entryPath, indexDir, tmpDir, trashDayDir, trashDir, trashedIdOf } from './layout.ts';
 import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind } from './lifetime.ts';
 import { PART, PLUGIN, isOwnTool } from './store.ts';
 import type { DirEntry, Files } from './types.ts';
@@ -30,9 +31,6 @@ export function skipped(dir: string): Counted {
   return { dir, missing: true };
 }
 
-const DAY = 24 * 60 * 60 * 1000;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 const filesIn = (entries: readonly DirEntry[] | null) => (entries ?? []).filter((entry) => entry.kind === 'file' && !entry.isLink);
 const tally = (entries: readonly DirEntry[]): Tally => ({ count: entries.length, bytes: entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0) });
 
@@ -40,17 +38,18 @@ const tally = (entries: readonly DirEntry[]): Tally => ({ count: entries.length,
 export async function countStore(files: Files, list: List, dir: string, now: number): Promise<Counted> {
   const top = await listed(list, dir);
   if (top === null) return { dir, missing: true };
-  const blobs = filesIn(await listed(list, `${dir}/blobs`)).filter((entry) => entry.name.endsWith('.txt'));
-  const entries = filesIn(await listed(list, `${dir}/index`)).filter((entry) => entry.name.endsWith('.json'));
+  // Named as the clean-up names them (src/layout.ts): what it would not collect is not counted as kept either.
+  const blobs = filesIn(await listed(list, blobsDir(dir))).filter((entry) => blobIdOf(entry.name) !== undefined);
+  const entries = filesIn(await listed(list, indexDir(dir))).filter((entry) => entryIdOf(entry.name) !== undefined);
   const from = { results: zero(), parts: zero(), own: zero(), unknown: zero() };
-  const sizeOf = new Map(blobs.map((entry) => [entry.name.slice(0, -'.txt'.length), entry.size ?? 0]));
+  const sizeOf = new Map(blobs.map((entry) => [blobIdOf(entry.name) as string, entry.size ?? 0]));
   for (const entry of entries) {
-    const id = entry.name.slice(0, -'.json'.length);
+    const id = entryIdOf(entry.name) as string;
     const bytes = sizeOf.get(id);
     if (bytes === undefined) continue;
     let tool: unknown;
     try {
-      tool = (JSON.parse(await files.read(`${dir}/index/${entry.name}`)) as { tool?: unknown }).tool;
+      tool = (JSON.parse(await files.read(entryPath(dir, id))) as { tool?: unknown }).tool;
     } catch {
       tool = undefined;
     }
@@ -59,7 +58,7 @@ export async function countStore(files: Files, list: List, dir: string, now: num
     into.bytes += bytes;
   }
   // A result without an entry is counted too: a write may have stopped between the two.
-  const entered = new Set(entries.map((entry) => entry.name.slice(0, -'.json'.length)));
+  const entered = new Set(entries.map((entry) => entryIdOf(entry.name) as string));
   for (const [id, bytes] of sizeOf) {
     if (entered.has(id)) continue;
     from.unknown.count += 1;
@@ -67,11 +66,12 @@ export async function countStore(files: Files, list: List, dir: string, now: num
   }
   const times = blobs.map((entry) => entry.mtimeMs);
   const trash: (Tally & { day: string })[] = [];
-  for (const day of await listed(list, `${dir}/trash`) ?? []) {
+  for (const day of await listed(list, trashDir(dir)) ?? []) {
     if (day.kind !== 'dir' || day.isLink || !DATE.test(day.name)) continue;
-    trash.push({ day: day.name, ...tally(filesIn(await listed(list, `${dir}/trash/${day.name}`))) });
+    const trashed = filesIn(await listed(list, trashDayDir(dir, day.name))).filter((entry) => trashedIdOf(entry.name) !== undefined);
+    trash.push({ day: day.name, ...tally(trashed) });
   }
-  const tmp = filesIn(await listed(list, `${dir}/tmp`));
+  const tmp = filesIn(await listed(list, tmpDir(dir)));
   return {
     dir,
     results: { ...tally(blobs), oldest: times.length > 0 ? Math.min(...times) : null, newest: times.length > 0 ? Math.max(...times) : null },
@@ -140,10 +140,10 @@ export function storeReport(counted: readonly Counted[], gc: GcState, now: numbe
   lines.push(`  last ended: ${gc.lastRun > 0 ? timeText(gc.lastRun) : 'never'}; last tried: ${gc.tried > 0 ? timeText(gc.tried) : 'never'}`);
   lines.push(`  tried since it last ended: ${gc.tries}${gc.stopped === null ? '' : `; last stopped ${timeText(gc.stopped.at)}: ${STOP_SAID[gc.stopped.kind]}`}`);
   const why = whyNotNow(gc, now);
-  if (why === 'the first week after transcripts were found is waited out') {
+  if (why?.kind === 'first-week') {
     lines.push(`  next: not before ${timeText(gc.firstSeen + FIRST_WAIT_MS)}, the first week after transcripts were found`);
   } else {
-    lines.push(`  next: ${why ?? 'tried when a session starts, once the place results are kept in is made private'}`);
+    lines.push(`  next: ${why?.text ?? 'tried when a session starts, once the place results are kept in is made private'}`);
   }
   lines.push('', 'Results are plain text on this machine (docs/limits.md, "The files").');
   return lines.join('\n');
@@ -177,8 +177,8 @@ export function lateLine(since: number, now: number, noPlace: boolean): string {
 export async function oldestResult(list: List, dirs: readonly string[]): Promise<number | null> {
   let oldest: number | null = null;
   for (const dir of dirs) {
-    for (const entry of filesIn(await listed(list, `${dir}/blobs`))) {
-      if (entry.name.endsWith('.txt') && (oldest === null || entry.mtimeMs < oldest)) oldest = entry.mtimeMs;
+    for (const entry of filesIn(await listed(list, blobsDir(dir)))) {
+      if (blobIdOf(entry.name) !== undefined && (oldest === null || entry.mtimeMs < oldest)) oldest = entry.mtimeMs;
     }
   }
   return oldest;

@@ -4,6 +4,7 @@
 // the same name and the same ticket, so compacting twice writes nothing new and
 // changes nothing that an earlier compaction left in the conversation.
 
+import { blobPath, blobsDir, entryPath, indexDir, tmpDir } from './layout.ts';
 import { decodeMedia, textOf, type MediaPart } from './media.ts';
 import type { Files, Message } from './types.ts';
 
@@ -126,12 +127,22 @@ export type Places = { CLAUDE_CONFIG_DIR?: string | undefined; HOME?: string | u
 
 const absolute = (path: string) => (ABSOLUTE.test(path) ? path : null);
 
-/** The directory named `name` under Claude Code's own: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`. */
-function defaultDirFrom(name: string, env: Places): string | null {
+/**
+ * Claude Code's own directory: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
+ * Null when what it would be built from is not an absolute path. The store and
+ * the place transcripts are looked for in are both read from here, so they agree.
+ */
+export function configDirFrom(env: Places): string | null {
   const config = withoutLastSlash(env.CLAUDE_CONFIG_DIR);
-  if (config !== '') return absolute(config) && `${config}/${name}`;
+  if (config !== '') return absolute(config);
   const home = withoutLastSlash(env.HOME) || withoutLastSlash(env.USERPROFILE);
-  return absolute(home) && `${home}/.claude/${name}`;
+  return absolute(home) && `${home}/.claude`;
+}
+
+/** The directory named `name` under Claude Code's own. */
+function defaultDirFrom(name: string, env: Places): string | null {
+  const config = configDirFrom(env);
+  return config && `${config}/${name}`;
 }
 
 /**
@@ -170,9 +181,6 @@ export async function placesOf(files: Files, setting: unknown, env: Places): Pro
   const found = await look(files, old);
   return found === 'missing' || found === 'file' ? { write: chosen, read: [chosen, old] } : { write: old, read: [old, chosen] };
 }
-
-const blobPath = (dir: string, id: string) => `${dir}/blobs/${id}.txt`;
-const entryPath = (dir: string, id: string) => `${dir}/index/${id}.json`;
 
 type Found = 'missing' | 'file' | 'symlink' | 'not-a-file';
 
@@ -298,11 +306,11 @@ export async function moveOut(files: Files, dir: string, tool: string, text: str
   if (!TOOL_NAME.test(tool)) return { reason: 'tool-name' };
   const bytes = bytesOf(text);
   if (bytes > MAX_BYTES) return { reason: 'too-large' };
-  for (const path of [dir, `${dir}/blobs`, `${dir}/index`, `${dir}/tmp`]) {
+  for (const path of [dir, blobsDir(dir), indexDir(dir), tmpDir(dir)]) {
     if (!(await plainDirectory(files, path))) return { reason: 'symlink' };
   }
   const id = await idOf(text);
-  const tmp = `${dir}/tmp`;
+  const tmp = tmpDir(dir);
   const blob = await writeOnce(files, blobPath(dir, id), text, tmp, () => true);
   if (blob) return blob;
   const entry = await writeOnce(files, entryPath(dir, id), JSON.stringify({ bytes, tool }), tmp, notJson);

@@ -7,6 +7,7 @@ import {
   MAX_BYTES,
   RECALL_TOOL,
   idMeant,
+  configDirFrom,
   idOf,
   isStored,
   moveOut,
@@ -440,6 +441,20 @@ test('a place that is not an absolute path is no place: it would be inside the r
   assert.equal(storeDirFrom('moved', home), null);
   assert.equal(storeDirFrom('/', home), null);
   assert.equal(storeDirFrom(7, home), '/home/u/.claude/lossless-compaction');
+});
+
+test("Claude Code's own directory, where the hook looks for this session's transcript: CLAUDE_CONFIG_DIR, else ~/.claude, and an absolute path or none", () => {
+  assert.equal(configDirFrom({ HOME: '/home/u' }), '/home/u/.claude');
+  assert.equal(configDirFrom({ HOME: ' /home/u/ ' }), '/home/u/.claude');
+  assert.equal(configDirFrom({ CLAUDE_CONFIG_DIR: '/etc/claude/', HOME: '/home/u' }), '/etc/claude');
+  // With no HOME, USERPROFILE, as for the store: the hook had read HOME alone, and recorded no place there.
+  assert.equal(configDirFrom({ USERPROFILE: 'C:\\Users\\u\\' }), 'C:\\Users\\u/.claude');
+  assert.equal(configDirFrom({ HOME: '', USERPROFILE: 'C:\\Users\\u' }), 'C:\\Users\\u/.claude');
+  // A relative path set is no place, and HOME is not taken in its stead.
+  assert.equal(configDirFrom({ CLAUDE_CONFIG_DIR: '.', HOME: '/home/u' }), null);
+  assert.equal(configDirFrom({ HOME: '../up' }), null);
+  assert.equal(configDirFrom({ CLAUDE_CONFIG_DIR: '/', HOME: '/home/u' }), '/home/u/.claude');
+  assert.equal(configDirFrom({}), null);
 });
 
 /** The wording version 0.1.0 wrote. Conversations compacted then still carry it. */

@@ -11,10 +11,11 @@
 // back what they need from the trash first, so a result moved there while a
 // session still used it is not lost.
 
+import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { idOf, isPart, readPartTicket, readTicket, recall } from './store.ts';
 import type { DirEntry, Exec, Files, Message } from './types.ts';
 
-const DAY = 24 * 60 * 60 * 1000;
+export { dayOf };
 /** How often the transcripts are read. Measured: 81 s for 2.9 GB of them. */
 export const GC_EVERY_MS = 7 * DAY;
 /** How long a result stays in the trash, unreferenced, before it is removed. */
@@ -27,9 +28,6 @@ export const FIRST_WAIT_MS = 7 * DAY;
 export const SEARCH_WITHIN_MS = 5 * 60 * 1000;
 
 const ID = /^[0-9a-f]{64}$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const BLOB = /^([0-9a-f]{64})\.txt$/;
-const TRASHED = /^([0-9a-f]{64})\.(?:txt|json)$/;
 
 export type List = (path: string) => Promise<DirEntry[]>;
 
@@ -58,8 +56,8 @@ export type GcState = { roots: string[]; firstSeen: number; lastRun: number; tri
 /** What `gc.json` holds. */
 export type GcRecord = Pick<GcState, 'lastRun' | 'tried' | 'tries' | 'stopped'>;
 
-const rootFile = async (dir: string, root: string) => `${dir}/roots/${await idOf(root)}.json`;
-const lastRunFile = (dir: string) => `${dir}/gc.json`;
+const rootFile = async (dir: string, root: string) => rootPath(dir, await idOf(root));
+const lastRunFile = gcFile;
 
 async function readJson(files: Files, path: string): Promise<unknown> {
   try {
@@ -78,9 +76,9 @@ export async function stateIn(files: Files, list: List, dirs: readonly string[])
   let tries = 0;
   let stopped: Stopped | null = null;
   for (const dir of dirs) {
-    for (const entry of (await listed(list, `${dir}/roots`)) ?? []) {
-      if (entry.kind !== 'file' || entry.isLink || !entry.name.endsWith('.json')) continue;
-      const value = (await readJson(files, `${dir}/roots/${entry.name}`)) as { root?: unknown; at?: unknown } | undefined;
+    for (const entry of (await listed(list, rootsDir(dir))) ?? []) {
+      if (entry.kind !== 'file' || entry.isLink || !isRootName(entry.name)) continue;
+      const value = (await readJson(files, `${rootsDir(dir)}/${entry.name}`)) as { root?: unknown; at?: unknown } | undefined;
       if (typeof value?.root !== 'string' || typeof value.at !== 'number') continue;
       roots.add(value.root);
       firstSeen = firstSeen === 0 ? value.at : Math.min(firstSeen, value.at);
@@ -148,12 +146,15 @@ export async function noteRun(files: Files, dir: string, now: number): Promise<v
 /** How long after a collection was tried, without ending, it is tried again. */
 export const RETRY_MS = DAY;
 
+/** Why no collection runs now: which reason, and the words it is said in. A caller tells reasons apart by `kind`. */
+export type NotNow = { kind: 'no-place' | 'first-week' | 'ran' | 'tried'; text: string };
+
 /** Why no collection runs now, or null when one does. */
-export function whyNotNow(state: GcState, now: number): string | null {
-  if (state.roots.length === 0) return 'no place transcripts are kept in is known yet';
-  if (now - state.firstSeen < FIRST_WAIT_MS) return 'the first week after transcripts were found is waited out';
-  if (now - state.lastRun < GC_EVERY_MS) return 'it ran less than a week ago';
-  if (now - state.tried < RETRY_MS) return 'one was tried less than a day ago';
+export function whyNotNow(state: GcState, now: number): NotNow | null {
+  if (state.roots.length === 0) return { kind: 'no-place', text: 'no place transcripts are kept in is known yet' };
+  if (now - state.firstSeen < FIRST_WAIT_MS) return { kind: 'first-week', text: 'the first week after transcripts were found is waited out' };
+  if (now - state.lastRun < GC_EVERY_MS) return { kind: 'ran', text: 'it ran less than a week ago' };
+  if (now - state.tried < RETRY_MS) return { kind: 'tried', text: 'one was tried less than a day ago' };
   return null;
 }
 
@@ -296,8 +297,6 @@ export type Trashed = { day: string; id: string };
 /** What a collection does, decided from what is on disk and what is in use. */
 export type GcPlan = { toTrash: string[]; toRestore: Trashed[]; toRemove: Trashed[] };
 
-export const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
-
 /**
  * Results over a day old that no transcript names go to the trash; in the
  * trash, those named again go back, and those the trash has held for the
@@ -307,7 +306,7 @@ export const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0,
 export function planGc(blobs: readonly DirEntry[], trashed: readonly Trashed[], live: ReadonlySet<string>, now: number): GcPlan {
   const toTrash = blobs
     .filter((entry) => entry.kind === 'file' && !entry.isLink && now - entry.mtimeMs >= YOUNG_MS)
-    .map((entry) => BLOB.exec(entry.name)?.[1])
+    .map((entry) => blobIdOf(entry.name))
     .filter((id): id is string => id !== undefined && !live.has(id));
   const toRestore = trashed.filter((item) => live.has(item.id));
   const before = dayOf(now - GRACE_MS);
@@ -317,17 +316,17 @@ export function planGc(blobs: readonly DirEntry[], trashed: readonly Trashed[], 
 
 /** What is in `<dir>/trash`, by day; null when it cannot be read. */
 export async function trashIn(list: List, dir: string): Promise<Trashed[] | null> {
-  const days = await listed(list, `${dir}/trash`);
+  const days = await listed(list, trashDir(dir));
   if (days === null) return [];
   const items: Trashed[] = [];
   for (const day of days) {
     if (day.kind !== 'dir' || day.isLink || !DATE.test(day.name)) continue;
-    const entries = await listed(list, `${dir}/trash/${day.name}`);
+    const entries = await listed(list, trashDayDir(dir, day.name));
     if (entries === null) return null;
     // A blob or its entry alone counts: a move may have stopped between the two.
     const ids = new Set<string>();
     for (const entry of entries) {
-      const id = entry.kind === 'file' && !entry.isLink ? TRASHED.exec(entry.name)?.[1] : undefined;
+      const id = entry.kind === 'file' && !entry.isLink ? trashedIdOf(entry.name) : undefined;
       if (id !== undefined) ids.add(id);
     }
     for (const id of ids) items.push({ day: day.name, id });
@@ -356,9 +355,7 @@ async function runIn(exec: Exec, program: string, flags: readonly string[], path
   return true;
 }
 
-const blobAt = (dir: string, id: string) => `${dir}/blobs/${id}.txt`;
-const entryAt = (dir: string, id: string) => `${dir}/index/${id}.json`;
-const trashedAt = (dir: string, item: Trashed) => [`${dir}/trash/${item.day}/${item.id}.txt`, `${dir}/trash/${item.day}/${item.id}.json`];
+const trashedAt = (dir: string, item: Trashed) => trashedPaths(dir, item.day, item.id);
 
 /** Puts back from the trash each of `ids` that is there. Resolves with how many were. */
 export async function restore(list: List, exec: Exec, dir: string, ids: ReadonlySet<string>): Promise<number> {
@@ -445,14 +442,15 @@ export async function restoreThroughParts(
 }
 
 async function putBack(exec: Exec, dir: string, items: readonly Trashed[]): Promise<boolean> {
-  const blobs = items.map((item) => trashedAt(dir, item)[0] as string);
-  const entries = items.map((item) => trashedAt(dir, item)[1] as string);
-  return (await runIn(exec, 'mv', ['-n'], blobs, [`${dir}/blobs/`])) && (await runIn(exec, 'mv', ['-n'], entries, [`${dir}/index/`]));
+  const blobs = items.map((item) => trashedAt(dir, item)[0]);
+  const entries = items.map((item) => trashedAt(dir, item)[1]);
+  return (await runIn(exec, 'mv', ['-n'], blobs, [`${blobsDir(dir)}/`])) && (await runIn(exec, 'mv', ['-n'], entries, [`${indexDir(dir)}/`]));
 }
 
 export type Collected = { trashed: number; restored: number; removed: number } | Stop;
 
-const blobNames = async (list: List, dir: string) => new Set(((await listed(list, `${dir}/blobs`)) ?? []).map((entry) => entry.name));
+const blobNames = async (list: List, dir: string) => new Set(((await listed(list, blobsDir(dir))) ?? []).map((entry) => entry.name));
+const entryNames = async (list: List, dir: string) => new Set(((await listed(list, indexDir(dir))) ?? []).map((entry) => entry.name));
 
 /**
  * One collection of `dir` against the ids in use. What it reports is counted
@@ -462,7 +460,7 @@ const blobNames = async (list: List, dir: string) => new Set(((await listed(list
  * collection put back when it is named.
  */
 export async function collect(list: List, exec: Exec, dir: string, live: ReadonlySet<string>, now: number): Promise<Collected> {
-  const blobs = await listed(list, `${dir}/blobs`);
+  const blobs = await listed(list, blobsDir(dir));
   if (blobs === null) return { trashed: 0, restored: 0, removed: 0 };
   const trashed = await trashIn(list, dir);
   if (trashed === null) return { stop: `the trash of ${dir} could not be listed`, kind: 'trash' };
@@ -471,22 +469,22 @@ export async function collect(list: List, exec: Exec, dir: string, live: Readonl
     if (!(await putBack(exec, dir, plan.toRestore))) return { stop: 'what is in use could not be put back', kind: 'move' };
     // What is left of them in the trash had a copy back in place already (`mv -n` kept it): the same text, by its name.
     const back = await blobNames(list, dir);
-    const entries = new Set(((await listed(list, `${dir}/index`)) ?? []).map((entry) => entry.name));
+    const entries = await entryNames(list, dir);
     // Each copy only once the one in place is there: an entry whose move failed stays in the trash, to be put back.
     const doubled = plan.toRestore.flatMap((item) => {
-      const [blob, entry] = trashedAt(dir, item) as [string, string];
-      return [...(back.has(`${item.id}.txt`) ? [blob] : []), ...(entries.has(`${item.id}.json`) ? [entry] : [])];
+      const [blob, entry] = trashedAt(dir, item);
+      return [...(back.has(blobName(item.id)) ? [blob] : []), ...(entries.has(entryName(item.id)) ? [entry] : [])];
     });
     if (!(await runIn(exec, 'rm', ['-f'], doubled))) return { stop: 'the trash could not be emptied', kind: 'trash' };
   }
   if (plan.toTrash.length > 0) {
-    const day = `${dir}/trash/${dayOf(now)}`;
+    const day = trashDayDir(dir, dayOf(now));
     if (!(await runIn(exec, 'mkdir', ['-p'], [day])) || (await listed(list, day)) === null) return { stop: 'the trash could not be made', kind: 'trash' };
-    const indexed = new Set(((await listed(list, `${dir}/index`)) ?? []).map((entry) => entry.name));
-    const entries = plan.toTrash.filter((id) => indexed.has(`${id}.json`)).map((id) => entryAt(dir, id));
+    const indexed = await entryNames(list, dir);
+    const entries = plan.toTrash.filter((id) => indexed.has(entryName(id))).map((id) => entryPath(dir, id));
     // The entry first: a blob without one is not offered, a blob gone with its entry still there is.
     if (!(await runIn(exec, 'mv', ['-n'], entries, [`${day}/`]))) return { stop: 'results could not be moved to the trash', kind: 'move' };
-    if (!(await runIn(exec, 'mv', ['-n'], plan.toTrash.map((id) => blobAt(dir, id)), [`${day}/`]))) {
+    if (!(await runIn(exec, 'mv', ['-n'], plan.toTrash.map((id) => blobPath(dir, id)), [`${day}/`]))) {
       return { stop: 'results could not be moved to the trash', kind: 'move' };
     }
   }
@@ -496,8 +494,8 @@ export async function collect(list: List, exec: Exec, dir: string, live: Readonl
   const after = await blobNames(list, dir);
   const left = new Set(((await trashIn(list, dir)) ?? []).map((item) => `${item.day}/${item.id}`));
   return {
-    trashed: plan.toTrash.filter((id) => !after.has(`${id}.txt`)).length,
-    restored: plan.toRestore.filter((item) => after.has(`${item.id}.txt`)).length,
+    trashed: plan.toTrash.filter((id) => !after.has(blobName(id))).length,
+    restored: plan.toRestore.filter((item) => after.has(blobName(item.id))).length,
     removed: plan.toRemove.filter((item) => !left.has(`${item.day}/${item.id}`)).length,
   };
 }

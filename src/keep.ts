@@ -92,18 +92,51 @@ function resultText(content: unknown): string {
 
 const valueText = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
 
+// The fixed lines of a kept message. `messageText` writes them and `callsOfLines`
+// reads them back: both are here, so the one cannot change without the other.
+const roleLine = (role: Message['role']) => `--- ${role}`;
+const callLine = (use: ToolUse) => `[call ${use.tool} ${use.tool_use_id}] ${inputLine(use.input)}`;
+const resultLine = (result: ToolResult) => `[result ${result.tool_use_id}${result.isError ? ' error' : ''}]`;
+const ROLE_LINE = /^--- (?:user|assistant)$/;
+const CALL_LINE = /^\[call (\S+) (\S+)\] (.*)$/;
+const RESULT_LINE = /^\[result (\S+)(?: error)?\]$/;
+
 /** One message as it is kept: every text, input value and result as it was, between fixed lines. */
 export function messageText(message: Message): string {
-  const lines = [`--- ${message.role}`];
+  const lines = [roleLine(message.role)];
   if (message.text !== '') lines.push(message.text);
   for (const use of message.toolUses) {
-    lines.push(`[call ${use.tool} ${use.tool_use_id}] ${inputLine(use.input)}`);
+    lines.push(callLine(use));
     for (const [name, value] of Object.entries(use.input)) lines.push(`${name}:`, valueText(value));
   }
   for (const result of message.toolResults ?? []) {
-    lines.push(`[result ${result.tool_use_id}${result.isError ? ' error' : ''}]`, result.text);
+    lines.push(resultLine(result), result.text);
   }
   return lines.join('\n');
+}
+
+/**
+ * Each line of a kept part, with the call it stands under as `T called with
+ * <input>`: the lines of a result under the call that made it, the values of
+ * an input under the call they are of, and the text of a message under none.
+ * A result whose call was kept in an earlier part stands under none either.
+ */
+export function callsOfLines(text: string): { line: string; call: string | undefined }[] {
+  const lines = text.split('\n');
+  const calls = new Map<string, string>();
+  for (const line of lines) {
+    const match = CALL_LINE.exec(line);
+    if (match) calls.set(match[2] as string, `${match[1]} called with ${match[3]}`);
+  }
+  let call: string | undefined;
+  return lines.map((line) => {
+    if (ROLE_LINE.test(line)) call = undefined;
+    else {
+      const id = CALL_LINE.exec(line)?.[2] ?? RESULT_LINE.exec(line)?.[1];
+      if (id !== undefined) call = calls.get(id);
+    }
+    return { line, call };
+  });
 }
 
 /** The UTF-8 length of one character, as a code point tells it. */

@@ -3,6 +3,7 @@
 
 import { choose, digest, inputLine, stateFor, type Provider } from './ask.ts';
 import { unnumbered } from './changed.ts';
+import { callsOfLines } from './keep.ts';
 import { PART, PLUGIN, RECALL_TOOL, isOwnTool, isStored, readPartTicket, readTicket, recall, type Ticket } from './store.ts';
 import type { Files, Http, Message } from './types.ts';
 
@@ -156,33 +157,18 @@ function partsIn(text: string, seen: Set<string>): Stored[] {
   return out;
 }
 
-const CALL = /^\[call (\S+) (\S+)\] (.*)$/;
-const RESULT = /^\[result (\S+)(?: error)?\]$/;
-
 /**
- * The tickets written in a kept part: those of the results it holds, each
- * described by the call the part writes above it, and those of parts kept by
- * an earlier summary, which a part holds when a summary was summarized.
+ * The tickets written in a kept part: those of the results and the inputs it
+ * holds, each described by the call it stands under, and those of parts kept
+ * by an earlier summary, which a part holds when a summary was summarized.
  */
 function ticketsInPart(text: string, seen: Set<string>): Stored[] {
-  const lines = text.split('\n');
-  const calls = new Map<string, string>();
-  for (const line of lines) {
-    const match = CALL.exec(line);
-    if (match) calls.set(match[2] as string, `${match[1]} called with ${match[3]}`);
-  }
   const out: Stored[] = [];
-  let result: string | undefined;
-  for (const line of lines) {
-    const header = RESULT.exec(line);
-    if (header) {
-      result = header[1];
-      continue;
-    }
+  for (const { line, call } of callsOfLines(text)) {
     const ticket = readTicket(line);
     if (!ticket || isOwnTool(ticket.tool) || seen.has(ticket.id)) continue;
     seen.add(ticket.id);
-    out.push({ ...ticket, line, about: (result !== undefined ? calls.get(result) : undefined) ?? `${ticket.tool} called` });
+    out.push({ ...ticket, line, about: call ?? `${ticket.tool} called` });
   }
   return [...out, ...partsIn(text, seen)];
 }

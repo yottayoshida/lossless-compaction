@@ -132,6 +132,18 @@ test('/lossless-store says each place and the clean-up, names no path but the pl
   assert.match(bare, /next: no place transcripts are kept in is known yet/);
 });
 
+test('a file under blobs/, index/ or the trash that the clean-up would not take for a result is not counted as one either', async () => {
+  const files = new Guarded();
+  await storeIn(files, DIR);
+  const before = await countStore(files, list(files), DIR, NOW);
+  await put(files, `${DIR}/blobs/notes.txt`, 'left by hand', NOW - 2 * DAY);
+  await files.write(`${DIR}/index/notes.json`, '{"bytes":12,"tool":"Bash"}');
+  await put(files, `${DIR}/trash/2026-10-10/notes.txt`, 'left by hand', NOW - 10 * DAY);
+  const after = await countStore(files, list(files), DIR, NOW);
+  assert.ok(!('missing' in before) && !('missing' in after));
+  assert.deepEqual([after.results, after.from, after.entries, after.trash], [before.results, before.from, before.entries, before.trash]);
+});
+
 test('the first week is said with the day it ends, and a place not there is said as such', async () => {
   const files = new Guarded();
   files.dirs.add(`${DIR}/roots`);

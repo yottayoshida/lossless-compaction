@@ -150,6 +150,12 @@ test('a compaction makes the place private before anything is written, and gives
   assert.ok(hooks.includes('$.process.run(argv, { timeoutMs: 10_000 })'), 'commands run through the host');
 });
 
+test("the place a session's transcript is looked for in is read from Claude Code's directory as the store's default is, not a second way", () => {
+  const noting = hooks.slice(hooks.indexOf('async function noteRootOf('), hooks.indexOf('async function', hooks.indexOf('async function noteRootOf(') + 1));
+  assert.ok(noting.includes('const config = configDirFrom(env);'), noting);
+  assert.ok(!/env\.(HOME|USERPROFILE|CLAUDE_CONFIG_DIR)/.test(noting), 'no variable is read here on its own');
+});
+
 test('the clean-up runs after the session starts, unwaited, and recall, find and the compaction put back from the trash first', () => {
   const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('tool.call'"));
   assert.ok(start.includes('void collectOnce($, options);'), 'not waited for');
