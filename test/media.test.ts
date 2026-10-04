@@ -122,6 +122,24 @@ test('a result that holds an image leaves whatever its place: the newest, a shor
   assert.equal(readTicket(resultOf(after.messages, 'toolu_1')?.text ?? '')?.tool, 'mcp__shots__take');
 });
 
+test('a /compact by hand that reaches into the newest calls leaves a result that held an image as it left, its image with it', async () => {
+  const files = new MemoryFiles();
+  const data = pixels('second-round');
+  const before = 'what the notebook\'s plot shows\n'.repeat(80);
+  const { messages, api } = withImages([text('a'), { tool: 'Read', input: { file_path: 'plots.ipynb' }, text: '' }], { 2: { before, data } });
+  // What the person said last comes after the result, and its text is long enough to leave on its own.
+  messages.push({ role: 'user', text: 'Go on with the plots.', toolUses: [] }, { role: 'assistant', text: 'Going on.', toolUses: [] });
+
+  const outcome = await compact({ ...inputFor(messages, api), byHand: true }, CONFIG, host(files));
+  assert.equal(outcome.report.images, 1);
+  assert.ok((outcome.report.recent ?? 0) > 0, 'the second round ran');
+  const ticket = readTicket(resultOf(outcome.messages, 'toolu_2')?.text ?? '');
+  assert.ok(ticket);
+  const back = await recall(files, DIR, ticket.id);
+  assert.ok('text' in back);
+  assert.deepEqual(back.parts, [{ type: 'text', text: before }, { type: 'image', media_type: 'image/png', data }]);
+});
+
 test('text and images of one result are stored in the order the result held them, the host\'s note left out, under one ticket', async () => {
   const files = new MemoryFiles();
   const first = pixels('first');

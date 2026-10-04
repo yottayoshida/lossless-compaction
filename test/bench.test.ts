@@ -200,6 +200,10 @@ test('the plugin\'s line is read in every form it has, and from the function tha
     outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, inUse: 28425, window: 167000, ms: 0,
   });
   assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(null, 167000)}`), { outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, ms: 0 });
+  // And with what takes the room named (ADR 0023): read the same.
+  assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(28425, 167000, { fixed: 12100, first: 15700 })}`), {
+    outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, inUse: 28425, window: 167000, ms: 0,
+  });
   assert.equal(readLine('something else'), null);
 });
 

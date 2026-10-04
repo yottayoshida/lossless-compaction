@@ -45,7 +45,7 @@
     "keepTokens": {
       "type": "number",
       "title": "Newest results to leave alone, in tokens",
-      "description": "The newest tool result that could leave always stays; the ones before it stay while they and the newest add up to this many tokens (three characters to a token). 0 keeps the newest one only. Where the oldest messages are kept in place of a summary, the newest messages stay while they add up to this many tokens, unless fewer have to stay for the conversation to fit.",
+      "description": "The newest tool result that could leave always stays; the ones before it stay while they and the newest add up to this many tokens (three characters to a token). 0 keeps the newest one only. A /compact typed without instructions reaches into them too where that is not enough, up to the last thing you said. Where the oldest messages are kept in place of a summary, the newest messages stay while they add up to this many tokens, unless fewer have to stay for the conversation to fit.",
       "default": 20000
     },
     "minChars": {

@@ -50,3 +50,6 @@ Why the plugin is built the way it is, one record a decision.
   installed with one line in a session and nothing is set for it to run.
 - [0022](0022-old-tool-calls-fold-into-a-list.md): why old small tool calls
   fold into a list, kept whole, and what was said stays.
+- [0023](0023-a-compact-by-hand-reaches-the-newest-calls.md): why a
+  `/compact` typed without instructions reaches into the newest calls, up to
+  the last thing the person said.

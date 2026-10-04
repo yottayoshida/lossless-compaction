@@ -301,3 +301,157 @@ test('find offers the part of a list of folded calls, and does not count it amon
   const answer = await find({ files, dirs: [DIR], messages, question: 'Where was "the needle phrase is here"?', provider: { kind: 'typesafe', key: 'k' }, http: async () => { throw new Error('nothing is to be sent'); } } as never);
   assert.ok(answer.startsWith('[found] Bash result'), answer.slice(0, 160));
 });
+
+/** The commands of the calls still in a conversation, in order. */
+const commandsIn = (messages: readonly Message[]) => messages.flatMap((m) => m.toolUses.map((use) => String(use.input['command'])));
+
+test('a /compact typed without instructions reaches into the newest calls, up to what the person said last; what came after stays as it was (ADR 0023)', async () => {
+  const before: Message[] = [
+    said('user', 'Start.'),
+    ...calls(bash('a', 'a result line\n'.repeat(300))),
+    ...calls(bash('b')),
+    ...calls(bash('c')),
+    said('assistant', 'Done with those.'),
+    said('user', 'Now look at d.'),
+    ...calls(bash('d', 'd result line\n'.repeat(300))),
+    // Two calls after what the person said: a message of results is not something said.
+    ...calls(bash('e', 'e result line\n'.repeat(300))),
+    said('assistant', 'd looked at.'),
+  ];
+  // Everything is within the newest keepTokens: on its own, a compaction leaves it all.
+  const wide = { ...CONFIG, keepTokens: 1_000_000 };
+  const plain = await compact(inUse(before), wide, host(new MemoryFiles()));
+  assert.equal(plain.report.moved + plain.report.folded, 0);
+
+  const files = new MemoryFiles();
+  const { messages, report } = await compact({ ...inUse(before), byHand: true }, wide, host(files));
+  // a's result left, b and c folded: all before what the person said last. d and its result stand as they were.
+  assert.equal(report.moved, 1);
+  assert.equal(report.folded, 2);
+  assert.equal(report.recent, 3);
+  assert.deepEqual(commandsIn(messages), ['a', 'd', 'e']);
+  const d = messages.find((m) => m.toolUses.some((use) => use.input['command'] === 'd'));
+  const dAt = messages.indexOf(d as Message);
+  assert.equal(messages[dAt + 1]?.toolResults?.[0]?.text, 'd result line\n'.repeat(300));
+  assert.ok(messages.some((m) => m.text === 'Now look at d.') && messages.some((m) => m.text === 'Done with those.'));
+  assert.match(reportLine(report), /in \d+ ms; 3 of these from the newest turns/);
+  assert.equal(readLine(`lossless-compaction: ${reportLine(report)}`)?.moved, 1);
+});
+
+test('the newest calls are reached into only once what is older is out and more is still needed', async () => {
+  const before: Message[] = [said('user', 'Start.')];
+  for (let n = 1; n <= 8; n += 1) before.push(...calls(bash(`old${n}`, `old ${n} line\n`.repeat(200))), said('assistant', `old ${n} done.`));
+  before.push(said('user', 'Now the new ones.'));
+  for (let n = 1; n <= 2; n += 1) before.push(...calls(bash(`new${n}`, `new ${n} line\n`.repeat(200))), said('assistant', `new ${n} done.`));
+  // The newest 1,000 tokens hold the two new ones; what is older is enough to reach the target.
+  const { messages, report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 1_000 }, host(new MemoryFiles()));
+
+  assert.ok(report.moved + report.folded > 0);
+  assert.equal(report.recent ?? 0, 0);
+  assert.ok(commandsIn(messages).includes('new1') && commandsIn(messages).includes('new2'));
+  assert.ok(!reportLine(report).includes('from the newest turns'));
+});
+
+test('what Claude Code writes in a person\'s place is not the last thing they said: a turn stopped with Esc, a Stop hook\'s answer, another session\'s message, a command run with ! and what it printed, the note after a summary', async () => {
+  const marks = [
+    '[Request interrupted by user]',
+    '[Request interrupted by user for tool use]',
+    'Stop hook feedback:\nThe turn ended waiting.',
+    'Another Claude session sent a message:\n<teammate-message teammate_id="r2" color="yellow">\nThe review is done.\n</teammate-message>\n\nThis came from another Claude session, not typed by your user.',
+    '<bash-input>git status</bash-input>',
+    '<bash-stdout>On branch main</bash-stdout><bash-stderr></bash-stderr>',
+    '<artifact-content-authored-by-others/>\nThe summarized conversation included content written by others.',
+  ];
+  for (const mark of marks) {
+    const before: Message[] = [
+      said('user', 'Start.'),
+      ...calls(bash('a', 'a result line\n'.repeat(300))),
+      said('user', 'Now look at d.'),
+      ...calls(bash('d', 'd result line\n'.repeat(300))),
+      said('user', mark),
+      said('assistant', 'Stopped.'),
+    ];
+    const { messages, report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 1_000_000 }, host(new MemoryFiles()));
+    // What the person last said is "Now look at d.": d and its result stay; only a, before it, left.
+    assert.equal(report.moved, 1, mark);
+    const d = messages.findIndex((m) => m.toolUses.some((use) => use.input['command'] === 'd'));
+    assert.equal(messages[d + 1]?.toolResults?.[0]?.text, 'd result line\n'.repeat(300), mark);
+    assert.equal(goalOf(messages, undefined).includes(mark.slice(0, 10)), false, mark);
+  }
+});
+
+test('the second round tries nothing the first tried: a result that could not be written is counted once, and not said to be from the newest turns', async () => {
+  const files = new MemoryFiles();
+  const old = 'old result line\n'.repeat(300);
+  files.corrupt = (text) => (text === old ? `${text}!` : text);
+  const before: Message[] = [said('user', 'Start.'), ...calls(bash('old', old)), ...calls(bash('mid', 'mid result line\n'.repeat(300))), said('user', 'Go on.'), said('assistant', 'Going.')];
+  // keepTokens 300: the first round tries the old result and fails; the second takes what is newer.
+  const { report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 300 }, host(files));
+  assert.equal(report.notMoved.differs, 1);
+  assert.equal(report.recent, 1);
+});
+
+test('a call answered after what the person said last is of what came after it: the second round leaves it, wherever the call stands', async () => {
+  // The call w is made, the person says two things while it runs, then its result comes.
+  const w = calls(bash('w', 'w result line\n'.repeat(300)));
+  const before: Message[] = [
+    said('user', 'Start.'),
+    ...calls(bash('a', 'a result line\n'.repeat(300))),
+    w[0] as Message,
+    said('user', 'Also look at b.'),
+    said('user', 'And then c.'),
+    w[1] as Message,
+    said('assistant', 'Done.'),
+  ];
+  const { messages } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 1_000_000 }, host(new MemoryFiles()));
+  assert.ok(commandsIn(messages).includes('w'));
+  const at = messages.findIndex((m) => m.toolUses.some((use) => use.input['command'] === 'w'));
+  assert.equal(messages[at + 1]?.toolResults?.[0]?.text, 'w result line\n'.repeat(300));
+});
+
+test('the second round tries no input the first tried: a value that could not be written is counted once', async () => {
+  const files = new MemoryFiles();
+  const old = 'const old = 1;\n'.repeat(300);
+  const newer = 'const newer = 2;\n'.repeat(300);
+  files.corrupt = (text) => (text === old ? `${text}!` : text);
+  const before: Message[] = [
+    said('user', 'Start.'),
+    ...calls({ tool: 'Write', input: { file_path: '/w/old.ts', content: old }, out: 'File created successfully at: /w/old.ts' }),
+    ...calls({ tool: 'Write', input: { file_path: '/w/newer.ts', content: newer }, out: 'File created successfully at: /w/newer.ts' }),
+    said('user', 'Go on.'),
+    said('assistant', 'Going.'),
+  ];
+  // keepTokens 300: the first round tries the older value and fails, keeping the newest; the second takes the newest.
+  const { messages, report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 300 }, host(files));
+  assert.equal(report.notMoved.differs, 1);
+  assert.equal(report.inputs, 1);
+  assert.equal(messages.flatMap((m) => m.toolUses).find((use) => use.input['file_path'] === '/w/old.ts')?.input['content'], old);
+});
+
+test('a call answered after what the person said last keeps its long input in the second round, wherever the call stands', async () => {
+  const content = 'const w = 1;\n'.repeat(300);
+  const w = calls({ tool: 'Write', input: { file_path: '/w/w.ts', content }, out: 'File created successfully at: /w/w.ts' });
+  const before: Message[] = [said('user', 'Start.'), w[0] as Message, said('user', 'Also look at b.'), said('user', 'And then c.'), w[1] as Message, said('assistant', 'Done.')];
+  const { messages, report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 1_000_000 }, host(new MemoryFiles()));
+  assert.equal(report.inputs, 0);
+  assert.equal(messages.flatMap((m) => m.toolUses).find((use) => use.input['file_path'] === '/w/w.ts')?.input['content'], content);
+});
+
+test('a short call answered after what the person said last is not folded by the second round, wherever the call stands', async () => {
+  // Short enough to fold, long enough that its list would be smaller than it.
+  const w = calls(bash('w', 'w result line\n'.repeat(100)));
+  const before: Message[] = [said('user', 'Start.'), w[0] as Message, said('user', 'Also look at b.'), said('user', 'And then c.'), w[1] as Message, said('assistant', 'Done.')];
+  const { messages, report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 1_000_000 }, host(new MemoryFiles()));
+  assert.equal(report.folded, 0);
+  assert.deepEqual(commandsIn(messages), ['w']);
+});
+
+test('a run that could not be written in the first round is not tried again in the second, and is counted once', async () => {
+  const files = new MemoryFiles();
+  // Every part's write comes back changed: the run cannot be kept.
+  files.corrupt = (text) => (text.includes('[call Bash') ? `${text}!` : text);
+  const before: Message[] = [said('user', 'Start.'), ...calls(bash('x1')), ...calls(bash('x2')), said('user', 'Go on.'), said('assistant', 'Going.')];
+  const { report } = await compact({ ...inUse(before), byHand: true }, { ...CONFIG, keepTokens: 100 }, host(files));
+  assert.equal(report.folded, 0);
+  assert.equal(report.notMoved.differs, 1);
+});

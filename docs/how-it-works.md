@@ -14,7 +14,9 @@
   order until the conversation is estimated to be under the target size
   (`targetPercent`): those a later call replaced, then those sharing the
   least with what you are working on, then the oldest. The newest results
-  stay, up to `keepTokens` tokens of them (20,000 by default). A result a
+  stay, up to `keepTokens` tokens of them (20,000 by default), but at a
+  `/compact` typed without instructions, which reaches into them too, up to
+  what you said last ([ADR 0023](adr/0023-a-compact-by-hand-reaches-the-newest-calls.md)). A result a
   later call made obsolete can leave even when it is the newest, and a result
   that holds an image always leaves. Where moving results out does not make
   room, the oldest messages are kept whole in the same store and a list of

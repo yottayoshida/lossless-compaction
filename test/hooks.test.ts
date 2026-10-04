@@ -519,3 +519,9 @@ test('what the guard counts as the conversation\'s is what the plugin put there:
   const answered = await guard!(host, { tool: 'Edit', tool_use_id: 'e1', file_path: '/w/README.md', old_string: 'reads', new_string: `reads ${example}` }, async () => ({ result: 'ran' }));
   assert.deepEqual(answered, { result: 'ran' });
 });
+
+test('a /compact is by hand, reaching into the newest calls, only when typed without instructions (ADR 0023)', () => {
+  const hooks = readFileSync(new URL('../hooks/move-out.ts', import.meta.url), 'utf8');
+  assert.ok(hooks.includes("byHand: e.trigger === 'manual' && (e.instructions ?? '').trim() === '',"));
+  assert.equal(hooks.split('byHand:').length - 1, 1, 'set in one place');
+});

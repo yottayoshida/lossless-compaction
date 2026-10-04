@@ -84,7 +84,7 @@ type WithSession = {
     usage: (args: { breakdown: 'summary' }) => Promise<{ context?: (Context & { tokens?: unknown }) | undefined }>;
   };
 };
-type Compacting = { messages: readonly unknown[]; instructions?: string | undefined };
+type Compacting = { messages: readonly unknown[]; instructions?: string | undefined; trigger?: string | undefined };
 
 function say($: WithUi, text: string): void {
   try {
@@ -438,6 +438,8 @@ async function attempt(
         count,
         window: windowFrom(context, FALLBACK_WINDOW),
         goal: goalOf(messages, e.instructions),
+        // Typed by hand with nothing asked of it: the newest calls may be reached into (ADR 0023).
+        byHand: e.trigger === 'manual' && (e.instructions ?? '').trim() === '',
         media: media.results,
       },
       config,

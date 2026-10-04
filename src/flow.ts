@@ -13,7 +13,7 @@
 // built-in summary, of the conversation as it was handed in when nothing was
 // moved out, or of what is left when something was.
 
-import { leftUndone, reportLine, undoneLine, type Config, type Count, type Outcome } from './compact.ts';
+import { leftUndone, reportLine, tokensOf, undoneLine, type Config, type Count, type Outcome } from './compact.ts';
 import { cutLine, decide } from './cut.ts';
 import { PLUGIN } from './store.ts';
 
@@ -66,8 +66,10 @@ export function nextStep(tried: Tried): Step {
   const { outcome } = tried;
   const { report } = outcome;
   const nothing = report.moved === 0 && report.inputs === 0 && report.folded === 0;
-  // By hand, with room and nothing that could leave: no summary was asked for and none is needed (ADR 0015).
-  const undone = leftUndone({
+  // By hand, with room and nothing that could leave: no summary was asked for and none is needed (ADR 0015). Not where
+  // something could have left and could not be written: that is said, as any write that could not be.
+  const couldNotWrite = Object.entries(report.notMoved).some(([reason, count]) => reason !== 'call-differs' && count > 0);
+  const undone = !couldNotWrite && leftUndone({
     trigger: tried.trigger,
     instructions: tried.instructions,
     inUse: tried.inUse,
@@ -76,7 +78,13 @@ export function nextStep(tried: Tried): Step {
     candidates: report.candidates,
   });
   // Said once, as the reason Claude Code shows for not compacting: a line of the plugin's beside it says the same twice.
-  if (nothing && undone) return { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window)}` };
+  // What takes the room is named where Claude Code gave the figure and the conversation was counted from what stays.
+  const first = outcome.messages[0];
+  const parts =
+    tried.given && tried.count !== undefined && first !== undefined
+      ? { fixed: Math.round(tried.count.fixedTokens), first: Math.round(tokensOf([first], tried.count)) }
+      : undefined;
+  if (nothing && undone) return { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts)}` };
   if (!nothing && outcome.enough) return { step: 'back', line: reportLine(report) };
   // Nothing could be moved out, or too much is still in use: handed over, unless src/cut.ts keeps the oldest
   // messages in place of a summary, down to the size moving results out aimed at (ADR 0019).
