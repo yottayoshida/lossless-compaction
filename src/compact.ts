@@ -3,7 +3,7 @@
 import { fold, runsIn, type Run } from './fold.ts';
 import { messagesFromApi } from './keep.ts';
 import { IMAGE_TOKENS, encodeMedia, type MediaPart } from './media.ts';
-import { ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
+import { lastSaid, ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
 import { isStored, moveInputOut, moveOut, readTicket, ticketText, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
@@ -50,6 +50,11 @@ export type Input = {
   /** What the person is working on, in their words. */
   goal: string;
   /**
+   * A /compact typed without instructions: once what is older than the newest `keepTokens` is out, the newest
+   * calls are reached into too, up to what the person said last (ADR 0023).
+   */
+  byHand?: boolean;
+  /**
    * The tool results that hold an image, by the id of their call, see `mediaIn`.
    * Each is moved out whatever its age or size: a rebuilt message cannot carry it.
    */
@@ -64,6 +69,8 @@ export type Report = {
   inputs: number;
   /** Old tool calls folded into lists, each run kept as a part (ADR 0022). */
   folded: number;
+  /** Of the results, inputs and calls above, those taken from the newest turns by a /compact typed by hand (ADR 0023). */
+  recent?: number;
   /** The images that left with their results; those results are among `moved`. */
   images: number;
   charsBefore: number;
@@ -529,83 +536,141 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   // what left, the images that left above are taken off as well, at the same rough figure:
   // `tokens` holds them, as Claude Code's own figure or as the caller made it up.
   let saved = count === undefined ? images * IMAGE_TOKENS * CHARS_PER_TOKEN : 0;
-  const left = [...order];
-  while (saved * perUnit < need && left.length > 0) {
-    // As many as the estimate says are still needed, written side by side. Each
-    // round takes at least one, so the loop ends when the candidates do.
-    const wave: Candidate[] = [];
-    const sizes: number[] = [];
-    let expected = saved;
-    do {
-      const candidate = left.shift() as Candidate;
-      const size = measure(candidate.text);
-      wave.push(candidate);
-      sizes.push(size);
-      expected += size;
-    } while (left.length > 0 && expected * perUnit < need);
-    const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) =>
-      moveOut(files, config.store.write, candidate.tool, candidate.text),
-    );
-    wave.forEach((candidate, at) => {
-      const result = written[at] as Moved | NotMoved;
-      if ('reason' in result) {
-        notMoved[result.reason] = (notMoved[result.reason] ?? 0) + 1;
-        if (result.code !== undefined && !writeErrors.includes(result.code) && writeErrors.length < 3) writeErrors.push(result.code);
-        return;
-      }
-      moved.set(candidate.id, result);
-      saved += Math.max(0, (sizes[at] as number) - measure(result.text));
-    });
-  }
+  const short = (): boolean => saved * perUnit < need;
+  const missed = (result: NotMoved): void => {
+    notMoved[result.reason] = (notMoved[result.reason] ?? 0) + 1;
+    if (result.code !== undefined && !writeErrors.includes(result.code) && writeErrors.length < 3) writeErrors.push(result.code);
+  };
 
-  // Then, while still short of the target, the long values handed to the tools that write a file and to Bash,
-  // with an allowance of their own for the newest (ADR 0020). What a write tool was handed is on disk as well.
+  // Results, as many at a time as the estimate says are still needed, written side by side. Each round takes at
+  // least one, so the loop ends when the candidates do.
+  const tried = new Set<string>();
+  const moveResults = async (queue: readonly Candidate[]): Promise<number> => {
+    const left = [...queue];
+    let n = 0;
+    while (short() && left.length > 0) {
+      const wave: Candidate[] = [];
+      const sizes: number[] = [];
+      let expected = saved;
+      do {
+        const candidate = left.shift() as Candidate;
+        const size = measure(candidate.text);
+        tried.add(candidate.id);
+        wave.push(candidate);
+        sizes.push(size);
+        expected += size;
+      } while (left.length > 0 && expected * perUnit < need);
+      const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) =>
+        moveOut(files, config.store.write, candidate.tool, candidate.text),
+      );
+      wave.forEach((candidate, at) => {
+        const result = written[at] as Moved | NotMoved;
+        if ('reason' in result) return missed(result);
+        moved.set(candidate.id, result);
+        n += 1;
+        saved += Math.max(0, (sizes[at] as number) - measure(result.text));
+      });
+    }
+    return n;
+  };
+
+  // Then the long values handed to the tools that write a file and to Bash, with an allowance of their own for the
+  // newest (ADR 0020). What a write tool was handed is on disk as well.
   const inputs = new Map<string, MovedValue[]>();
   let inputsMoved = 0;
-  const waiting = selectInputs(input.messages, { keepChars: config.keepTokens * CHARS_PER_TOKEN, minChars: config.minChars });
-  while (saved * perUnit < need && waiting.length > 0) {
-    const wave: InputCandidate[] = [];
-    let expected = saved;
-    do {
-      const candidate = waiting.shift() as InputCandidate;
-      wave.push(candidate);
-      expected += measure(candidate.text);
-    } while (waiting.length > 0 && expected * perUnit < need);
-    const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) =>
-      moveInputOut(files, config.store.write, candidate.tool, candidate.field, candidate.text),
-    );
-    wave.forEach((candidate, at) => {
-      const result = written[at] as MovedInput | NotMoved;
-      if ('reason' in result) {
-        notMoved[result.reason] = (notMoved[result.reason] ?? 0) + 1;
-        if (result.code !== undefined && !writeErrors.includes(result.code) && writeErrors.length < 3) writeErrors.push(result.code);
-        return;
-      }
-      inputs.set(candidate.id, [...(inputs.get(candidate.id) ?? []), { path: candidate.path, line: result.text }]);
-      inputsMoved += 1;
-      saved += Math.max(0, measure(candidate.text) - measure(result.text));
-    });
-  }
+  const valueOf = (one: InputCandidate): string => `${one.id} ${JSON.stringify(one.path)}`;
+  const triedValues = new Set<string>();
+  const moveInputs = async (queue: readonly InputCandidate[]): Promise<number> => {
+    const waiting = [...queue];
+    let n = 0;
+    while (short() && waiting.length > 0) {
+      const wave: InputCandidate[] = [];
+      let expected = saved;
+      do {
+        const candidate = waiting.shift() as InputCandidate;
+        triedValues.add(valueOf(candidate));
+        wave.push(candidate);
+        expected += measure(candidate.text);
+      } while (waiting.length > 0 && expected * perUnit < need);
+      const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) =>
+        moveInputOut(files, config.store.write, candidate.tool, candidate.field, candidate.text),
+      );
+      wave.forEach((candidate, at) => {
+        const result = written[at] as MovedInput | NotMoved;
+        if ('reason' in result) return missed(result);
+        inputs.set(candidate.id, [...(inputs.get(candidate.id) ?? []), { path: candidate.path, line: result.text }]);
+        inputsMoved += 1;
+        n += 1;
+        saved += Math.max(0, measure(candidate.text) - measure(result.text));
+      });
+    }
+    return n;
+  };
 
-  const rebuilt = rebuild(input.messages, moved, stored, inputs);
-
-  // Then, while still short of the target, runs of old calls, oldest first: each kept whole as a part, and a list
-  // of the calls in its place. What the person and Claude said stays as it was (ADR 0022).
+  // Then runs of old calls, oldest first: each kept whole as a part, and a list of the calls in its place. What the
+  // person and Claude said stays as it was (ADR 0022).
   const lists = new Map<number, { run: Run; list: Message }>();
   let folded = 0;
-  for (const run of config.fold !== false && saved * perUnit < need ? runsIn(rebuilt, config.keepTokens * CHARS_PER_TOKEN, config.minChars) : []) {
-    if (saved * perUnit >= need) break;
-    // Folded only where the list takes less room than the calls it stands for, measured as every size here is.
-    const done = await fold(files, config.store.write, run, (list) => sizeOf([list], measure) < sizeOf(run.messages, measure));
-    if ('notWorth' in done) continue;
-    if ('reason' in done) {
-      notMoved[done.reason] = (notMoved[done.reason] ?? 0) + 1;
-      if (done.code !== undefined && !writeErrors.includes(done.code) && writeErrors.length < 3) writeErrors.push(done.code);
-      continue;
+  // A run found again by the pass that reaches the newest calls, less what the first pass folded of it. Runs begin
+  // at the same messages in both passes, so what was folded of one is its first pairs.
+  const unfolded = (run: Run): Run | null => {
+    const done = lists.get(run.first);
+    if (done === undefined) return run;
+    if (done.run.last >= run.last) return null;
+    const first = done.run.last + 1;
+    return { first, last: run.last, messages: run.messages.slice(first - run.first) };
+  };
+  const failedRuns = new Set<number>();
+  const foldRuns = async (runs: readonly Run[]): Promise<number> => {
+    let n = 0;
+    for (const found of runs) {
+      if (!short()) break;
+      const run = unfolded(found);
+      if (run === null || failedRuns.has(run.first)) continue;
+      // Folded only where the list takes less room than the calls it stands for, measured as every size here is.
+      const done = await fold(files, config.store.write, run, (list) => sizeOf([list], measure) < sizeOf(run.messages, measure));
+      if ('notWorth' in done) continue;
+      if ('reason' in done) {
+        missed(done);
+        failedRuns.add(run.first);
+        continue;
+      }
+      lists.set(run.first, { run, list: done.list });
+      folded += done.calls;
+      n += done.calls;
+      saved += Math.max(0, sizeOf(run.messages, measure) - sizeOf([done.list], measure));
     }
-    lists.set(run.first, { run, list: done.list });
-    folded += done.calls;
-    saved += Math.max(0, sizeOf(run.messages, measure) - sizeOf([done.list], measure));
+    return n;
+  };
+
+  // First everything older than the newest `keepTokens`, in that order.
+  const keepChars = config.keepTokens * CHARS_PER_TOKEN;
+  await moveResults(order);
+  await moveInputs(selectInputs(input.messages, { keepChars, minChars: config.minChars }));
+  let rebuilt = rebuild(input.messages, moved, stored, inputs);
+  if (config.fold !== false && short()) await foldRuns(runsIn(rebuilt, keepChars, config.minChars));
+
+  // Then, for a /compact typed without instructions and while still short, the same three into the newest calls,
+  // up to what the person said last: they asked for it now, and what they asked for and what was done for it since
+  // stays (ADR 0023).
+  let recent = 0;
+  const said = input.byHand === true ? lastSaid(input.messages) : -1;
+  if (said > 0 && short()) {
+    const older = input.messages.slice(0, said);
+    // A call answered at or after what the person said last is of what came after it, wherever the call stands: its
+    // long input and its run stay. Its result is not among `older`.
+    const late = new Set(input.messages.slice(said).flatMap((message) => (message.toolResults ?? []).map((result) => result.tool_use_id)));
+    // Nothing the first round moved or tried: a result that left above with its images would be written again as
+    // its text alone, and its ticket would no longer bring them back.
+    const newer = select(older, { keepChars: 0, minChars: config.minChars, keepNewest: false }, new Set([...stored.keys(), ...moved.keys(), ...tried]));
+    recent += await moveResults(ruleOrder(newer.candidates, input.goal));
+    const values = selectInputs(older, { keepChars: 0, minChars: config.minChars, keepNewest: false });
+    recent += await moveInputs(values.filter((one) => !late.has(one.id) && !triedValues.has(valueOf(one))));
+    rebuilt = rebuild(input.messages, moved, stored, inputs);
+    const saidHere = lastSaid(rebuilt);
+    const runs = saidHere > 0 ? runsIn(rebuilt.slice(0, saidHere), 0, config.minChars) : [];
+    const earlier = runs.filter((run) => !run.messages.some((message) => message.toolUses.some((use) => late.has(use.tool_use_id))));
+    if (config.fold !== false && short()) recent += await foldRuns(earlier);
   }
   const messages: Message[] = [];
   for (let at = 0; at < rebuilt.length; at += 1) {
@@ -638,6 +703,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
       moved: moved.size,
       inputs: inputsMoved,
       folded,
+      recent,
       images,
       charsBefore,
       charsAfter,
@@ -664,7 +730,9 @@ export function reportLine(report: Report): string {
     (report.folded === 0 ? ' ' : `, ${report.folded} old tool ${report.folded === 1 ? 'call' : 'calls'} folded into lists `) +
     `(${report.charsBefore} -> ${report.charsAfter} chars` +
     (report.counted ? `, about ${report.tokensAfter} of ${report.window} tokens in use) ` : ') ') +
-    `in ${took}${stayed === '' ? '' : `; left in place: ${stayed}`}` +
+    `in ${took}` +
+    (report.recent ? `; ${report.recent} of these from the newest turns` : '') +
+    (stayed === '' ? '' : `; left in place: ${stayed}`) +
     (report.writeErrors.length === 0 ? '' : `; could not write: ${report.writeErrors.join(', ')}`)
   );
 }
@@ -714,9 +782,15 @@ export function leftUndone(asked: CompactRequest): boolean {
 }
 
 /** The line a `/compact` left undone shows. What is in use is named only when Claude Code gave the figure. */
-export function undoneLine(inUse: number | null, window: number): string {
+export function undoneLine(inUse: number | null, window: number, parts?: { fixed: number; first: number }): string {
+  // What takes the room, where it was counted: what no compaction makes smaller, the first message, which stays,
+  // and the rest (ADR 0023).
+  const taken =
+    inUse === null || parts === undefined
+      ? ''
+      : `; of what is in use, ${parts.fixed} are sent with every request (the system prompt, tools, memory and the like), ${parts.first} the first message and ${Math.max(0, inUse - parts.fixed - parts.first)} the rest`;
   return (
     `nothing to move out${inUse === null ? '' : `, ${inUse} of ${window} tokens in use`}: ` +
-    "the conversation is left as it is. /compact with instructions runs Claude Code's summary"
+    `the conversation is left as it is${taken}. /compact with instructions runs Claude Code's summary`
   );
 }

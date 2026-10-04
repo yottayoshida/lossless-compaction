@@ -31,6 +31,11 @@ export type SelectOptions = {
   keepChars: number;
   /** Results shorter than this many characters stay. */
   minChars: number;
+  /**
+   * False: the newest stays only within `keepChars`, as when a /compact typed by hand reaches into the newest
+   * calls and what stays is told by what the person said last (ADR 0023).
+   */
+  keepNewest?: false;
 };
 
 /** The tools that write to the file their input names. */
@@ -146,7 +151,7 @@ export function select(messages: readonly Message[], options: SelectOptions, sto
       candidates.push(candidate);
       continue;
     }
-    if (kept === 0 || total + candidate.text.length <= options.keepChars) {
+    if ((kept === 0 && options.keepNewest !== false) || total + candidate.text.length <= options.keepChars) {
       kept += 1;
       total += candidate.text.length;
       left.newest += 1;
@@ -270,7 +275,7 @@ export function selectInputs(messages: readonly Message[], options: SelectOption
   let closed = false;
   for (let index = could.length - 1; index >= 0; index -= 1) {
     const candidate = could[index] as InputCandidate;
-    if (!closed && (kept === 0 || total + candidate.text.length <= options.keepChars)) {
+    if (!closed && ((kept === 0 && options.keepNewest !== false) || total + candidate.text.length <= options.keepChars)) {
       kept += 1;
       total += candidate.text.length;
       continue;
@@ -324,11 +329,30 @@ export function whyNotRebuilt(messages: readonly Message[], api: unknown): strin
 
 /** What the person is working on: what they asked the compaction to keep, then their latest turns. */
 export function goalOf(messages: readonly Message[], instructions: string | undefined): string {
-  const said = messages
-    .filter((message) => message.role === 'user' && (message.toolResults?.length ?? 0) === 0)
-    .map((message) => message.text.replace(HOST_TEXT, '').trim())
-    // A line this plugin put after a summary is not what the person asked for.
-    .filter((text) => text !== '' && !text.startsWith('/') && !text.startsWith(`[${PLUGIN}]`))
-    .slice(-3);
+  const said = messages.filter(saidByAPerson).map(sayingOf).slice(-3);
   return [instructions?.trim() ?? '', ...said].filter((text) => text !== '').join('\n\n');
+}
+
+const sayingOf = (message: Message): string => message.text.replace(HOST_TEXT, '').trim();
+
+/**
+ * Whether a message is something a person said: theirs, no results, and not the host's text, a command, or a
+ * line this plugin put in the conversation.
+ */
+function saidByAPerson(message: Message): boolean {
+  if (message.role !== 'user' || (message.toolResults?.length ?? 0) > 0) return false;
+  const text = sayingOf(message);
+  return text !== '' && !text.startsWith('/') && !text.startsWith(`[${PLUGIN}]`) && !WRITTEN_BY_CLAUDE_CODE.test(text);
+}
+
+// What Claude Code writes in a person's place: the mark of a turn stopped with Esc, what a Stop hook said back, a
+// message another session sent, a command run with `!` and what it printed, and the note after a summary that
+// held what others wrote.
+const WRITTEN_BY_CLAUDE_CODE =
+  /^(?:\[Request interrupted by user[^\]]*\]$|Stop hook feedback:|Another Claude session sent a message:|<bash-(?:input|stdout|stderr)>|<artifact-content-authored-by-others\/>)/;
+
+/** Where the newest thing a person said stands, or -1: told as `goalOf` tells it. */
+export function lastSaid(messages: readonly Message[]): number {
+  for (let at = messages.length - 1; at >= 0; at -= 1) if (saidByAPerson(messages[at] as Message)) return at;
+  return -1;
 }

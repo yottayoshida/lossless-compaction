@@ -58,8 +58,12 @@ test('a compaction computed ahead is skipped and a subagent goes straight on, be
 
 test('a /compact by hand with nothing to move out and room left is left undone, the figure named only when Claude Code gave it (ADR 0015)', () => {
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0 } } as const;
-  assert.deepEqual(nextStep(tried(WIDE, asked)), { step: 'skip', why: `${PLUGIN}: ${undoneLine(30_000, 100_000)}` });
+  // Counted from what stays, it says what takes the room: what every request carries, the first message, the rest (ADR 0023).
+  const first = Math.round(tokensOf([WIDE[0] as Message], COUNT));
+  assert.deepEqual(nextStep(tried(WIDE, asked)), { step: 'skip', why: `${PLUGIN}: ${undoneLine(30_000, 100_000, { fixed: 10_000, first })}` });
+  assert.ok(undoneLine(30_000, 100_000, { fixed: 10_000, first }).includes(`; of what is in use, 10000 are sent with every request (the system prompt, tools, memory and the like), ${first} the first message and ${30_000 - 10_000 - first} the rest.`));
   assert.deepEqual(nextStep(tried(WIDE, { ...asked, given: false })), { step: 'skip', why: `${PLUGIN}: ${undoneLine(null, 100_000)}` });
+  assert.deepEqual(nextStep(tried(WIDE, { ...asked, count: undefined })), { step: 'skip', why: `${PLUGIN}: ${undoneLine(30_000, 100_000)}` });
   // Not with instructions, not on its own, not with something that could have left, not over what may stay, not once results left.
   for (const other of [{ instructions: 'keep the plan' }, { trigger: 'auto' }, { report: { moved: 0, candidates: 1 } }, { inUse: 75_001 }, { report: { moved: 2, candidates: 0 } }]) {
     assert.notEqual(nextStep(tried(WIDE, { ...asked, ...other })).step, 'skip', JSON.stringify(other));
@@ -175,4 +179,13 @@ test('old calls folded are something moved out: handed back when enough, and nev
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, inputs: 0, folded: 2 }, enough: true } as const;
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
   assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, inputs: 0, folded: 0 }, enough: false })).step, 'skip');
+});
+
+test('a /compact by hand with room, where what could have left could not be written, is not left undone: the line says it could not write', () => {
+  const asked: Parameters<typeof tried>[1] = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, notMoved: { 'write-failed': 2 }, writeErrors: ['ENOSPC'] } };
+  const step = nextStep(tried(WIDE, asked));
+  assert.notEqual(step.step, 'skip');
+  assert.ok('line' in step && step.line.includes('could not write: ENOSPC'), JSON.stringify(step));
+  // A result whose call holds another text is not one that could not be written: that one is still left undone.
+  assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, notMoved: { 'call-differs': 1 } } })).step, 'skip');
 });
