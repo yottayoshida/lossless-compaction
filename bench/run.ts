@@ -1,14 +1,15 @@
 // Runs units of the benchmark: one trace, one model, one run, one arm. A unit
 // forks the built conversation, compacts the copy, and asks each question of a
-// fresh copy of what the compaction left. What it measured is written per unit,
-// so a run that is stopped goes on where it was.
+// fresh copy of what the compaction left; a unit of a chain asks each question of
+// what the one before left, so that what was brought back stays. What it measured
+// is written per unit, so a run that is stopped goes on where it was.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { build, workDir, type Base, type Places } from './build.ts';
+import { build, recordPath, workDir, type Base, type Places } from './build.ts';
 import { claude } from './cc.ts';
 import { gapsOf, holdsAll, lookedOutside, ownUsage, readLine, retrievalOf, summarizedBy, tellsIn, type Arm, type Line, type Retrieval, type Usage } from './lib.ts';
 import { BUILT, FIND_TOOL, QUESTION_TOOLS, type Kind, type Trace } from './traces.ts';
@@ -88,6 +89,12 @@ export type Unit = {
     own: Usage;
   };
   questions: Asked[];
+  /**
+   * In a chain, what was in use once every question had been asked: the first request of one more that needs
+   * no history. Against the first request of the first question, it is how much the context grew: the questions and
+   * answers, with what they read.
+   */
+  afterQuestions?: number;
 };
 
 export type Variant = {
@@ -99,8 +106,11 @@ export type Variant = {
   env?: Readonly<Record<string, string>>;
 };
 
-/** What a unit asks: the trace's questions, one question that needs no history, or the questions `find` is for. */
-export type Mode = 'ask' | 'probe' | 'find';
+/**
+ * What a unit asks: the trace's questions, one question that needs no history, the questions `find` is for, or
+ * the trace's questions one after another (`chain`), each going on from the one before.
+ */
+export type Mode = 'ask' | 'probe' | 'find' | 'chain';
 
 /** The name of a unit's file: its arm, then what sets it apart from the plain unit of that arm. */
 export const leaf = (arm: Arm, variant: string, mode: Mode) => [arm, ...(variant === 'default' ? [] : [variant]), ...(mode === 'ask' ? [] : [mode])].join('-');
@@ -130,6 +140,13 @@ export function staleness(measured: Pick<Unit, 'version' | 'base' | 'plugin'>, t
 }
 const unitPath = (places: Places, trace: string, model: string, run: number, arm: Arm, variant: string, mode: Mode) =>
   join(places.box, 'units', trace, model, `run-${run}`, `${leaf(arm, variant, mode)}.json`);
+
+/**
+ * What a chain sends before its compaction: a turn of the work, which asks for nothing of the conversation. It names
+ * the run: the plugin compacts to the same text each time, and two runs within the prompt cache's hour would otherwise
+ * send the same first question, the second reading what the first wrote.
+ */
+export const warmOf = (run: number): string => `Reply only: ok. (Run ${run} of the benchmark.)`;
 
 /**
  * One unit, or the one already measured. A unit measured against something else
@@ -173,8 +190,23 @@ export async function unit(
     ...(trace.window !== undefined ? { window: trace.window } : {}),
   };
   const tools = variant.tools ?? QUESTION_TOOLS;
+  // In a chain, each question goes on from the one before, and its session is kept for the next to go on from.
+  const chained = mode === 'chain';
+  const kept: string[] = [];
 
-  const compacted = await claude({ ...common, out: join(records, 'compact.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: '/compact' });
+  // In a chain, the conversation is sent once before the compaction, as the turn before a /compact sends it: what was
+  // just sent is in the prompt cache, where a summary could read it from, and what the compaction leaves ends with that turn,
+  // so that no other unit has sent it before. The turn is the work's, and is counted neither to the compaction nor to
+  // the questions.
+  const warm = chained ? await claude({ ...common, out: join(records, 'warm.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: warmOf(run), kept: true }) : null;
+  if (warm !== null) {
+    kept.push(warm.session.sessionId);
+    // The turn is the work's: compacted at it, or answered by another model, the unit would measure something else.
+    if (warm.session.compaction !== null) throw new Error(`${records}: the conversation was compacted at the turn before the compaction`);
+    if (warm.session.fellBackTo !== null) throw new Error(`${records}: ${model} refused at the turn before the compaction, and ${warm.session.fellBackTo} went on in its place`);
+  }
+  const before = warm?.session ?? base;
+  const compacted = await claude({ ...common, out: join(records, 'compact.jsonl'), allowedTools: tools, resume: warm?.session.sessionId ?? base.sessionId, prompt: '/compact' });
   const boundary = compacted.session.compaction;
   // The plugin's line at a compaction; of a `/compact` it left undone (ADR 0015) its line is the reason Claude Code gives for not compacting.
   const line = compacted.session.uiLog.map(readLine).find((read) => read !== null) ?? (compacted.session.skipped === null ? null : readLine(compacted.session.skipped));
@@ -193,41 +225,63 @@ export async function unit(
       ? { durationMs: compacted.session.durationMs, preTokens: inUse, postTokens: inUse }
       : { durationMs: boundary.durationMs, preTokens: boundary.preTokens, postTokens: boundary.postTokens };
   // A fork prints the usage of the session it came from with its own. Were that missing, taking one from the other would give a compaction that cost nothing.
-  const unseen = Object.keys(base.modelUsage).filter((name) => !(name in compacted.session.modelUsage));
-  if (unseen.length > 0) throw new Error(`${records}: the compaction's session does not carry the usage of the trace it was forked from (${unseen.join(', ')})`);
-  const own = ownUsage(compacted.session, base);
+  const unseen = Object.keys(before.modelUsage).filter((name) => !(name in compacted.session.modelUsage));
+  if (unseen.length > 0) throw new Error(`${records}: the compaction's session does not carry the usage of the session it was forked from (${unseen.join(', ')})`);
+  const own = ownUsage(compacted.session, before);
   log(`${trace.name} ${model} run ${run} ${arm} ${variant.name}: ${undone ? 'left undone' : 'compacted'} in ${sizes.durationMs} ms, ${sizes.preTokens} -> ${sizes.postTokens}${line ? `, ${line.outcome}` : ''}`);
 
   const asked: Asked[] = [];
-  for (const question of questions) {
-    const ran = await claude({ ...common, out: join(records, `q-${question.id}.jsonl`), allowedTools: tools, resume: compacted.session.sessionId, prompt: question.ask, refusalsCounted: true, kept: false });
-    const { session } = ran;
-    if (session.compaction !== null) throw new Error(`${records}: the conversation was compacted again at the question ${question.id}`);
-    const gaps = gapsOf(session, 'question');
-    if (gaps.length > 0) throw new Error(`${records}, ${question.id}: ${gaps.join('; ')}`);
-    const putToFind = session.toolCalls.filter((call) => call.name === FIND_TOOL).map((call) => String(call.input['question'] ?? ''));
-    const one: Asked = {
-      id: question.id,
-      kind: question.kind,
-      answer: session.answer,
-      calls: session.toolCalls.map((call) => call.name),
-      ...(putToFind.length > 0 ? { findQuestions: putToFind } : {}),
-      ...(session.fellBackTo !== null ? { fellBackTo: session.fellBackTo } : {}),
-      retrieval: retrievalOf(session.toolCalls),
-      // Against the directory the session says it ran in: the box may be reached through a link.
-      outside: lookedOutside(session.toolCalls, session.cwd || cwd),
-      refused: session.denials.length,
-      tells: tellsIn(session.answer),
-      requests: session.requests,
-      durationMs: session.durationMs,
-      wallMs: ran.wallMs,
-      own: ownUsage(session, compacted.session),
-    };
-    if (question.needles !== undefined && holdsAll(session.answer, question.needles)) one.verdict = 'correct';
-    // A question calls the model: one that cost nothing is one whose usage was not taken from its parent's as meant.
-    if (!(one.own.costUSD > 0)) throw new Error(`${records}, ${question.id}: the question's own cost came out as ${one.own.costUSD}`);
-    asked.push(one);
-    log(`  ${question.id}: ${one.verdict ?? 'to grade'}, calls ${one.calls.join(',') || 'none'}, ${one.requests[0]} tokens, ${one.durationMs} ms`);
+  let parent = compacted.session;
+  let afterQuestions: number | undefined;
+  try {
+    for (const question of questions) {
+      const ran = await claude({ ...common, out: join(records, `q-${question.id}.jsonl`), allowedTools: tools, resume: parent.sessionId, prompt: question.ask, refusalsCounted: true, kept: chained });
+      const { session } = ran;
+      if (session.compaction !== null) throw new Error(`${records}: the conversation was compacted again at the question ${question.id}`);
+      const gaps = gapsOf(session, 'question');
+      if (gaps.length > 0) throw new Error(`${records}, ${question.id}: ${gaps.join('; ')}`);
+      const putToFind = session.toolCalls.filter((call) => call.name === FIND_TOOL).map((call) => String(call.input['question'] ?? ''));
+      const one: Asked = {
+        id: question.id,
+        kind: question.kind,
+        answer: session.answer,
+        calls: session.toolCalls.map((call) => call.name),
+        ...(putToFind.length > 0 ? { findQuestions: putToFind } : {}),
+        ...(session.fellBackTo !== null ? { fellBackTo: session.fellBackTo } : {}),
+        retrieval: retrievalOf(session.toolCalls),
+        // Against the directory the session says it ran in: the box may be reached through a link.
+        outside: lookedOutside(session.toolCalls, session.cwd || cwd),
+        refused: session.denials.length,
+        tells: tellsIn(session.answer),
+        requests: session.requests,
+        durationMs: session.durationMs,
+        wallMs: ran.wallMs,
+        own: ownUsage(session, parent),
+      };
+      if (question.needles !== undefined && holdsAll(session.answer, question.needles)) one.verdict = 'correct';
+      // A question calls the model: one that cost nothing is one whose usage was not taken from its parent's as meant.
+      if (!(one.own.costUSD > 0)) throw new Error(`${records}, ${question.id}: the question's own cost came out as ${one.own.costUSD}`);
+      asked.push(one);
+      log(`  ${question.id}: ${one.verdict ?? 'to grade'}, calls ${one.calls.join(',') || 'none'}, ${one.requests[0]} tokens, ${one.durationMs} ms`);
+      if (chained) {
+        kept.push(session.sessionId);
+        parent = session;
+      }
+    }
+    // Measured before the chain's sessions are moved: it goes on from the last of them.
+    if (chained) {
+      const ran = await claude({ ...common, out: join(records, 'after.jsonl'), allowedTools: tools, resume: parent.sessionId, prompt: (PROBE[0] as { ask: string }).ask, refusalsCounted: true, kept: false });
+      afterQuestions = ran.session.requests[0];
+      if (afterQuestions === undefined) throw new Error(`${records}: the request after the questions was not measured`);
+      log(`  after the questions: ${afterQuestions} tokens`);
+    }
+  } finally {
+    // What a question answered is not left where a session of another unit can read it (see "What is there to
+    // be read" in bench/README.md): a chain's sessions go to the unit's records, whether it ended or stopped.
+    for (const sessionId of kept) {
+      const from = recordPath(cwd, sessionId);
+      if (existsSync(from)) renameSync(from, join(records, `${sessionId}.record.jsonl`));
+    }
   }
 
   const measured: Unit = {
@@ -257,6 +311,7 @@ export async function unit(
       own,
     },
     questions: asked,
+    ...(afterQuestions !== undefined ? { afterQuestions } : {}),
   };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(measured, null, 1)}\n`);

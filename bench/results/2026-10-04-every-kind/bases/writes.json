@@ -1,0 +1,23 @@
+{
+  "trace": "writes",
+  "version": 1,
+  "sessionId": "66e9184b-043c-4b26-8d12-d0a5d037e1ed",
+  "model": "claude-sonnet-5-5",
+  "claudeCode": "2.1.289",
+  "tokens": 75586,
+  "thinkingTokens": 136,
+  "toolCalls": 13,
+  "work": "writes-mutbg0oy",
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 52,
+      "outputTokens": 31386,
+      "cacheReadInputTokens": 1072609,
+      "cacheCreationInputTokens": 72189,
+      "costUSD": 0.8172417999999999,
+      "thinkingTokens": 136
+    }
+  },
+  "recordSha256": "5fd0e8ffc547c4363dc1a2ce16794c44b311d7d9fc2e3416b31d98d7c3c9d02f",
+  "builtAt": "2026-10-04T04:27:13.374Z"
+}

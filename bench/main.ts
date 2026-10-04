@@ -4,6 +4,7 @@
 //   node bench/main.ts build   --traces a,b          build the conversations: the six that are asked questions, the two that are only probed, and the one asked only what `find` is for
 //   node bench/main.ts run     --traces a,b --models m1,m2 --runs 3
 //   node bench/main.ts probe   --traces a,b --models m1 [--plugin-dirs name=path,...] [--max-after 100] [--target 1]   (each checkout at those settings; `run` takes them too)
+//   node bench/main.ts chain   --traces a,b --models m1 --runs 1   the questions one after another, each going on from the one before
 //   node bench/main.ts pick                          what `find` picks against a word match (asks Jev: BENCH_JEV_ENV)
 //   node bench/main.ts pick    --questions file.json  the same of a file's questions: [{ trace, kind, ask, target }]
 //   node bench/main.ts find    [--traces a,b] [--variants find]   the same questions with an agent in between, with and without `find`
@@ -21,14 +22,15 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { providerFrom } from '../src/ask.ts';
 import type { Http } from '../src/types.ts';
 import { build, type Conversation, type Places } from './build.ts';
-import { currentOf, grade, published, scrubbed, unitsUnder, type Grades } from './grade.ts';
+import { currentOf, grade, published, scrubbed, unitsUnder, versionsIn, type Grades } from './grade.ts';
 import { keysIn } from './lib.ts';
 import { pick, pickTable, wentOf, type Pick } from './pick.ts';
 import { whole } from './report.ts';
 import { leaf, runAll, variantsOf } from './run.ts';
 import { BUILT, FOUND, PROBED, TRACES, described, unnamed } from './traces.ts';
 
-const HAIKU = 'claude-haiku-4-5-20251001';
+/** The model that builds, answers and grades where none is named: the least the benchmark is measured with. */
+const SONNET = 'claude-sonnet-5-5';
 
 function flag(args: readonly string[], name: string): string | undefined {
   const at = args.indexOf(`--${name}`);
@@ -53,9 +55,13 @@ const overHttp: Http = async (url, init) => {
   return { status: response.status, ok: response.ok, text: await response.text() };
 };
 
-/** What was measured under a directory: the box, or results as they were published. */
-function measuredUnder(dir: string) {
-  const { units, older } = currentOf(unitsUnder(dir));
+/**
+ * What was measured under a directory: the box, of the traces as they are, or results as they were published, of the
+ * traces as they were then.
+ */
+function measuredUnder(dir: string, asPublished = false) {
+  const all = unitsUnder(dir);
+  const { units, older } = currentOf(all, ...(asPublished ? [versionsIn(all)] : []));
   const read = <T>(name: string): T | null => (existsSync(join(dir, name)) ? (JSON.parse(readFileSync(join(dir, name), 'utf8')) as T) : null);
   return { units, older, grades: read<Grades>('grades.json'), picks: read<{ picks: Pick[] }>('picks.json') };
 }
@@ -73,7 +79,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'report' && flag(args, 'from') !== undefined) {
-    const { units, older, grades, picks } = measuredUnder(resolve(flag(args, 'from') as string));
+    const { units, older, grades, picks } = measuredUnder(resolve(flag(args, 'from') as string), true);
     process.stdout.write(whole(units, grades, older, picks?.picks ?? null));
     return;
   }
@@ -85,7 +91,7 @@ async function main(): Promise<void> {
   // With no trace named: every conversation but the large one is built; questions are asked of the six they were written for.
   // A probe leaves out those asked only what `find` is for: their size was not set against the count (#37).
   const traces = list(flag(args, 'traces'), unnamed(command ?? '').map((trace) => trace.name));
-  const buildModel = flag(args, 'build-model') ?? HAIKU;
+  const buildModel = flag(args, 'build-model') ?? SONNET;
   if (command === 'build') {
     for (const name of traces) {
       const trace = BUILT.find((one) => one.name === name);
@@ -95,15 +101,15 @@ async function main(): Promise<void> {
     }
     return;
   }
-  if (command === 'run' || command === 'probe') {
-    const unasked = command === 'run' ? traces.filter((name) => [...PROBED, ...FOUND].some((one) => one.name === name)) : [];
+  if (command === 'run' || command === 'probe' || command === 'chain') {
+    const unasked = command !== 'probe' ? traces.filter((name) => [...PROBED, ...FOUND].some((one) => one.name === name)) : [];
     if (unasked.length > 0) throw new Error(`no question but those of \`find\` is asked of ${unasked.join(', ')}: built for \`probe\`, \`find\` or \`pick\` only`);
-    const models = list(flag(args, 'models'), [HAIKU]);
+    const models = list(flag(args, 'models'), [SONNET]);
     const runs = Number(flag(args, 'runs') ?? 1);
     const variants = variantsOf(flag(args, 'plugin-dirs'), flag(args, 'max-after'), pluginDir, flag(args, 'target'));
     const arms = flag(args, 'arms');
     const units = await runAll(
-      { traces, models, runs, buildModel, mode: command === 'probe' ? 'probe' : 'ask', ...(variants ? { variants } : {}), ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}) },
+      { traces, models, runs, buildModel, mode: command === 'probe' ? 'probe' : command === 'chain' ? 'chain' : 'ask', ...(variants ? { variants } : {}), ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}) },
       places,
       log,
     );
@@ -146,7 +152,7 @@ async function main(): Promise<void> {
     const units = await runAll(
       {
         traces: list(flag(args, 'traces'), ['results', 'short']),
-        models: list(flag(args, 'models'), [HAIKU]),
+        models: list(flag(args, 'models'), [SONNET]),
         runs: Number(flag(args, 'runs') ?? 1),
         buildModel,
         mode: 'find',
@@ -164,7 +170,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'grade') {
-    const grades = await grade(places, flag(args, 'model') ?? HAIKU, log);
+    const grades = await grade(places, flag(args, 'model') ?? SONNET, log);
     console.log(JSON.stringify({ answers: Object.keys(grades.verdicts).length, controls: grades.controls, disagreements: grades.disagreements, ungraded: grades.ungraded.length }));
     return;
   }

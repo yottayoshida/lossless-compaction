@@ -49,29 +49,29 @@ compaction then go through it, each with a line marked `lossless-compaction:`
 
 ## Against the built-in compaction
 
-Two made-up conversations of the kind the plugin compacts, measured once
-with Opus 5.5, each question asked of a fresh copy of what `/compact` left:
+The benchmark's six made-up conversations, each of another kind, measured
+twice with Sonnet 5.5: a `/compact` typed by hand, then nine questions asked
+one after another:
 
-|                                               |         Plugin |     Built-in |
-| --------------------------------------------- | -------------: | -----------: |
-| **102,276 tokens, mostly large tool results** |                |              |
-| `/compact` took                               |         0.10 s |       23.2 s |
-| The next request carried                      |  43,884 tokens | 6,952 tokens |
-| `/compact` and nine questions cost            |       0.62 USD |     0.68 USD |
-| **575,632 tokens, in a window of 1,000,000**  |                |              |
-| `/compact` took                               |         0.35 s |       51.4 s |
-| The next request carried                      | 272,428 tokens | 6,538 tokens |
-| `/compact` and eleven questions cost          |       3.58 USD |     3.13 USD |
+|                                  |        Plugin |      Built-in |
+| -------------------------------- | ------------: | ------------: |
+| A summary was written            |       0 of 12 |      12 of 12 |
+| `/compact` took                  |   0.07–0.35 s |       15–27 s |
+| The next request carried, tokens | 12,283–83,475 |  9,044–30,735 |
+| After the nine questions, tokens | 21,647–84,889 | 12,010–40,921 |
+| Right answers, of 108            |           106 |            96 |
+| The first run cost               |      2.82 USD |      2.17 USD |
 
-- **`/compact` is instant and calls no model, and every request after it is
-  larger.** In the larger conversation its questions took longer, and cost
-  more than the summary and the questions after it.
-- **In one run of each model, the answers were no better with the plugin.**
-  After a summary, Sonnet 5.5 and Opus 5.5 answered from Claude Code's own
-  record of the session: Sonnet 9 of 9 either way, Opus 8 of 12 exact
-  answers counted right with the plugin and 10 without, the rest right but
-  for how an id was written
-  ([every table](docs/measurements.md#with-opus-55-and-in-a-window-of-1000000)).
+- **`/compact` is instant, calls no model, and leaves more.** What fills the
+  conversation is moved out, not summarized: the next request was larger in
+  five kinds of six, and smaller in the one of many short calls.
+- **What left comes back by its id.** With the plugin the agent called
+  `recall`; after a summary it read files again and Claude Code's record of
+  the session. Either way, what it read went back into context.
+- **The cost moves.** No summary to pay for, and larger requests after it:
+  the plugin cost less in five kinds, and more in the one that fills the
+  window, where Claude Code wrote it to the cache again at four questions
+  ([every table](docs/measurements.md#every-kind-of-conversation-with-sonnet-55)).
 
 ## Before you install
 

@@ -43,6 +43,13 @@ four conversations it leaves undone with `maxAfterPercent` at 1, where each
 was handed to the summary, as the plugin did then: since ADR 0019 the oldest
 messages of such a conversation are kept in place of a summary.
 
+`results/2026-10-04-every-kind/` is the six conversations built again with
+Sonnet 5.5, `full` and `thinking` at version 2, compacted by the plugin as it
+is on `main` at `65c4ec2` and by Claude Code, the questions asked each of a
+fresh copy and one after another (`chain`), and graded by Sonnet 5.5. Its
+`bases/` holds the conversations as they were built: they are not those of
+`bases/` here.
+
 ## What is fixed before anything is compared
 
 - **The traces** (`traces.ts`): six made-up conversations of different
@@ -178,7 +185,13 @@ Every session is started the same way (`cc.ts`):
   can read what an earlier one was asked and answered.
 - `--autocompact 200000`: the same window for every model (the plugin sees
   167,000). A trace that names a window of its own is built, compacted and
-  asked in that one: `large` in 1,000,000, where the plugin sees 967,000.
+  asked in that one: `large` in 1,000,000, where the plugin sees 967,000, and
+  `full` in 264,000, where it sees 231,000: Sonnet 5.5 counts its text as
+  about 197,000 tokens, which fills 85 % of that as it filled 85 % of
+  167,000 for Haiku 4.5.
+- A model is named for each of building, answering and grading; where none
+  is, it is Sonnet 5.5. `thinking` asks its puzzles at the highest effort:
+  at high, Sonnet 5.5 thinks a few hundred tokens a puzzle.
 - `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`: no memory shared between forks.
 - The plugin's store is a directory in the box, never the store of the
   person running it.
@@ -224,13 +237,36 @@ Everything comes from what a session printed (`--output-format stream-json`).
   What is there to be read: Claude Code files records by the directory a
   session ran in, each building of a trace has a directory no session ran
   in before, and of the sessions run there only the building of the trace
-  and each unit's compaction are kept. Both hold the conversation as it
-  was, and no answer to any question.
+  and each unit's compaction, with a chain's turn before it (below), are
+  kept. They hold the conversation as it was, and no answer to any question.
 
-Not measured: what brought-back results add to the context over many turns
-(each question is its own fork); a compaction on a store that already holds
-something (every attempt at a unit starts with an empty one); an image pasted
-into a message, and a document.
+What comes back into the context over many turns is measured by `chain`:
+the same questions asked one after another, each going on from the one
+before, in both arms. Before its compaction a chain sends the conversation
+once, as the turn before a `/compact` sends it ("Reply only: ok.", and the
+run): what was
+just sent is in the prompt cache, where a summary could read it from, and what the
+compaction leaves ends with that turn, so that no other unit sent the same
+before it and its first question writes the cache as it would in a session
+(the plugin compacts to the same text each time; in the second run of
+`results/2026-10-04-every-kind/` the turn did not name the run yet, and its
+first questions read what the first run's had written). That
+turn is counted neither to the compaction nor to the questions. Its table
+gives what was in use before the compaction, right after it, and once every
+question was asked; how much it grew in between, the questions and answers
+with what they read (`recall` in the plugin's arm, a file read again or
+Claude Code's own record in the built-in's); and how much of the room the
+compaction made that growth took. A summary makes more room than moving out
+does; what is read back is the other side of it. A chain's sessions have to
+be kept for the next question to go on from; once the chain ends they are
+moved into the unit's records, so that no session of another unit can read
+what they answered. A chain stopped by a check of the run (a session not the
+one meant) can leave the session it stopped at, or its turn before the
+compaction, where it ran; a box where one stopped is not measured on again.
+
+Not measured: a compaction on a store that already holds something (every
+attempt at a unit starts with an empty one); an image pasted into a message,
+and a document.
 
 ## `find`
 
@@ -281,10 +317,11 @@ It is written to no file and is on no command line.
 ```sh
 export BENCH_BOX=~/somewhere/outside/the/repository
 node bench/main.ts build                                   # every conversation but `large`, which is built by name
-node bench/main.ts run --runs 3                            # every trace, Haiku 4.5
-node bench/main.ts run --traces results,writes,prose --models claude-sonnet-5-5 --runs 1
+node bench/main.ts run --runs 3                            # every trace, Sonnet 5.5
+node bench/main.ts run --traces results,writes,prose --models claude-opus-5-5 --runs 1
 node bench/main.ts build --traces large --build-model claude-sonnet-5-5   # the conversation in a window of 1,000,000
 node bench/main.ts run --traces large --models claude-opus-5-5 --build-model claude-sonnet-5-5   # asked by another model than built it
+node bench/main.ts chain --models claude-sonnet-5-5 --build-model claude-sonnet-5-5   # the questions one after another: how much the context grew
 node bench/main.ts probe --plugin-dirs current=.,v0.5.2=../v0.5.2   # estimate against the next request
 node bench/main.ts probe --traces mixed --plugin-dirs v0.6.0=../v0.6.0 --max-after 100   # a checkout made to compact what it would hand over
 node bench/main.ts grade                                   # every answer in the box, again when a unit was added: grade what is to be published in a box of its own

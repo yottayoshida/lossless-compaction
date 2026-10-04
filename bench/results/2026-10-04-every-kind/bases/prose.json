@@ -1,0 +1,23 @@
+{
+  "trace": "prose",
+  "version": 1,
+  "sessionId": "574ba8ac-2718-451a-96a3-f578c98c01f0",
+  "model": "claude-sonnet-5-5",
+  "claudeCode": "2.1.289",
+  "tokens": 74070,
+  "thinkingTokens": 61,
+  "toolCalls": 3,
+  "work": "prose-mutbkjfn",
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 24,
+      "outputTokens": 377,
+      "cacheReadInputTokens": 333244,
+      "cacheCreationInputTokens": 70673,
+      "costUSD": 0.35315880000000005,
+      "thinkingTokens": 61
+    }
+  },
+  "recordSha256": "8136e7ba0f52e42c88f12e10424e6cd02c006c63bf6e1aeea90774690ede341e",
+  "builtAt": "2026-10-04T04:27:51.649Z"
+}
