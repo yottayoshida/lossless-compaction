@@ -603,11 +603,6 @@ export async function compact(input: Input, config: Config, host: Host): Promise
       if (done.code !== undefined && !writeErrors.includes(done.code) && writeErrors.length < 3) writeErrors.push(done.code);
       continue;
     }
-    // A reading kept apart that could not be written is said as any write that could not be.
-    for (const missed of done.notStored) {
-      notMoved[missed.reason] = (notMoved[missed.reason] ?? 0) + 1;
-      if (missed.code !== undefined && !writeErrors.includes(missed.code) && writeErrors.length < 3) writeErrors.push(missed.code);
-    }
     lists.set(run.first, { run, list: done.list });
     folded += done.calls;
     saved += Math.max(0, sizeOf(run.messages, measure) - sizeOf([done.list], measure));

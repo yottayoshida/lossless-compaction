@@ -3,12 +3,12 @@ import { test } from 'node:test';
 
 import { readingsIn, readFoldedReadLine } from '../src/changed.ts';
 import { CHARS_PER_TOKEN, charsOf, compact, reportLine, type Config, type Input } from '../src/compact.ts';
-import { FOLDABLE, runsIn } from '../src/fold.ts';
+import { FOLDABLE, isFoldedList, runsIn } from '../src/fold.ts';
 import { placedTicketIds } from '../src/guard.ts';
 import { ticketIds } from '../src/lifetime.ts';
 import { goalOf } from '../src/select.ts';
-import { isStored, moveInputOut, moveOut, readPartTicket, recall } from '../src/store.ts';
-import { ticketsIn } from '../src/find.ts';
+import { PART, isStored, moveInputOut, moveOut, partTicketText, readPartTicket, recall, ticketText } from '../src/store.ts';
+import { find, ticketsIn } from '../src/find.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles } from './helpers.ts';
 import { readLine } from '../bench/lib.ts';
@@ -267,15 +267,37 @@ test('a call that holds another text than its result stays, as a result in that 
   assert.deepEqual(runsIn(conversation, 0, 2000), []);
 });
 
-test('a whole-file reading that cannot be written is said as a write that could not be, and listed without an id', async () => {
+test('where a whole-file reading cannot be written, its run stays where it stood, as a result that cannot be written does, and is counted', async () => {
   const files = new MemoryFiles();
   const reading = Array.from({ length: 60 }, (_, at) => `${at + 1}\tline ${at + 1}`).join('\n');
   files.corrupt = (text) => (text === reading ? `${text}!` : text);
   const before: Message[] = [said('user', 'Go.'), ...calls({ tool: 'Read', input: { file_path: '/w/a.ts' }, out: reading }), ...calls(bash('b')), said('assistant', 'Done.')];
   const { messages, report } = await compact(inUse(before), CONFIG, host(files));
 
-  assert.equal(report.folded, 2);
+  assert.equal(report.folded, 0);
   assert.equal(report.notMoved.differs, 1);
-  const list = messages.find((m) => m.text.startsWith('[lossless-compaction]'));
-  assert.ok(list && list.text.includes('\nRead: /w/a.ts -> 60 lines') && readFoldedReadLine(list.text.split('\n')[2] as string) === null);
+  // Nothing of the run is folded, and no part was written for it.
+  assert.deepEqual(messages.flatMap((m) => m.toolUses.map((use) => use.tool)), ['Read', 'Bash']);
+  assert.ok(!messages.some((m) => m.text.startsWith('[lossless-compaction]')));
+  assert.ok(![...files.files.keys()].some((path) => path.includes('/index/') && (files.files.get(path) ?? '').includes('"conversation"')));
+});
+
+test('find offers the part of a list of folded calls, and does not count it among the parts it reads through', async () => {
+  const files = new MemoryFiles();
+  // 70 lists of folded calls, then a part kept before a summary that holds a result: past the first 64 parts.
+  const before: Message[] = [said('user', 'Go.')];
+  for (let n = 1; n <= 70; n += 1) before.push(...calls(bash(`c${n}`, `c${n} output\n`.repeat(60))), said('assistant', `c${n} done.`));
+  before.push(said('assistant', 'All done.'));
+  const { messages } = await compact(inUse(before), { ...CONFIG, targetPercent: 0 }, host(files));
+  const lists = messages.filter((m) => isFoldedList(m.text));
+  assert.ok(lists.length > 64, `${lists.length} lists`);
+
+  const result = await moveOut(files, DIR, 'Bash', `the needle phrase is here\n${'x'.repeat(3000)}`);
+  assert.ok(!('reason' in result));
+  const kept = await moveOut(files, DIR, PART, `--- user\n[result Bash t9] \n${ticketText({ tool: 'Bash', bytes: result.bytes, id: result.id })}\n`);
+  assert.ok(!('reason' in kept));
+  messages.push({ role: 'user', text: `[lossless-compaction] Earlier messages of this conversation are kept\n${partTicketText({ part: 1, parts: 1, first: 1, last: 1, bytes: kept.bytes, id: kept.id })}`, toolUses: [] });
+
+  const answer = await find({ files, dirs: [DIR], messages, question: 'Where was "the needle phrase is here"?', provider: { kind: 'typesafe', key: 'k' }, http: async () => { throw new Error('nothing is to be sent'); } } as never);
+  assert.ok(answer.startsWith('[found] Bash result'), answer.slice(0, 160));
 });

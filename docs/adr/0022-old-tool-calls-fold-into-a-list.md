@@ -93,13 +93,16 @@ conclusion drawn from it is in what Claude said after it.
 
 - In the records above, folding as decided here leaves a median 39.6 % of a
   conversation's characters where every result and long input moved out left
-  62 %; the median conversation has 99 lists. Counted offline over the
-  records, by the rule; the size of a list estimated at 200 characters and 60
-  a call.
+  62 %, as 0020 counted it over the 104 there were then; the median
+  conversation has 99 lists. Counted offline over the records, by the rule;
+  the size of a list estimated at 200 characters and 60 a call.
 - The agent knows an old step by its line: what was run, on what, how much
   came back. What came back is a `recall` away. A summary of what is left,
-  where one runs (`/compact` with instructions, or a part that cannot be
-  written), sees the same lines.
+  where one runs (`docs/limits.md`, "In short", lists when), sees the same
+  lines.
+- `find` offers a list's part as any part, and does not read through it for
+  tickets: it holds none. The parts it reads through, at most 64, are the
+  kept conversation's.
 - A `/compact` with instructions that folding made room for is handed back
   without a summary, as one that moving results out made room for always was.
 - A list is not folded again: a long session gathers lists, which #47's cut

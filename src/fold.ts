@@ -124,7 +124,7 @@ function targetOf(use: ToolUse): string {
 const linesOf = (text: string): number => (text === '' ? 0 : text.split('\n').length);
 
 /** What a folded run left in the conversation, and the part that holds it. */
-export type Folded = { list: Message; part: { id: string; bytes: number }; calls: number; notStored: NotMoved[] };
+export type Folded = { list: Message; part: { id: string; bytes: number }; calls: number };
 
 /** A run whose list would take as much room as the calls it lists, or more: left where it stands, nothing written. */
 export type NotWorth = { notWorth: true };
@@ -167,15 +167,20 @@ export async function fold(files: Files, dir: string, run: Run, worth: (list: Me
   const reads = run.messages.flatMap((message) => message.toolUses).filter((use) => wholeRead(use, results.get(use.tool_use_id) ?? ''));
   const draft = listFor(run, { id: NO_ID, bytes: bytesOf(text) }, new Map(reads.map((use) => [use.tool_use_id, NO_ID])));
   if (!worth(draft)) return { notWorth: true };
+  // The readings first: where one cannot be written, the run stays where it stood, as a result that cannot be
+  // written does, and nothing of it is folded.
+  const readings = new Map<string, string>();
+  for (const use of reads) {
+    const stored = await moveOut(files, dir, 'Read', results.get(use.tool_use_id) ?? '');
+    if ('reason' in stored) return stored;
+    readings.set(use.tool_use_id, stored.id);
+  }
   const kept = await moveOut(files, dir, PART, text);
   if ('reason' in kept) return kept;
-  const readings = new Map<string, string>();
-  const notStored: NotMoved[] = [];
-  for (const use of reads) {
-    // A reading that cannot be stored is listed as any call is, and said: it is in the part all the same.
-    const stored = await moveOut(files, dir, 'Read', results.get(use.tool_use_id) ?? '');
-    if ('reason' in stored) notStored.push(stored);
-    else readings.set(use.tool_use_id, stored.id);
-  }
-  return { list: listFor(run, { id: kept.id, bytes: kept.bytes }, readings), part: { id: kept.id, bytes: kept.bytes }, calls: run.messages.flatMap((message) => message.toolUses).length, notStored };
+  return { list: listFor(run, { id: kept.id, bytes: kept.bytes }, readings), part: { id: kept.id, bytes: kept.bytes }, calls: run.messages.flatMap((message) => message.toolUses).length };
+}
+
+/** Whether a message is a list of folded calls: the part it names holds calls and results, and no ticket. */
+export function isFoldedList(text: string): boolean {
+  return /^\[lossless-compaction\] \d+ tool calls? (?:was|were) moved out here, with what (?:it|they) returned; /.test(text);
 }
