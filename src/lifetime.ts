@@ -11,6 +11,7 @@
 // back what they need from the trash first, so a result moved there while a
 // session still used it is not lost.
 
+import { readFoldedReadLine } from './changed.ts';
 import { ticketIdsIn } from './guard.ts';
 import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { exitOf } from './commands.ts';
@@ -175,9 +176,10 @@ export function ticketIds(messages: readonly Message[]): Set<string> {
       // the guard reads it: an id too many keeps a result a while longer, one too few leaves it in the trash.
       ticketIdsIn(use.input, ids);
     }
-    // The tickets of kept parts stand in the text of the message put after a summary, a line each.
+    // The tickets of kept parts stand in the text of the message put after a summary, a line each; and a list of
+    // folded calls names what a whole-file Read returned on that Read's line (ADR 0022).
     for (const line of message.text.split('\n')) {
-      const part = readPartTicket(line);
+      const part = readPartTicket(line) ?? readFoldedReadLine(line);
       if (part) ids.add(part.id);
     }
   }

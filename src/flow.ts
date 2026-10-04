@@ -65,7 +65,7 @@ export type Tried = {
 export function nextStep(tried: Tried): Step {
   const { outcome } = tried;
   const { report } = outcome;
-  const nothing = report.moved === 0 && report.inputs === 0;
+  const nothing = report.moved === 0 && report.inputs === 0 && report.folded === 0;
   // By hand, with room and nothing that could leave: no summary was asked for and none is needed (ADR 0015).
   const undone = leftUndone({
     trigger: tried.trigger,

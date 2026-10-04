@@ -17,6 +17,8 @@ const CONFIG: Config = {
   minChars: 200,
   targetPercent: 40,
   maxAfterPercent: 60,
+  // What these tests measure is results and inputs leaving; folding old calls is measured apart (test/fold.test.ts).
+  fold: false,
 };
 
 /** A conversation of this many tokens has to lose half: 400 tokens, which one result of `call` covers. */

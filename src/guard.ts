@@ -7,6 +7,7 @@
 // stopped: tools that write come and go faster than this plugin does, and one it has never heard of is looked at.
 // A ticket nothing knows goes through, since a document about tickets holds examples of them.
 
+import { readFoldedReadLine } from './changed.ts';
 import { PLUGIN, RECALL_TOOL, inputTicketsOf, isOwnTool, readInputTicket, readPartTicket, readTicket } from './store.ts';
 import type { Message } from './types.ts';
 
@@ -82,7 +83,7 @@ export function placedTicketIds(messages: readonly Message[], exceptCall?: strin
       if (use.text !== undefined) add(readTicket(use.text));
       for (const line of inputTicketsOf(use.input)) add(readInputTicket(line));
     }
-    if (message.role === 'user') for (const line of message.text.split('\n')) add(readPartTicket(line));
+    if (message.role === 'user') for (const line of message.text.split('\n')) add(readPartTicket(line) ?? readFoldedReadLine(line));
   }
   return ids;
 }

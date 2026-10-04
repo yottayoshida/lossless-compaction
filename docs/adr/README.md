@@ -48,3 +48,5 @@ Why the plugin is built the way it is, one record a decision.
   refused.
 - [0021](0021-one-line-installs-it-and-nothing-is-set.md): why the plugin is
   installed with one line in a session and nothing is set for it to run.
+- [0022](0022-old-tool-calls-fold-into-a-list.md): why old small tool calls
+  fold into a list, kept whole, and what was said stays.

@@ -30,7 +30,7 @@ function turn(n: number, said: number): Message[] {
 const talk = (turns: number, said: number): Message[] => Array.from({ length: turns }, (_, at) => turn(at + 1, said)).flat();
 
 function report(over: Partial<Report> = {}): Report {
-  return { results: 5, candidates: 5, moved: 0, inputs: 0, images: 0, charsBefore: 1000, charsAfter: 1000, tokensAfter: 20_000, counted: true, window: 100_000, notMoved: {}, writeErrors: [], ms: 12, ...over };
+  return { results: 5, candidates: 5, moved: 0, inputs: 0, folded: 0, images: 0, charsBefore: 1000, charsAfter: 1000, tokensAfter: 20_000, counted: true, window: 100_000, notMoved: {}, writeErrors: [], ms: 12, ...over };
 }
 
 /** A compaction in a window of 100,000 with 75 % allowed to stay, of `messages`, as `over` changes it. */
@@ -168,4 +168,11 @@ test('long inputs moved out are something moved out: handed back when enough, an
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
   // The control: nothing at all left, the same /compact is left undone.
   assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, inputs: 0 }, enough: false })).step, 'skip');
+});
+
+test('old calls folded are something moved out: handed back when enough, and never a /compact left undone (ADR 0022)', () => {
+  assert.deepEqual(nextStep(tried(WIDE, { report: { folded: 4 }, enough: true })), { step: 'back', line: reportLine(report({ folded: 4 })) });
+  const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, inputs: 0, folded: 2 }, enough: true } as const;
+  assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
+  assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, inputs: 0, folded: 0 }, enough: false })).step, 'skip');
 });

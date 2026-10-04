@@ -189,7 +189,7 @@ const REPLACEMENT = String.fromCodePoint(0xfffd);
  * was written, and nothing would be kept (#70). Only a part is mended so; a
  * result moved out on its own is refused and stays in the conversation as it was.
  */
-const wholeCharacters = (text: string): string => text.replace(/\p{Surrogate}/gu, REPLACEMENT);
+export const wholeCharacters = (text: string): string => text.replace(/\p{Surrogate}/gu, REPLACEMENT);
 
 type Kept = { text: string; parts: number } | { failed: NotMoved['reason']; code?: string } | { nothing: true };
 

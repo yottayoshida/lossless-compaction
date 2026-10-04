@@ -32,8 +32,48 @@ const char = String.fromCharCode;
 // A path holding one of these would break its line, could not be read back from it, or would not show as it is:
 // the control characters, the line and paragraph separators, and the marks that turn the direction of text.
 const UNFIT = new RegExp(`[${char(0)}-${char(0x1f)}${char(0x7f)}-${char(0x9f)}${char(0x2028)}${char(0x2029)}${char(0x202a)}-${char(0x202e)}${char(0x2066)}-${char(0x2069)}]`);
+
+/** `text` with every character a line cannot hold as it shows (see UNFIT) made a space. */
+export const fitForALine = (text: string): string => text.replace(new RegExp(UNFIT.source, 'g'), ' ');
 // What a file that is not UTF-8 reads as: it cannot be set against what `Read` made of it.
 const NOT_TEXT = new RegExp(`[${char(0)}${char(0xfffd)}]`);
+
+// The line a list of folded calls gives a file read whole (src/fold.ts): what the Read returned is stored apart, so
+// that the file can still be set against it after a summary, as a reading in the conversation is.
+const FOLDED_READ = 'Read: ';
+const FOLDED_READ_ID = ` lines; what it returned then comes back with ${RECALL_TOOL} id `;
+
+/** The line of a folded `Read` of a whole file, or null when its path is unfit for a line: that one is listed without its reading. */
+export function foldedReadLine(path: string, lines: number, id: string): string | null {
+  if (path.length > MAX_PATH_CHARS || UNFIT.test(path)) return null;
+  return `${FOLDED_READ}${path} -> ${lines}${FOLDED_READ_ID}${id}`;
+}
+
+/** What a line written by `foldedReadLine` names, or null for any other line. */
+export function readFoldedReadLine(line: string): { path: string; id: string } | null {
+  if (!line.startsWith(FOLDED_READ)) return null;
+  const id = line.slice(-64);
+  const at = line.lastIndexOf(FOLDED_READ_ID);
+  if (!ID.test(id) || at < 0 || at + FOLDED_READ_ID.length !== line.length - 64) return null;
+  const upTo = line.slice(FOLDED_READ.length, at);
+  const arrow = upTo.lastIndexOf(' -> ');
+  if (arrow <= 0 || !/^\d{1,9}$/.test(upTo.slice(arrow + 4))) return null;
+  return { path: upTo.slice(0, arrow), id };
+}
+
+/** The line of a folded call that wrote a file, or null when its path is unfit for a line. */
+export function foldedWriteLine(tool: string, path: string): string | null {
+  if (!WRITES.has(tool) || path.length > MAX_PATH_CHARS || UNFIT.test(path)) return null;
+  return `${tool}: ${path} -> written`;
+}
+
+/** The file a line written by `foldedWriteLine` names, or null for any other line. */
+export function readFoldedWriteLine(line: string): string | null {
+  const colon = line.indexOf(': ');
+  if (colon < 0 || !WRITES.has(line.slice(0, colon)) || !line.endsWith(' -> written')) return null;
+  const path = line.slice(colon + 2, -' -> written'.length);
+  return path === '' ? null : path;
+}
 
 export function changedLine(path: string, id: string): string {
   return `${BEFORE_PATH}${path}${BEFORE_ID}${id}.`;
@@ -100,8 +140,11 @@ export function readingsIn(messages: readonly Message[]): Reading[] {
       const said = message.text.replace(HOST_TEXT, '').trim();
       if (said.startsWith(`[${PLUGIN}] `)) {
         for (const line of said.split('\n')) {
-          const named = readChangedLine(line);
+          const named = readChangedLine(line) ?? readFoldedReadLine(line);
           if (named !== null) put(named);
+          // A folded call that wrote a file: the agent changed it itself, as a write in the conversation says.
+          const written = readFoldedWriteLine(line);
+          if (written !== null) latest.delete(written);
         }
       }
     }
