@@ -78,6 +78,11 @@ With a key set, each call to `find` sends the provider:
 - for every long value moved out of a call's input (what `Write` was handed
   to write, say), the call as it stands with the ticket in the value's place,
   and a 400-character digest of the value;
+- nothing of the middle of a long message that left: `find` looks through
+  those here, for a quoted phrase or the values the question names; where no
+  result holds the phrase and one middle does, it gives that message back,
+  and it names the other middles that hold what was asked beside its answer
+  (ADR 0024);
 - for every part of the conversation that was kept, before a summary, in
   place of one or as old tool calls folded into a list, a 400-character
   digest of what was said or returned in it, made as a

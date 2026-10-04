@@ -6,6 +6,9 @@
   for old short calls, which fold with their results into a list kept as a
   part ([ADR 0022](adr/0022-old-tool-calls-fold-into-a-list.md)), and
   `recall` checks the content against its name again before returning it. A
+  long message is kept the same way, whole, its first and last paragraphs and
+  a line in place of its middle standing in the conversation
+  ([ADR 0024](adr/0024-the-middle-of-a-long-message-leaves.md)). A
   write that fails loses nothing: a result is ticketed only once all of it is
   written.
 - **Rules decide what leaves. On this path no summary is written, and

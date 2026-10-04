@@ -51,7 +51,7 @@
     "minChars": {
       "type": "number",
       "title": "Smallest result to move out",
-      "description": "Tool results and input values shorter than this many characters are not moved out one by one. Old short calls may still fold into a list with what they returned.",
+      "description": "Tool results, input values and messages shorter than this many characters are not moved out one by one. Old short calls may still fold into a list with what they returned.",
       "default": 2000
     },
     "maxAfterPercent": {

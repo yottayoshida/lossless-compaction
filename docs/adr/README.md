@@ -53,3 +53,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0023](0023-a-compact-by-hand-reaches-the-newest-calls.md): why a
   `/compact` typed without instructions reaches into the newest calls, up to
   the last thing the person said.
+- [0024](0024-the-middle-of-a-long-message-leaves.md): why the middle of a
+  long message leaves, its first and last paragraphs staying, and is never
+  sent to Jev.
