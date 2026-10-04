@@ -1,0 +1,23 @@
+{
+  "trace": "full",
+  "version": 2,
+  "sessionId": "67c5f7cc-92e0-4d02-a9f5-46c1d511e21d",
+  "model": "claude-sonnet-5-5",
+  "claudeCode": "2.1.289",
+  "tokens": 197389,
+  "thinkingTokens": 0,
+  "toolCalls": 3,
+  "work": "full-mutc19n5",
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 30,
+      "outputTokens": 324,
+      "cacheReadInputTokens": 138425,
+      "cacheCreationInputTokens": 1040939,
+      "costUSD": 4.1947410000000005,
+      "thinkingTokens": 0
+    }
+  },
+  "recordSha256": "839f432f2578232fecdf20fac5fbf3b107d602f305b85fd6823576f3ce7fa35a",
+  "builtAt": "2026-10-04T04:41:07.357Z"
+}

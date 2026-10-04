@@ -1,5 +1,15 @@
 # Against the built-in compaction
 
+Measured last, on 2026-10-04 with Sonnet 5.5, the plugin compacted each of
+the six kinds of conversation by itself and no summary ran: a `/compact`
+took 0.08 to 0.17 s against 18 to 27 s, and left the next request larger in
+five of them. Asked one after another, the nine questions were answered
+right 53 times of 54 against 49, and the `/compact`s and their questions
+cost 0.81 USD against 2.07 with the prompt cache warm; asked each of a fresh
+copy, with nothing cached, 7.68 against 4.02
+([every table](measurements.md#every-kind-of-conversation-with-sonnet-55)).
+What follows is how it stood before.
+
 What follows was measured with Haiku 4.5, but for the one point on Opus 5.5.
 Where Sonnet 5.5 and Opus 5.5 were asked after a compaction the plugin made
 by itself, they answered no worse after the built-in one: after a summary

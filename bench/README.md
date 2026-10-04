@@ -43,6 +43,13 @@ four conversations it leaves undone with `maxAfterPercent` at 1, where each
 was handed to the summary, as the plugin did then: since ADR 0019 the oldest
 messages of such a conversation are kept in place of a summary.
 
+`results/2026-10-04-every-kind/` is the six conversations built again with
+Sonnet 5.5, `full` and `thinking` at version 2, compacted by the plugin as it
+is on `main` at `65c4ec2` and by Claude Code, the questions asked each of a
+fresh copy and one after another (`chain`), and graded by Sonnet 5.5. Its
+`bases/` holds the conversations as they were built: they are not those of
+`bases/` here.
+
 ## What is fixed before anything is compared
 
 - **The traces** (`traces.ts`): six made-up conversations of different
