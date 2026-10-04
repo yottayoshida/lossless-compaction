@@ -11,7 +11,7 @@ import type { Http, Message } from '../src/types.ts';
 import { MemoryFiles, conversation, ok, output, questionsOf, recordingHttp, type Call } from './helpers.ts';
 
 const DIR = '/home/u/.claude/lossless-compaction';
-const CONFIG: Config = { store: { write: DIR, read: [DIR] }, keepTokens: 20_000, minChars: 2000, targetPercent: 40, maxAfterPercent: 75 };
+const CONFIG: Config = { store: { write: DIR, read: [DIR] }, keepTokens: 20_000, minChars: 2000, targetPercent: 40, maxAfterPercent: 75, fold: false };
 const TYPESAFE = { kind: 'typesafe', key: 'test-key-for-typesafe', model: 'jev-latest' } as const;
 
 const STARTS = { 'image/png': 'iVBORw0KGgo', 'image/jpeg': '/9j/' } as const;

@@ -1,5 +1,6 @@
 // One compaction: choose what leaves, move it out, hand the conversation back.
 
+import { fold, runsIn, type Run } from './fold.ts';
 import { messagesFromApi } from './keep.ts';
 import { IMAGE_TOKENS, encodeMedia, type MediaPart } from './media.ts';
 import { ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
@@ -22,6 +23,11 @@ export type Config = {
    * in use to go on with and the built-in compaction takes over.
    */
   maxAfterPercent: number;
+  /**
+   * False leaves every call where it stands, whatever is still needed: what is measured is then the stages before
+   * folding (ADR 0022). Not a setting: the hook never sets it, and a compaction folds.
+   */
+  fold?: false;
 };
 
 /** What a compaction needs of the host: files, and a clock. Nothing is sent anywhere. */
@@ -56,6 +62,8 @@ export type Report = {
   moved: number;
   /** Long values of the inputs of the tools that write a file and of Bash that left, each a ticket now in its call. */
   inputs: number;
+  /** Old tool calls folded into lists, each run kept as a part (ADR 0022). */
+  folded: number;
   /** The images that left with their results; those results are among `moved`. */
   images: number;
   charsBefore: number;
@@ -450,6 +458,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
         candidates: 0,
         moved: 0,
         inputs: 0,
+        folded: 0,
         images: 0,
         charsBefore: charsOf(input.messages),
         charsAfter: charsOf(input.messages),
@@ -578,7 +587,39 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     });
   }
 
-  const messages = rebuild(input.messages, moved, stored, inputs);
+  const rebuilt = rebuild(input.messages, moved, stored, inputs);
+
+  // Then, while still short of the target, runs of old calls, oldest first: each kept whole as a part, and a list
+  // of the calls in its place. What the person and Claude said stays as it was (ADR 0022).
+  const lists = new Map<number, { run: Run; list: Message }>();
+  let folded = 0;
+  for (const run of config.fold !== false && saved * perUnit < need ? runsIn(rebuilt, config.keepTokens * CHARS_PER_TOKEN, config.minChars) : []) {
+    if (saved * perUnit >= need) break;
+    // Folded only where the list takes less room than the calls it stands for, measured as every size here is.
+    const done = await fold(files, config.store.write, run, (list) => sizeOf([list], measure) < sizeOf(run.messages, measure));
+    if ('notWorth' in done) continue;
+    if ('reason' in done) {
+      notMoved[done.reason] = (notMoved[done.reason] ?? 0) + 1;
+      if (done.code !== undefined && !writeErrors.includes(done.code) && writeErrors.length < 3) writeErrors.push(done.code);
+      continue;
+    }
+    lists.set(run.first, { run, list: done.list });
+    folded += done.calls;
+    saved += Math.max(0, sizeOf(run.messages, measure) - sizeOf([done.list], measure));
+  }
+  const messages: Message[] = [];
+  for (let at = 0; at < rebuilt.length; at += 1) {
+    const here = lists.get(at);
+    if (here === undefined) {
+      messages.push(rebuilt[at] as Message);
+      continue;
+    }
+    // What Claude said with the first calls of the run stays, and the list stands after it.
+    const said = (rebuilt[at] as Message).text;
+    if (said !== '') messages.push({ role: 'assistant', text: said, toolUses: [] });
+    messages.push(here.list);
+    at = here.run.last;
+  }
   // What is measured against the window is everything in it: the system prompt and the
   // tools' definitions too, which no compaction makes smaller.
   const charsAfter = charsOf(messages);
@@ -589,13 +630,14 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   const over = tokensAfter - mayStay(input.window, config.maxAfterPercent);
   return {
     messages,
-    enough: moved.size + inputsMoved > 0 && (over <= 0 || conversationAfter < over),
+    enough: moved.size + inputsMoved + folded > 0 && (over <= 0 || conversationAfter < over),
     target,
     report: {
       results: resultCount,
       candidates: candidates.length,
       moved: moved.size,
       inputs: inputsMoved,
+      folded,
       images,
       charsBefore,
       charsAfter,
@@ -618,7 +660,8 @@ export function reportLine(report: Report): string {
   return (
     `moved ${report.moved} of ${report.results} tool results out` +
     (report.images === 0 ? '' : `, ${report.images} ${report.images === 1 ? 'image' : 'images'} with them`) +
-    (report.inputs === 0 ? ' ' : ` and ${report.inputs} tool ${report.inputs === 1 ? 'input' : 'inputs'} `) +
+    (report.inputs === 0 ? '' : ` and ${report.inputs} tool ${report.inputs === 1 ? 'input' : 'inputs'}`) +
+    (report.folded === 0 ? ' ' : `, ${report.folded} old tool ${report.folded === 1 ? 'call' : 'calls'} folded into lists `) +
     `(${report.charsBefore} -> ${report.charsAfter} chars` +
     (report.counted ? `, about ${report.tokensAfter} of ${report.window} tokens in use) ` : ') ') +
     `in ${took}${stayed === '' ? '' : `; left in place: ${stayed}`}` +

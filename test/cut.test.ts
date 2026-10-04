@@ -491,7 +491,7 @@ test('what the built-in summary was handed for its size is cut instead, down to 
 });
 
 test('the line says no summary ran, which messages were kept and in how many parts, around the report of what was handed back', () => {
-  const report: Report = { results: 612, candidates: 30, moved: 23, inputs: 0, images: 0, charsBefore: 3_000_000, charsAfter: 2_400_000, tokensAfter: 483_027, counted: true, window: 967_000, notMoved: {}, writeErrors: [], ms: 140 };
+  const report: Report = { results: 612, candidates: 30, moved: 23, inputs: 0, folded: 0, images: 0, charsBefore: 3_000_000, charsAfter: 2_400_000, tokensAfter: 483_027, counted: true, window: 967_000, notMoved: {}, writeErrors: [], ms: 140 };
   assert.equal(
     cutLine(report, { first: 2, last: 526, of: 1306, parts: 12, over: false }),
     'no summary, messages 2-526 of 1306 kept in 12 parts: moved 23 of 612 tool results out (3000000 -> 2400000 chars, about 483027 of 967000 tokens in use) in 140 ms',

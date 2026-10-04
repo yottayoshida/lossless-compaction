@@ -32,6 +32,17 @@ stood ([what stays, and how far a cut goes](limits.md#when-the-conversation-is-t
 [moved out] conversation, part 1 of 11, messages 2-12, 1438 bytes; recall with mcp__lossless-compaction__recall id aeda8ee2358743538f517ef841ea5aa71780a5d523b81441ca65097beab4b2e7
 ```
 
+Old small calls fold into a list where they stood, each run kept as a part,
+once moving results and long inputs out is not enough
+([which calls fold](limits.md#in-short)):
+
+```text
+[lossless-compaction] 2 tool calls were moved out here, with what they returned; recall the part for all of it.
+[moved out] conversation, part 1 of 1, messages 12-15, 849 bytes; recall with mcp__lossless-compaction__recall id ae3a60d299d1060a7a920c43933c89a9d0b3715ad679f450ca5a68b0e0086367
+Read: /work/notes.md -> 4 lines; what it returned then comes back with mcp__lossless-compaction__recall id 7eb572e61cf43a61319777b05fd294ce71692bd1b502ce3b1924362ce7606e59
+Edit: /work/notes.md -> written
+```
+
 In a session where the plugin is enabled and is not running, a line says so
 at the first message you send, naming what the plugin needs: Claude Code
 2.1.287 or later, and mods not turned off for you
@@ -67,8 +78,9 @@ With a key set, each call to `find` sends the provider:
 - for every long value moved out of a call's input (what `Write` was handed
   to write, say), the call as it stands with the ticket in the value's place,
   and a 400-character digest of the value;
-- for every part of the conversation that was kept, before a summary or in
-  place of one, a 400-character digest of what was said in it, made as a
+- for every part of the conversation that was kept, before a summary, in
+  place of one or as old tool calls folded into a list, a 400-character
+  digest of what was said or returned in it, made as a
   result's is: its first lines, up to five lines between that look like
   failures, and its last lines, which are its newest messages (of a result or
   a part over 256 KB, the digest is of its first 8 KB);

@@ -3,6 +3,7 @@
 
 import { choose, digest, head, inputLine, stateFor, type Provider } from './ask.ts';
 import { unnumbered } from './changed.ts';
+import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
 import { PART, PLUGIN, RECALL_TOOL, inputTicketsOf, isOwnTool, isStored, readInputTicket, readPartTicket, readTicket, recall, type Ticket } from './store.ts';
 import type { Files, Http, Message } from './types.ts';
@@ -53,7 +54,7 @@ export type FindInput = {
  * summary, with what it stands for in words: the call that made the result, or
  * which messages the part holds.
  */
-export type Stored = Ticket & { line: string; about: string };
+export type Stored = Ticket & { line: string; about: string; follow?: false };
 
 /**
  * The phrases the question puts in double quotes, long enough to narrow by.
@@ -151,7 +152,10 @@ export function ticketsIn(messages: readonly Message[]): Stored[] {
         tickets.push({ ...ticket, line, about: `the ${ticket.field} handed to ${ticket.tool}, called with ${inputLine(use.input)}` });
       }
     }
-    if (message.role === 'user' && (message.toolResults?.length ?? 0) === 0) tickets.push(...partsIn(message.text, seen));
+    if (message.role === 'user' && (message.toolResults?.length ?? 0) === 0) {
+      const parts = partsIn(message.text, seen);
+      tickets.push(...(isFoldedList(message.text) ? parts.map((part) => ({ ...part, follow: false as const })) : parts));
+    }
   }
   return tickets;
 }
@@ -198,7 +202,8 @@ async function everyTicket(files: Files, dirs: readonly string[], messages: read
   let read = 0;
   for (let index = 0; index < tickets.length && read < MAX_PARTS; index += 1) {
     const ticket = tickets[index] as Stored;
-    if (ticket.tool !== PART) continue;
+    // A list of folded calls names a part with no ticket in it: offered as any part, not followed (ADR 0022).
+    if (ticket.tool !== PART || ticket.follow === false) continue;
     read += 1;
     if (!(await isStored(files, dirs, ticket.line))) continue;
     const got = await recall(files, dirs, ticket.id);

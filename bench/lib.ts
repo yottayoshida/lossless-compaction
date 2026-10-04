@@ -273,6 +273,8 @@ export type Line = {
   moved: number;
   /** Long values of tool inputs moved out (ADR 0020); absent where the line names none. */
   inputs?: number;
+  /** Old tool calls folded into lists (ADR 0022); absent where the line names none. */
+  folded?: number;
   results: number;
   images: number;
   charsBefore: number;
@@ -288,7 +290,7 @@ export type Line = {
 };
 
 const LINE =
-  /moved (\d+) of (\d+) tool results out(?:, (\d+) images? with them)?(?: and (\d+) tool inputs?)? \((\d+) -> (\d+) chars(?:, about (\d+) of (\d+) tokens in use)?\) in ([\d.]+) (ms|s)/;
+  /moved (\d+) of (\d+) tool results out(?:, (\d+) images? with them)?(?: and (\d+) tool inputs?)?(?:, (\d+) old tool calls? folded into lists)? \((\d+) -> (\d+) chars(?:, about (\d+) of (\d+) tokens in use)?\) in ([\d.]+) (ms|s)/;
 const UNDONE = /nothing to move out(?:, (\d+) of (\d+) tokens in use)?: the conversation is left as it is/;
 // No summary in place of one (ADR 0019, src/cut.ts writes the line): the oldest messages kept, or nothing to cut once rebuilt.
 const CUT = /no summary, messages (\d+)-(\d+) of (\d+) kept in (\d+) parts?: /;
@@ -316,14 +318,15 @@ export function readLine(text: string): Line | null {
     moved: Number(match[1]),
     results: Number(match[2]),
     images: Number(match[3] ?? 0),
-    charsBefore: Number(match[5]),
-    charsAfter: Number(match[6]),
-    ms: Number(match[9]) * (match[10] === 's' ? 1000 : 1),
+    charsBefore: Number(match[6]),
+    charsAfter: Number(match[7]),
+    ms: Number(match[10]) * (match[11] === 's' ? 1000 : 1),
   };
   if (cut) line.cut = { first: Number(cut[1]), last: Number(cut[2]), of: Number(cut[3]), parts: Number(cut[4]) };
   if (match[4] !== undefined) line.inputs = Number(match[4]);
-  if (match[7] !== undefined) line.estimate = Number(match[7]);
-  if (match[8] !== undefined) line.window = Number(match[8]);
+  if (match[5] !== undefined) line.folded = Number(match[5]);
+  if (match[8] !== undefined) line.estimate = Number(match[8]);
+  if (match[9] !== undefined) line.window = Number(match[9]);
   return line;
 }
 

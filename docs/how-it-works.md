@@ -2,7 +2,9 @@
 
 - **A result is stored before it is replaced.** It is written to a file named
   by the SHA-256 of its content, read back, and compared. Only then does a
-  ticket take its place. The tool call itself stays in the conversation, and
+  ticket take its place. The tool call itself stays in the conversation, but
+  for old short calls, which fold with their results into a list kept as a
+  part ([ADR 0022](adr/0022-old-tool-calls-fold-into-a-list.md)), and
   `recall` checks the content against its name again before returning it. A
   write that fails loses nothing: a result is ticketed only once all of it is
   written.

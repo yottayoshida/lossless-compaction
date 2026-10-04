@@ -14,7 +14,8 @@ What the plugin does not do, and what a repository or a version can change.
   message stays. More is sent with each request than after a summary, and
   the agent knows what was cut by the list alone (ADR 0019).
 - **Claude Code's own summary still runs** when `/compact` is given
-  instructions and moving results out did not make room; when no cut
+  instructions and moving results, long inputs and old calls out did not
+  make room; when no cut
   between messages brings the conversation under `maxAfterPercent`, as with
   one very long message said last; when the plugin cannot count the
   conversation and its messages come to less than `keepTokens`; when the
@@ -26,6 +27,15 @@ What the plugin does not do, and what a repository or a version can change.
   enough, long values handed to `Write`, `Edit`, `MultiEdit`, `NotebookEdit`
   and Bash leave too, each a line in its call; the newest stay up to
   `keepTokens` of their own. The inputs of other tools stay (ADR 0020).
+- **Old small calls fold into a list after that.** Calls of `Bash`, `Read`,
+  `Grep`, `Glob`, the tools that write, `WebFetch` and `WebSearch` whose
+  inputs and results are all short and hold no ticket, older than the newest
+  `keepTokens`, leave with their results, kept as a part; a list of what was
+  called stands where they stood, and what was said stays. A call that holds
+  a ticket stays, so the ticket goes on naming what it stands for. A run
+  folds only where its list is smaller than it. The agent sees an old step by
+  its line, not by what it returned, until it recalls the part; so does a
+  summary of what is left, where one runs (ADR 0022).
 - **A tool call that hands on a ticket is refused**, whatever the tool, when
   the id is one this store holds or this conversation names, or when the store
   cannot be read to tell. Not caught: a ticket built up in a script, one whose

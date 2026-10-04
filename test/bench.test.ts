@@ -183,7 +183,7 @@ test('a figure a session did not give is not read as nought: the session is not 
 });
 
 test('the plugin\'s line is read in every form it has, and from the function that writes it', () => {
-  const report: Report = { results: 21, candidates: 9, moved: 6, inputs: 0, images: 2, charsBefore: 844544, charsAfter: 548237, tokensAfter: 52357, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 61 };
+  const report: Report = { results: 21, candidates: 9, moved: 6, inputs: 0, folded: 0, images: 2, charsBefore: 844544, charsAfter: 548237, tokensAfter: 52357, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 61 };
   assert.deepEqual(readLine(`lossless-compaction: ${reportLine(report)}`), {
     outcome: 'moved', moved: 6, results: 21, images: 2, charsBefore: 844544, charsAfter: 548237, estimate: 52357, window: 167000, ms: 61,
   });
@@ -204,7 +204,7 @@ test('the plugin\'s line is read in every form it has, and from the function tha
 });
 
 test('a conversation cut in place of a summary is read as one the summary did not run on, with how much was kept (ADR 0019)', () => {
-  const report: Report = { results: 21, candidates: 0, moved: 0, inputs: 0, images: 0, charsBefore: 440000, charsAfter: 330000, tokensAfter: 118000, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 48 };
+  const report: Report = { results: 21, candidates: 0, moved: 0, inputs: 0, folded: 0, images: 0, charsBefore: 440000, charsAfter: 330000, tokensAfter: 118000, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 48 };
   // From the function that writes it: the sizes are those of what was handed back.
   const cut = readLine(`lossless-compaction: ${cutLine(report, { first: 2, last: 5, of: 16, parts: 3, over: false })}`);
   assert.deepEqual(cut, {
