@@ -1,4 +1,4 @@
-Graded by claude-sonnet-5-5, in two passes; the tables use the first. Of 217 answers mixed in whose grade was known, it graded 217, 214 as expected. Of 140 pairs of the same answer with and without words that tell an arm, it graded both of 140, 137 alike. The two passes graded 7 answer(s) differently; 0 answer(s) or control(s) were left ungraded by a pass.
+Graded by claude-sonnet-5-5, in two passes; the tables use the first. Of 217 answers mixed in whose grade was known, it graded 217, 215 as expected. Of 140 pairs of the same answer with and without words that tell an arm, it graded both of 140, 139 alike. The two passes graded 10 answer(s) differently; 0 answer(s) or control(s) were left ungraded by a pass.
 
 ### full, claude-sonnet-5-5
 
@@ -134,19 +134,19 @@ Right answers of those asked, per run:
 | Exact, file unchanged | 1/1 | 1/1 |
 | Exact, file changed: what it said then | 1/1 | 1/1 |
 | Exact, file changed: what it says now | 1/1 | 1/1 |
-| Where the work stands | 2/2 | 2/2 |
-| A rule stated early | 2/2 | 2/2 |
+| Where the work stands | 1/2 | 2/2 |
+| A rule stated early | 2/2 | 1/2 |
 
 How the questions went, all runs together:
 
 |  | plugin | builtin |
 | --- | ---: | ---: |
-| correct from context | 4 | 4 |
+| correct from context | 3 | 3 |
 | correct after recall | 3 | 0 |
 | correct after find | 0 | 0 |
 | correct after reading outside the working directory | 0 | 3 |
 | correct after reading again | 2 | 2 |
-| incorrect without retrieval | 0 | 0 |
+| incorrect without retrieval | 1 | 1 |
 | incorrect after retrieval | 0 | 0 |
 | incorrect after reading outside the working directory | 0 | 0 |
 | incorrect after reading again | 0 | 0 |
@@ -185,19 +185,19 @@ Right answers of those asked, per run:
 | Exact, file unchanged | 1/1 | 1/1 |
 | Exact, file changed: what it said then | 1/1 | 1/1 |
 | Exact, file changed: what it says now | 1/1 | 1/1 |
-| Where the work stands | 2/2 | 2/2 |
+| Where the work stands | 2/2 | 1/2 |
 | A rule stated early | 2/2 | 2/2 |
 
 How the questions went, all runs together:
 
 |  | plugin | builtin |
 | --- | ---: | ---: |
-| correct from context | 3 | 6 |
+| correct from context | 3 | 5 |
 | correct after recall | 4 | 0 |
 | correct after find | 0 | 0 |
 | correct after reading outside the working directory | 0 | 3 |
 | correct after reading again | 2 | 0 |
-| incorrect without retrieval | 0 | 0 |
+| incorrect without retrieval | 0 | 1 |
 | incorrect after retrieval | 0 | 0 |
 | incorrect after reading outside the working directory | 0 | 0 |
 | incorrect after reading again | 0 | 0 |
@@ -236,19 +236,19 @@ Right answers of those asked, per run:
 | Exact, file unchanged | 1/1 | 1/1 |
 | Exact, file changed: what it said then | 1/1 | 0/1 |
 | Exact, file changed: what it says now | 1/1 | 1/1 |
-| Where the work stands | 2/2 | 2/2 |
+| Where the work stands | 2/2 | 1/2 |
 | A rule stated early | 2/2 | 2/2 |
 
 How the questions went, all runs together:
 
 |  | plugin | builtin |
 | --- | ---: | ---: |
-| correct from context | 4 | 5 |
+| correct from context | 4 | 4 |
 | correct after recall | 3 | 0 |
 | correct after find | 0 | 0 |
 | correct after reading outside the working directory | 0 | 2 |
 | correct after reading again | 2 | 1 |
-| incorrect without retrieval | 0 | 1 |
+| incorrect without retrieval | 0 | 2 |
 | incorrect after retrieval | 0 | 0 |
 | incorrect after reading outside the working directory | 0 | 0 |
 | incorrect after reading again | 0 | 0 |
@@ -318,19 +318,19 @@ How the questions went, all runs together:
 | thinking | claude-sonnet-5-5 | default (214978c94372) | 1 | moved | 20714 | 17641 sent next | 17.4 % |
 | writes | claude-sonnet-5-5 | default (214978c94372) | 1 | moved | 34138 | 35215 sent next | -3.1 % |
 
-### The questions asked one after another: what came back into the context
+### The questions asked one after another: how much the context grew
 
-| Trace | Model | Run | Arm | In use before | Right after | After the questions | Brought back | Of the room made, taken again | `recall` calls | Files read again | Questions that read outside the work | Right |
+| Trace | Model | Run | Arm | In use before | Right after | After the questions | Grew by | Of the room made, taken again | `recall` calls | Files read again | Questions that read outside the work | Right |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| full | claude-sonnet-5-5 | 1 | builtin | 197394 | 11761 | 14254 | 2493 | 1 % | 0 | 4 | 2 | 7 of 9 graded |
-| full | claude-sonnet-5-5 | 1 | plugin | 197394 | 83460 | 84906 | 1446 | 1 % | 0 | 1 | 0 | 9 of 9 graded |
-| prose | claude-sonnet-5-5 | 1 | builtin | 74075 | 11717 | 13785 | 2068 | 3 % | 0 | 3 | 2 | 8 of 9 graded |
-| prose | claude-sonnet-5-5 | 1 | plugin | 74075 | 34497 | 35678 | 1181 | 3 % | 0 | 1 | 0 | 9 of 9 graded |
-| results | claude-sonnet-5-5 | 1 | builtin | 101258 | 7334 | 10268 | 2934 | 3 % | 0 | 5 | 3 | 9 of 9 graded |
-| results | claude-sonnet-5-5 | 1 | plugin | 101258 | 43586 | 53466 | 9880 | 17 % | 3 | 1 | 0 | 8 of 9 graded |
-| short | claude-sonnet-5-5 | 1 | builtin | 25377 | 11854 | 14609 | 2755 | 20 % | 0 | 4 | 2 | 8 of 9 graded |
-| short | claude-sonnet-5-5 | 1 | plugin | 25377 | 10766 | 21675 | 10909 | 75 % | 4 | 1 | 0 | 9 of 9 graded |
-| thinking | claude-sonnet-5-5 | 1 | builtin | 37746 | 12552 | 15289 | 2737 | 11 % | 0 | 4 | 2 | 8 of 9 graded |
-| thinking | claude-sonnet-5-5 | 1 | plugin | 37746 | 17641 | 27005 | 9364 | 47 % | 3 | 1 | 0 | 9 of 9 graded |
-| writes | claude-sonnet-5-5 | 1 | builtin | 75591 | 28413 | 32430 | 4017 | 9 % | 0 | 7 | 3 | 9 of 9 graded |
-| writes | claude-sonnet-5-5 | 1 | plugin | 75591 | 35215 | 44617 | 9402 | 23 % | 3 | 1 | 0 | 9 of 9 graded |
+| full | claude-sonnet-5-5 | 1 | builtin | 199586 | 14251 | 16684 | 2433 | 1 % | 0 | 4 | 2 | 8 of 9 graded |
+| full | claude-sonnet-5-5 | 1 | plugin | 199947 | 83475 | 84889 | 1414 | 1 % | 0 | 1 | 0 | 9 of 9 graded |
+| prose | claude-sonnet-5-5 | 1 | builtin | 76198 | 13883 | 16283 | 2400 | 4 % | 0 | 4 | 2 | 8 of 9 graded |
+| prose | claude-sonnet-5-5 | 1 | plugin | 76559 | 34512 | 35762 | 1250 | 3 % | 0 | 1 | 0 | 9 of 9 graded |
+| results | claude-sonnet-5-5 | 1 | builtin | 103450 | 9242 | 12010 | 2768 | 3 % | 0 | 5 | 3 | 6 of 9 graded |
+| results | claude-sonnet-5-5 | 1 | plugin | 103811 | 43606 | 53512 | 9906 | 16 % | 3 | 1 | 0 | 8 of 9 graded |
+| short | claude-sonnet-5-5 | 1 | builtin | 27341 | 14081 | 17082 | 3001 | 23 % | 0 | 4 | 2 | 8 of 9 graded |
+| short | claude-sonnet-5-5 | 1 | plugin | 27702 | 12283 | 22645 | 10362 | 67 % | 4 | 1 | 0 | 8 of 9 graded |
+| thinking | claude-sonnet-5-5 | 1 | builtin | 27783 | 14859 | 17597 | 2738 | 21 % | 0 | 4 | 2 | 7 of 9 graded |
+| thinking | claude-sonnet-5-5 | 1 | plugin | 28144 | 17656 | 27032 | 9376 | 89 % | 3 | 1 | 0 | 9 of 9 graded |
+| writes | claude-sonnet-5-5 | 1 | builtin | 77643 | 30735 | 34629 | 3894 | 8 % | 0 | 7 | 4 | 9 of 9 graded |
+| writes | claude-sonnet-5-5 | 1 | plugin | 78004 | 35230 | 44970 | 9740 | 23 % | 3 | 1 | 0 | 8 of 9 graded |

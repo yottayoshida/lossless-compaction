@@ -49,28 +49,28 @@ compaction then go through it, each with a line marked `lossless-compaction:`
 
 ## Against the built-in compaction
 
-Six made-up conversations, one of each kind the benchmark builds, measured
+The benchmark's six made-up conversations, each of another kind, measured
 once with Sonnet 5.5: a `/compact` typed by hand, then nine questions asked
 one after another:
 
 |                                   |        Plugin |      Built-in |
 | --------------------------------- | ------------: | ------------: |
 | A summary was written             |        0 of 6 |        6 of 6 |
-| `/compact` took                   |   0.08–0.17 s |       18–27 s |
-| The next request carried, tokens  | 10,766–83,460 |  7,334–28,413 |
-| After the nine questions, tokens  | 21,675–84,906 | 10,268–32,430 |
-| Right answers, of 54              |            53 |            49 |
-| `/compact` and the questions cost |      0.81 USD |      2.07 USD |
+| `/compact` took                   |   0.09–0.18 s |       15–23 s |
+| The next request carried, tokens  | 12,283–83,475 |  9,242–30,735 |
+| After the nine questions, tokens  | 22,645–84,889 | 12,010–34,629 |
+| Right answers, of 54              |            51 |            46 |
+| `/compact` and the questions cost |      2.82 USD |      2.17 USD |
 
 - **`/compact` is instant, calls no model, and leaves more.** What fills the
   conversation is moved out, not summarized: the next request was larger in
   five kinds of six, and smaller in the one of many short calls.
 - **What left comes back by its id.** With the plugin the agent called
   `recall`; after a summary it read files again and Claude Code's own record
-  of the session. Either way, what it needed went back into the context.
-- **The cost moves.** With the prompt cache warm, the plugin's questions
-  cost more than those after a summary and less than the summary itself.
-  Each asked of a fresh copy, nothing cached: 7.68 USD against 4.02
+  of the session. Either way, what it read went back into the context.
+- **The cost moves.** No summary to pay for, and more in every request
+  after it: the plugin cost less in five kinds of six, and more in the one
+  that fills the window, 1.69 USD against 0.63
   ([every table](docs/measurements.md#every-kind-of-conversation-with-sonnet-55)).
 
 ## Before you install

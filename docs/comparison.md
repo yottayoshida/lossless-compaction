@@ -2,11 +2,11 @@
 
 Measured last, on 2026-10-04 with Sonnet 5.5, the plugin compacted each of
 the six kinds of conversation by itself and no summary ran: a `/compact`
-took 0.08 to 0.17 s against 18 to 27 s, and left the next request larger in
+took 0.09 to 0.18 s against 15 to 23 s, and left the next request larger in
 five of them. Asked one after another, the nine questions were answered
-right 53 times of 54 against 49, and the `/compact`s and their questions
-cost 0.81 USD against 2.07 with the prompt cache warm; asked each of a fresh
-copy, with nothing cached, 7.68 against 4.02
+right 51 times of 54 against 46, and the `/compact`s and their questions
+cost 2.82 USD against 2.17; asked each of a fresh copy, where no question
+reads what another wrote to the prompt cache, 7.68 against 4.02
 ([every table](measurements.md#every-kind-of-conversation-with-sonnet-55)).
 What follows is how it stood before.
 

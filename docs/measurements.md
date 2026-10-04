@@ -30,49 +30,62 @@ built in its `bases/`.
 Sonnet 5.5 counts the same text as more tokens than Haiku 4.5 does, and
 thinks less over the benchmark's puzzles, so two conversations were given the
 shape they had for Haiku (version 2 of each, `bench/traces.ts`). `full` is
-built, compacted and asked in a window of 264,000 tokens: its 197,394 tokens
+built, compacted and asked in a window of 264,000 tokens: its 197,389 tokens
 fill 85 % of the 231,000 the plugin sees there, as `full` filled 167,000 for
 Haiku. `thinking` asks twenty puzzles at the highest effort: 12,135 of its
-37,746 tokens were thinking.
+37,741 tokens were thinking when it was built, and out of what is sent once a
+turn has gone by.
 
 The questions were asked two ways: each of a fresh copy of what the
 compaction left, as in the runs before, and one after another in one
-session, each going on from the one before, as work goes on. The second
-counts what the questions brought back into the context.
+session, each going on from the one before, as work goes on. Before such a
+compaction the conversation was sent once, as the turn before a `/compact`
+sends it: its tokens before are those of that turn. A first run without that
+turn had the plugin's first question read what the plugin's arm asked of a
+fresh copy had written to the prompt cache minutes before, the compaction
+leaving the same text both times; it is not published.
 
 One after another, as the README gives it. In every cell the plugin's figure
 is first and the built-in compaction's second:
 
 | The conversation is mostly      | Tokens before | `/compact` took, s | The next request, tokens | After the nine, tokens | Right, of 9 | Cost, USD   |
 | ------------------------------- | ------------: | -----------------: | -----------------------: | ---------------------: | ----------: | ----------: |
-| Large tool results              |       101,258 |        0.09 · 26.8 |           43,586 · 7,334 |        53,466 · 10,268 |       8 · 9 | 0.18 · 0.35 |
-| Files the agent wrote           |        75,591 |        0.16 · 23.1 |          35,215 · 28,413 |        44,617 · 32,430 |       9 · 9 | 0.15 · 0.45 |
-| Text pasted into messages       |        74,075 |        0.08 · 18.0 |          34,497 · 11,717 |        35,678 · 13,785 |       9 · 8 | 0.08 · 0.29 |
-| Many short calls                |        25,377 |        0.17 · 21.7 |          10,766 · 11,854 |        21,675 · 14,609 |       9 · 8 | 0.11 · 0.19 |
-| Text filling most of the window |       197,394 |        0.09 · 21.7 |          83,460 · 11,761 |        84,906 · 14,254 |       9 · 7 | 0.18 · 0.61 |
-| Thinking                        |        37,746 |        0.08 · 25.1 |          17,641 · 12,552 |        27,005 · 15,289 |       9 · 8 | 0.10 · 0.20 |
+| Large tool results              |       103,811 |        0.13 · 23.0 |           43,606 · 9,242 |        53,512 · 12,010 |       8 · 6 | 0.35 · 0.36 |
+| Files the agent wrote           |        78,004 |        0.18 · 16.9 |          35,230 · 30,735 |        44,970 · 34,629 |       8 · 9 | 0.28 · 0.47 |
+| Text pasted into messages       |        76,559 |        0.09 · 15.1 |          34,512 · 13,883 |        35,762 · 16,283 |       9 · 8 | 0.20 · 0.31 |
+| Many short calls                |        27,702 |        0.15 · 21.2 |          12,283 · 14,081 |        22,645 · 17,082 |       8 · 8 | 0.14 · 0.20 |
+| Text filling most of the window |       199,947 |        0.10 · 22.6 |          83,475 · 14,251 |        84,889 · 16,684 |       9 · 8 | 1.69 · 0.63 |
+| Thinking                        |        28,144 |        0.09 · 23.3 |          17,656 · 14,859 |        27,032 · 17,597 |       9 · 7 | 0.16 · 0.21 |
 
 - **No summary was written by the plugin**, in any of its twelve compactions
   (six each way); Claude Code wrote one in each of its twelve. Each kind left
   smaller with no summary, and the next request was larger with the plugin in
   five of the six, smaller in the one of many short calls.
-- **What the questions brought back.** One after another, the plugin's
-  context grew by 1,181 to 10,909 tokens over the nine questions, the
-  built-in's by 2,068 to 4,017. With the plugin the agent called `recall` 13
-  times and read 6 files again; after a summary it read 27 files again, and
-  14 of its questions read outside the working directory, in Claude Code's
-  own record of the session. In `short`, made of many short calls folded into lists, the
-  questions took back three quarters of the room the plugin had made.
-- **The cost.** One after another, with the prompt cache warm: 0.81 USD in
-  all for the plugin, against 2.07, of which the summaries were 1.40 and the
-  questions after them 0.68. Each of a fresh copy, with nothing cached: 7.68
-  against 4.02, every question sending the plugin's larger context afresh.
-- **The answers.** 53 of 54 right against 49 one after another, 54 against 53
-  each of a fresh copy. The grader graded 7 answers differently in its two
-  passes, the tables using the first: 4 of the built-in's and 3 of the
-  plugin's, all about where the work stood or what was decided. Of 217
-  answers of known grade mixed in, it graded 214 as expected; the other three
-  say nothing is left, and were graded wrong rather than abstained.
+- **What the questions added.** One after another, the plugin's context grew
+  by 1,250 to 10,362 tokens over the nine questions, the built-in's by 2,400
+  to 3,894: the questions and answers, and what they read. With the plugin
+  the agent called `recall` 13 times and read or searched files 6 times;
+  after a summary it read or searched files 28 times, and 15 of its questions
+  did so outside the working directory, in Claude Code's own record of the
+  session. In `short`, made of many short calls folded into lists, and in
+  `thinking`, the growth took two thirds and more of the room the plugin had
+  made.
+- **The cost.** One after another: 2.82 USD in all for the plugin, against
+  2.17, of which the summaries were 1.41 and the questions after them 0.76.
+  The plugin cost less in five kinds and more in `full`, 1.69 against 0.63:
+  each request after its `/compact` carries the 83,475 tokens it left, and
+  the first writes them to the prompt cache. The summary read nothing of the
+  turn sent just before it from the cache but the system prompt: Claude Code
+  sends the conversation to it in another form, and in `full` it wrote
+  193,244 tokens afresh. Each of a fresh copy, where no question reads what
+  another wrote to the cache: 7.68 against 4.02.
+- **The answers.** 51 of 54 right against 46 one after another, 53 against
+  50 each of a fresh copy. The grader graded 10 answers differently in its two
+  passes, the tables using the first, all to questions a program cannot
+  grade; graded before the chain's answers were added to its batches, the
+  fresh copies had come to 54 and 53. Of 217 answers of known grade mixed in,
+  it graded 215 as expected; the other two are the right answer to a question
+  of `large`, which this run did not ask.
 
 Not shown here: one run of one model; made-up conversations, each of one
 kind; and, one after another, an answer that leans on the one before it.

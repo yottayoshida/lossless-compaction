@@ -1,23 +1,23 @@
 {
  "model": "claude-sonnet-5-5",
  "verdicts": {
-  "full|claude-sonnet-5-5|1|builtin|default|then|a10ba69da487": [
+  "full|claude-sonnet-5-5|1|builtin|default|then|807ff6182d54": [
    "incorrect",
    "incorrect"
   ],
-  "full|claude-sonnet-5-5|1|builtin|default|next|a513ed7ff705": [
+  "full|claude-sonnet-5-5|1|builtin|default|next|1ffcd0a79128": [
    "correct",
    "correct"
   ],
-  "full|claude-sonnet-5-5|1|builtin|default|decided|c38c94e74ccb": [
-   "incorrect",
-   "correct"
-  ],
-  "full|claude-sonnet-5-5|1|builtin|default|rule-1|35c55698ecbb": [
+  "full|claude-sonnet-5-5|1|builtin|default|decided|01999aaf07fb": [
    "correct",
    "correct"
   ],
-  "full|claude-sonnet-5-5|1|builtin|default|rule-2|0582ad64fb1d": [
+  "full|claude-sonnet-5-5|1|builtin|default|rule-1|94af5edd948e": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|builtin|default|rule-2|81f20da1b15c": [
    "correct",
    "correct"
   ],
@@ -33,15 +33,11 @@
    "correct",
    "correct"
   ],
-  "full|claude-sonnet-5-5|1|builtin|default|rule-2|81f20da1b15c": [
+  "full|claude-sonnet-5-5|1|plugin|default|next|b7d4e887142a": [
    "correct",
    "correct"
   ],
-  "full|claude-sonnet-5-5|1|plugin|default|next|bfe12d67b340": [
-   "correct",
-   "correct"
-  ],
-  "full|claude-sonnet-5-5|1|plugin|default|decided|6f4c63f2d13e": [
+  "full|claude-sonnet-5-5|1|plugin|default|decided|69b107ffcd2d": [
    "correct",
    "correct"
   ],
@@ -49,7 +45,7 @@
    "correct",
    "correct"
   ],
-  "full|claude-sonnet-5-5|1|plugin|default|rule-2|81f20da1b15c": [
+  "full|claude-sonnet-5-5|1|plugin|default|rule-2|b5e00003bdfd": [
    "correct",
    "correct"
   ],
@@ -61,19 +57,23 @@
    "correct",
    "correct"
   ],
-  "prose|claude-sonnet-5-5|1|builtin|default|then|ca25b989ea72": [
+  "full|claude-sonnet-5-5|1|plugin|default|rule-2|81f20da1b15c": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|builtin|default|then|4f8d484e1614": [
    "incorrect",
    "incorrect"
   ],
-  "prose|claude-sonnet-5-5|1|builtin|default|next|70cc1055c3b5": [
+  "prose|claude-sonnet-5-5|1|builtin|default|next|a3d83c6a1729": [
    "correct",
    "correct"
   ],
-  "prose|claude-sonnet-5-5|1|builtin|default|decided|f0b1ec94fcf2": [
+  "prose|claude-sonnet-5-5|1|builtin|default|decided|229c6ada8d10": [
    "correct",
    "correct"
   ],
-  "prose|claude-sonnet-5-5|1|builtin|default|rule-1|db1f85f16e69": [
+  "prose|claude-sonnet-5-5|1|builtin|default|rule-1|ae9158fadb8c": [
    "correct",
    "correct"
   ],
@@ -89,15 +89,11 @@
    "correct",
    "correct"
   ],
-  "prose|claude-sonnet-5-5|1|builtin|default|rule-1|ae9158fadb8c": [
+  "prose|claude-sonnet-5-5|1|plugin|default|next|138c46f4ff71": [
    "correct",
    "correct"
   ],
-  "prose|claude-sonnet-5-5|1|plugin|default|next|0732ba649ff1": [
-   "correct",
-   "correct"
-  ],
-  "prose|claude-sonnet-5-5|1|plugin|default|decided|f070a2838de7": [
+  "prose|claude-sonnet-5-5|1|plugin|default|decided|d7faa4ee3528": [
    "correct",
    "correct"
   ],
@@ -117,52 +113,60 @@
    "correct",
    "correct"
   ],
-  "results|claude-sonnet-5-5|1|builtin|default|next|7351dd186a01": [
+  "results|claude-sonnet-5-5|1|builtin|default|unchanged|b475c58c6e4a": [
+   "incorrect",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|builtin|default|then|357b4dd2e91d": [
+   "incorrect",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|builtin|default|now|33ec3c78058c": [
+   "incorrect",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|builtin|default|decided|b6a3de028240": [
+   "correct",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|builtin|default|rule-1|1591ee78c613": [
    "correct",
    "correct"
   ],
-  "results|claude-sonnet-5-5|1|builtin|default|decided|7100be5c6c2e": [
-   "correct",
-   "correct"
-  ],
-  "results|claude-sonnet-5-5|1|builtin|default|rule-1|7284f8c7e2fb": [
-   "correct",
-   "correct"
-  ],
-  "results|claude-sonnet-5-5|1|builtin|default|rule-2|03f2410eafca": [
+  "results|claude-sonnet-5-5|1|builtin|default|rule-2|cc3b0e6f7189": [
    "correct",
    "correct"
   ],
   "results|claude-sonnet-5-5|1|builtin|default|decided|f71dc1200027": [
    "correct",
-   "incorrect"
+   "correct"
   ],
   "results|claude-sonnet-5-5|1|builtin|default|rule-1|49c06fc9e431": [
    "correct",
    "correct"
   ],
   "results|claude-sonnet-5-5|1|builtin|default|rule-2|50798ce80cd4": [
-   "correct",
-   "correct"
-  ],
-  "results|claude-sonnet-5-5|1|plugin|default|next|200635ea09b8": [
-   "correct",
-   "correct"
-  ],
-  "results|claude-sonnet-5-5|1|plugin|default|decided|2e2bfd4e4896": [
-   "correct",
-   "correct"
-  ],
-  "results|claude-sonnet-5-5|1|plugin|default|rule-1|238253210e14": [
    "incorrect",
    "correct"
   ],
-  "results|claude-sonnet-5-5|1|plugin|default|rule-2|347b6c8197c7": [
+  "results|claude-sonnet-5-5|1|plugin|default|next|026b5cc0450c": [
+   "incorrect",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|default|decided|f1931058300b": [
+   "correct",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|default|rule-1|3c03f7650d16": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|default|rule-2|abba4ffb15e4": [
    "correct",
    "correct"
   ],
   "results|claude-sonnet-5-5|1|plugin|default|next|0e9a8d7dba52": [
-   "correct",
+   "incorrect",
    "correct"
   ],
   "results|claude-sonnet-5-5|1|plugin|default|decided|cbe0414537b1": [
@@ -177,23 +181,23 @@
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|builtin|default|then|5454a4f16d24": [
+  "short|claude-sonnet-5-5|1|builtin|default|then|352cc2031365": [
    "incorrect",
    "incorrect"
   ],
-  "short|claude-sonnet-5-5|1|builtin|default|next|c797f3f404cd": [
+  "short|claude-sonnet-5-5|1|builtin|default|next|016a21c10bb5": [
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|builtin|default|decided|439e505cb5e6": [
+  "short|claude-sonnet-5-5|1|builtin|default|decided|126f32355d28": [
+   "correct",
+   "incorrect"
+  ],
+  "short|claude-sonnet-5-5|1|builtin|default|rule-1|5c1f42dd661b": [
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|builtin|default|rule-1|568076159b93": [
-   "correct",
-   "correct"
-  ],
-  "short|claude-sonnet-5-5|1|builtin|default|rule-2|eac07ea33d41": [
+  "short|claude-sonnet-5-5|1|builtin|default|rule-2|13dd7cd00263": [
    "correct",
    "correct"
   ],
@@ -202,7 +206,7 @@
    "correct"
   ],
   "short|claude-sonnet-5-5|1|builtin|default|decided|9da221ecfdb6": [
-   "correct",
+   "incorrect",
    "incorrect"
   ],
   "short|claude-sonnet-5-5|1|builtin|default|rule-1|913c341e8595": [
@@ -213,19 +217,19 @@
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|plugin|default|next|13dd0609265a": [
+  "short|claude-sonnet-5-5|1|plugin|default|next|d97c33f5869d": [
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|plugin|default|decided|87ab93c5596c": [
-   "correct",
-   "incorrect"
+  "short|claude-sonnet-5-5|1|plugin|default|decided|35483f4d085f": [
+   "incorrect",
+   "correct"
   ],
-  "short|claude-sonnet-5-5|1|plugin|default|rule-1|568076159b93": [
+  "short|claude-sonnet-5-5|1|plugin|default|rule-1|d5baaba0819d": [
    "correct",
    "correct"
   ],
-  "short|claude-sonnet-5-5|1|plugin|default|rule-2|e264cdf92555": [
+  "short|claude-sonnet-5-5|1|plugin|default|rule-2|de6006c89863": [
    "correct",
    "correct"
   ],
@@ -235,7 +239,7 @@
   ],
   "short|claude-sonnet-5-5|1|plugin|default|decided|5ec7527b89ab": [
    "correct",
-   "incorrect"
+   "correct"
   ],
   "short|claude-sonnet-5-5|1|plugin|default|rule-1|a55a4f450999": [
    "correct",
@@ -245,23 +249,23 @@
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|builtin|default|then|8b96692f306a": [
+  "thinking|claude-sonnet-5-5|1|builtin|default|then|fd3482ee0dfe": [
    "incorrect",
    "incorrect"
   ],
-  "thinking|claude-sonnet-5-5|1|builtin|default|next|f34653ba1f6a": [
+  "thinking|claude-sonnet-5-5|1|builtin|default|next|835d4d0b10cf": [
+   "incorrect",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|builtin|default|decided|96c372513333": [
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|builtin|default|decided|d1ed1e06f179": [
+  "thinking|claude-sonnet-5-5|1|builtin|default|rule-1|7e2b74cf3d78": [
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|builtin|default|rule-1|6047164f25c8": [
-   "correct",
-   "correct"
-  ],
-  "thinking|claude-sonnet-5-5|1|builtin|default|rule-2|d38c5e0bf460": [
+  "thinking|claude-sonnet-5-5|1|builtin|default|rule-2|b6f50820883e": [
    "correct",
    "correct"
   ],
@@ -270,7 +274,7 @@
    "incorrect"
   ],
   "thinking|claude-sonnet-5-5|1|builtin|default|next|7031698661d6": [
-   "correct",
+   "incorrect",
    "correct"
   ],
   "thinking|claude-sonnet-5-5|1|builtin|default|decided|db00e978741a": [
@@ -285,19 +289,19 @@
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|plugin|default|next|143ece12bb5c": [
+  "thinking|claude-sonnet-5-5|1|plugin|default|next|17808d18ae7d": [
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|plugin|default|decided|05f9da3e14f4": [
+  "thinking|claude-sonnet-5-5|1|plugin|default|decided|d0aa063defbc": [
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|plugin|default|rule-1|23e923396792": [
+  "thinking|claude-sonnet-5-5|1|plugin|default|rule-1|d306334c611f": [
    "correct",
    "correct"
   ],
-  "thinking|claude-sonnet-5-5|1|plugin|default|rule-2|2a2566131514": [
+  "thinking|claude-sonnet-5-5|1|plugin|default|rule-2|84266b651bb6": [
    "correct",
    "correct"
   ],
@@ -317,15 +321,15 @@
    "correct",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|builtin|default|next|bc2ba94e025c": [
+  "writes|claude-sonnet-5-5|1|builtin|default|next|3e30c1a1b118": [
    "correct",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|builtin|default|decided|0d47253db1ac": [
+  "writes|claude-sonnet-5-5|1|builtin|default|decided|eba8fdf45857": [
    "correct",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|builtin|default|rule-1|12dbc6782470": [
+  "writes|claude-sonnet-5-5|1|builtin|default|rule-1|6a3e2925a09f": [
    "correct",
    "correct"
   ],
@@ -339,7 +343,7 @@
   ],
   "writes|claude-sonnet-5-5|1|builtin|default|decided|20186e4c98d1": [
    "correct",
-   "incorrect"
+   "correct"
   ],
   "writes|claude-sonnet-5-5|1|builtin|default|rule-1|48a30db31509": [
    "correct",
@@ -349,15 +353,15 @@
    "correct",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|plugin|default|next|15a7f668a6e3": [
+  "writes|claude-sonnet-5-5|1|plugin|default|next|bf93be787507": [
    "correct",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|plugin|default|decided|955acbf3b690": [
-   "correct",
+  "writes|claude-sonnet-5-5|1|plugin|default|decided|ed3ec90cc7d7": [
+   "incorrect",
    "correct"
   ],
-  "writes|claude-sonnet-5-5|1|plugin|default|rule-1|94f225253b5b": [
+  "writes|claude-sonnet-5-5|1|plugin|default|rule-1|b844d58362c2": [
    "correct",
    "correct"
   ],
@@ -371,7 +375,7 @@
   ],
   "writes|claude-sonnet-5-5|1|plugin|default|decided|362ad2071a42": [
    "correct",
-   "correct"
+   "incorrect"
   ],
   "writes|claude-sonnet-5-5|1|plugin|default|rule-1|12dfca78e73a": [
    "correct",
@@ -407,7 +411,7 @@
   ],
   "control|results|decided|right": [
    "correct",
-   "correct"
+   "incorrect"
   ],
   "control|results|decided|right|told-1": [
    "correct",
@@ -415,7 +419,7 @@
   ],
   "control|results|decided|right|told-2": [
    "correct",
-   "correct"
+   "incorrect"
   ],
   "control|results|decided|wrong": [
    "incorrect",
@@ -982,15 +986,15 @@
    "incorrect"
   ],
   "control|large|decided|right": [
-   "correct",
-   "correct"
+   "incorrect",
+   "incorrect"
   ],
   "control|large|decided|right|told-1": [
    "correct",
    "correct"
   ],
   "control|large|decided|right|told-2": [
-   "correct",
+   "incorrect",
    "correct"
   ],
   "control|large|decided|wrong": [
@@ -1031,7 +1035,7 @@
   ],
   "control|large|rule-2|right": [
    "correct",
-   "correct"
+   "incorrect"
   ],
   "control|large|rule-2|right|told-1": [
    "correct",
@@ -1078,7 +1082,7 @@
    "abstained"
   ],
   "control|results|gone-1|none|told-2": [
-   "incorrect",
+   "abstained",
    "abstained"
   ],
   "control|writes|gone-1|other-hedged": [
@@ -1106,7 +1110,7 @@
    "abstained"
   ],
   "control|writes|gone-1|none|told-2": [
-   "incorrect",
+   "abstained",
    "abstained"
   ],
   "control|prose|gone-1|other-hedged": [
@@ -1214,7 +1218,7 @@
    "abstained"
   ],
   "control|thinking|gone-1|none|told-1": [
-   "incorrect",
+   "abstained",
    "abstained"
   ],
   "control|thinking|gone-1|none|told-2": [
@@ -1257,6 +1261,10 @@
    "correct",
    "correct"
   ],
+  "results|claude-sonnet-5-5|1|builtin|default|next|3db38a6dae96": [
+   "correct",
+   "correct"
+  ],
   "results|claude-sonnet-5-5|1|builtin|default|next|e3523401a223": [
    "correct",
    "correct"
@@ -1265,11 +1273,11 @@
  "controls": {
   "count": 217,
   "graded": 217,
-  "asExpected": 214,
+  "asExpected": 215,
   "toldPairs": 140,
   "toldPairsGraded": 140,
-  "toldPairsSame": 137
+  "toldPairsSame": 139
  },
- "disagreements": 7,
+ "disagreements": 10,
  "ungraded": []
 }
