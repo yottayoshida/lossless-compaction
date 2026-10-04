@@ -106,7 +106,7 @@ export async function replay(record: string, line: number, targetPercent: number
 
   // What the hook does with a conversation `compact()` leaves too full or with nothing moved out, `/compact` having been given no instructions.
   const asked = { messages: outcome.messages, tokens: outcome.report.tokensAfter, count, window, maxAfterPercent, cutTo: outcome.target, keepTokens, instructions: undefined };
-  const handedOver = (outcome.report.moved === 0 && outcome.report.inputs === 0 && outcome.report.folded === 0) || !outcome.enough;
+  const handedOver = (outcome.report.moved === 0 && outcome.report.inputs === 0 && (outcome.report.bodies ?? 0) === 0 && outcome.report.folded === 0) || !outcome.enough;
   const decision = handedOver ? decide(asked) : null;
   const kept = decision?.hand === 'back' && decision.at > 0 ? await keepOldest(files, config.store, asked, decision.after, decision.at) : null;
   const cut =

@@ -14,13 +14,14 @@ import { cutLine, keepOldest } from '../src/cut.ts';
 import { find } from '../src/find.ts';
 import { beforeTrying, configFrom, nextStep, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
-import { guarded, placedTicketIds, refused } from '../src/guard.ts';
+import { readBody, rewound } from '../src/body.ts';
+import { guarded, longestIn, middleDropped, middleRefusal, placedTicketIds, refused } from '../src/guard.ts';
 import { keepThenSummarize, messagesFromApi, namedThroughParts } from '../src/keep.ts';
 import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, PLUGIN, RECALL, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, type Recalled, type StoreDirs } from '../src/store.ts';
+import { FIND, PLUGIN, RECALL, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
@@ -642,7 +643,14 @@ export const register: Register = (on, options) => {
       return placedTicketIds(messages, String((e as { tool_use_id?: unknown }).tool_use_id)).has(id);
     };
     const why = await refused(input, known);
-    return why === null ? next(e) : { deny: why };
+    if (why !== null) return { deny: why };
+    // A message without its middle, the line dropped, handed on to any tool that is not known only to read: read the
+    // conversation only where a value is long enough to hold one (ADR 0024).
+    if (longestIn(input) >= 200) {
+      const id = middleDropped(input, (await $.session.messages()) as readonly Message[]);
+      if (id !== null) return { deny: middleRefusal(id) };
+    }
+    return next(e);
   });
 
   // Spelled out, not imported: Claude Code reads the matcher from this file. A test holds it to RECALL_TOOL.
@@ -711,6 +719,25 @@ export const register: Register = (on, options) => {
       // What the host threw names no key: keys are only ever read, not thrown.
       return { result: `[${PLUGIN}] find could not run: ${error instanceof Error ? error.message : String(error)}` };
     }
+  });
+
+  // A message sent again from a rewind, its middle still the line of this plugin's, goes in as the whole message it
+  // was: Claude Code puts the message in the box as it stands in the conversation (ADR 0024). Only what the person
+  // sends, and only a message this plugin kept: a peer's message or a notification goes in as it is.
+  on('prompt.submit', async ($, e, next) => {
+    const text = (e as { text?: unknown }).text;
+    if (typeof text !== 'string' || readBody(text) === null) return next(e);
+    const store = await storeOf($, options);
+    if (typeof store === 'string') return next(e);
+    const files = filesOf($);
+    const whole = await rewound(e, {
+      kindOf: (id) => storedAs(files, store.read, id),
+      textOf: async (id) => {
+        const got = await recall(files, store.read, id);
+        return 'error' in got ? null : got.text;
+      },
+    });
+    return whole === null ? next(e) : next({ ...e, text: whole });
   });
 
   // What is done, and in what order, is src/flow.ts's: each step is carried out here as it is returned.

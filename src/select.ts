@@ -1,7 +1,7 @@
 // Which tool results may leave the conversation, and the order they leave in
 // when nothing but rules decides it.
 
-import { PLUGIN, readInputTicket } from './store.ts';
+import { PLUGIN, readBodyTicket, readInputTicket } from './store.ts';
 import type { Message, ToolUse } from './types.ts';
 
 export type Candidate = {
@@ -333,13 +333,20 @@ export function goalOf(messages: readonly Message[], instructions: string | unde
   return [instructions?.trim() ?? '', ...said].filter((text) => text !== '').join('\n\n');
 }
 
-const sayingOf = (message: Message): string => message.text.replace(HOST_TEXT, '').trim();
+const sayingOf = (message: Message): string =>
+  message.text
+    .replace(HOST_TEXT, '')
+    .split('\n')
+    // The line in place of the middle of what was said is this plugin's (ADR 0024).
+    .filter((line) => readBodyTicket(line) === null)
+    .join('\n')
+    .trim();
 
 /**
  * Whether a message is something a person said: theirs, no results, and not the host's text, a command, or a
  * line this plugin put in the conversation.
  */
-function saidByAPerson(message: Message): boolean {
+export function saidByAPerson(message: Message): boolean {
   if (message.role !== 'user' || (message.toolResults?.length ?? 0) > 0) return false;
   const text = sayingOf(message);
   return text !== '' && !text.startsWith('/') && !text.startsWith(`[${PLUGIN}]`) && !WRITTEN_BY_CLAUDE_CODE.test(text);

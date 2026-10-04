@@ -15,7 +15,7 @@ import { readFoldedReadLine } from './changed.ts';
 import { ticketIdsIn } from './guard.ts';
 import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { exitOf } from './commands.ts';
-import { idOf, isPart, readPartTicket, readTicket, recall } from './store.ts';
+import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall } from './store.ts';
 import type { DirEntry, Exec, Files, Message } from './types.ts';
 
 export { dayOf };
@@ -181,6 +181,9 @@ export function ticketIds(messages: readonly Message[]): Set<string> {
     for (const line of message.text.split('\n')) {
       const part = readPartTicket(line) ?? readFoldedReadLine(line);
       if (part) ids.add(part.id);
+      // The middle of a long message, a person's or Claude's (ADR 0024).
+      const body = readBodyTicket(line);
+      if (body) ids.add(body.id);
     }
   }
   return ids;

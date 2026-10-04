@@ -28,6 +28,25 @@ What the plugin does not do, and what a repository or a version can change.
   and Bash leave too, each a line in its call; the newest stay up to
   `keepTokens` of their own, but at a `/compact` typed without instructions
   (ADR 0023). The inputs of other tools stay (ADR 0020).
+- **The middle of a long message leaves next.** A message of yours or of
+  Claude's of `minChars` characters or more, with three paragraphs or more,
+  keeps its first and last paragraphs (500 characters of each at most) and a
+  line in place of what is between them; the whole message is kept, and the
+  newest such messages stay up to `keepTokens` of their own, but at a
+  `/compact` typed without instructions. The first
+  message, the plugin's own lines and what Claude Code writes in your place (a
+  notification, another session's message) stay. A paragraph is never cut
+  inside a fenced block of code: where it could only be, the message stays
+  whole. Until it recalls the message, the agent sees only its first and last
+  paragraphs: an instruction in the middle of a long message is out of its
+  sight. `find` looks through the middles here, in the conversation and in
+  the kept parts it reads, for a quoted phrase or the values a question
+  names, and sends Jev nothing of them; a part kept before a summary is
+  offered to Jev by its digest, as before, and can hold what was said. A
+  message you send again from a rewind as its paragraphs and the line goes
+  in whole. A call of any tool but those known only to read that hands on the
+  first and last paragraphs together, the line dropped, is refused; where the
+  two are under 40 characters together, only side by side (ADR 0024).
 - **Old small calls fold into a list after that.** Calls of `Bash`, `Read`,
   `Grep`, `Glob`, the tools that write, `WebFetch` and `WebSearch` whose
   inputs and results are all short and hold no ticket, older than the newest
@@ -424,8 +443,8 @@ it is in. A result a later call made obsolete is a candidate even when it is
 the newest.
 
 A `/compact` typed without instructions goes on where that is not enough:
-once every result, long input and old call older than the newest
-`keepTokens` is out, the same three are taken from the newer ones, up to
+once every result, long input, middle of a long message and old call older
+than the newest `keepTokens` is out, the same are taken from the newer ones, up to
 the last thing you said (a turn stopped with Esc, a Stop hook's answer, a
 message from another session and a command run with `!` are not things you
 said); the second round leaves that message and what came

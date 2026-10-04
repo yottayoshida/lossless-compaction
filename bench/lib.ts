@@ -273,6 +273,8 @@ export type Line = {
   moved: number;
   /** Long values of tool inputs moved out (ADR 0020); absent where the line names none. */
   inputs?: number;
+  /** Long messages whose middles left (ADR 0024); absent where the line names none. */
+  bodies?: number;
   /** Old tool calls folded into lists (ADR 0022); absent where the line names none. */
   folded?: number;
   results: number;
@@ -290,7 +292,7 @@ export type Line = {
 };
 
 const LINE =
-  /moved (\d+) of (\d+) tool results out(?:, (\d+) images? with them)?(?: and (\d+) tool inputs?)?(?:, (\d+) old tool calls? folded into lists)? \((\d+) -> (\d+) chars(?:, about (\d+) of (\d+) tokens in use)?\) in ([\d.]+) (ms|s)/;
+  /moved (?<moved>\d+) of (?<results>\d+) tool results out(?:, (?<images>\d+) images? with them)?(?: and (?<inputs>\d+) tool inputs?)?(?:, the middle of (?<bodies>\d+) long messages?)?(?:, (?<folded>\d+) old tool calls? folded into lists)? \((?<before>\d+) -> (?<after>\d+) chars(?:, about (?<estimate>\d+) of (?<window>\d+) tokens in use)?\) in (?<took>[\d.]+) (?<unit>ms|s)/;
 const UNDONE = /nothing to move out(?:, (\d+) of (\d+) tokens in use)?: the conversation is left as it is/;
 // No summary in place of one (ADR 0019, src/cut.ts writes the line): the oldest messages kept, or nothing to cut once rebuilt.
 const CUT = /no summary, messages (\d+)-(\d+) of (\d+) kept in (\d+) parts?: /;
@@ -313,20 +315,22 @@ export function readLine(text: string): Line | null {
   }
   if (!match) return text.includes('built-in compaction:') ? { outcome: 'other', ...none } : null;
   const cut = CUT.exec(text);
+  const got = match.groups as Record<string, string | undefined>;
   const line: Line = {
     outcome: text.includes('too much is still in use') ? 'too-much' : text.includes('nothing could be moved out') ? 'nothing' : cut ? 'cut' : text.includes(REBUILT) ? 'rebuilt' : 'moved',
-    moved: Number(match[1]),
-    results: Number(match[2]),
-    images: Number(match[3] ?? 0),
-    charsBefore: Number(match[6]),
-    charsAfter: Number(match[7]),
-    ms: Number(match[10]) * (match[11] === 's' ? 1000 : 1),
+    moved: Number(got['moved']),
+    results: Number(got['results']),
+    images: Number(got['images'] ?? 0),
+    charsBefore: Number(got['before']),
+    charsAfter: Number(got['after']),
+    ms: Number(got['took']) * (got['unit'] === 's' ? 1000 : 1),
   };
   if (cut) line.cut = { first: Number(cut[1]), last: Number(cut[2]), of: Number(cut[3]), parts: Number(cut[4]) };
-  if (match[4] !== undefined) line.inputs = Number(match[4]);
-  if (match[5] !== undefined) line.folded = Number(match[5]);
-  if (match[8] !== undefined) line.estimate = Number(match[8]);
-  if (match[9] !== undefined) line.window = Number(match[9]);
+  if (got['inputs'] !== undefined) line.inputs = Number(got['inputs']);
+  if (got['bodies'] !== undefined) line.bodies = Number(got['bodies']);
+  if (got['folded'] !== undefined) line.folded = Number(got['folded']);
+  if (got['estimate'] !== undefined) line.estimate = Number(got['estimate']);
+  if (got['window'] !== undefined) line.window = Number(got['window']);
   return line;
 }
 

@@ -348,6 +348,34 @@ export async function moveOut(files: Files, dir: string, tool: string, text: str
 /** A value of a tool call's input, stored: what its ticket says, and the line that replaces it. */
 export type MovedInput = InputTicket & { text: string };
 
+// The middle of a long message that left (ADR 0024): a line of its own between the message's first and last
+// paragraphs. It says the whole message comes back, and its size, so that what is around it is not taken for all
+// there was.
+const BODY_TICKET = new RegExp(
+  `^\\[moved out\\] the middle of this message; recall returns the whole message, (\\d{1,9}) bytes, head and tail included, with ${RECALL_TOOL} id ([0-9a-f]{64})$`,
+);
+
+/** What the line in place of a message's middle says: the size of the whole message, and its id. */
+export type BodyTicket = { bytes: number; id: string };
+
+export function bodyTicketText({ bytes, id }: BodyTicket): string {
+  return `[moved out] the middle of this message; recall returns the whole message, ${bytes} bytes, head and tail included, with ${RECALL_TOOL} id ${id}`;
+}
+
+/** Reads a line that has the shape of a message's ticket. The shape alone proves nothing: see `isStored`. */
+export function readBodyTicket(line: string): BodyTicket | null {
+  const match = BODY_TICKET.exec(line);
+  if (!match) return null;
+  return { bytes: Number(match[1]), id: match[2] as string };
+}
+
+/** Stores a whole message, said by a person or by Claude, and returns the line for its middle. */
+export async function moveBodyOut(files: Files, dir: string, role: 'user' | 'assistant', text: string): Promise<(BodyTicket & { text: string }) | NotMoved> {
+  const moved = await moveOut(files, dir, role === 'user' ? 'message.person' : 'message.claude', text);
+  if ('reason' in moved) return moved;
+  return { bytes: moved.bytes, id: moved.id, text: bodyTicketText(moved) };
+}
+
 /**
  * Stores one long value of a tool call's input and returns the line that replaces it, or why the value has to
  * stay where it is. The entry names it `<tool>.<field>`, as a kept part names an input it holds (ADR 0007).
@@ -371,10 +399,21 @@ export async function holds(files: Files, dirs: string | readonly string[], id: 
   return false;
 }
 
-/**
- * True when `text` is a ticket this store wrote, of a result or of a part of a
- * kept conversation: its shape, and an entry of that size under its id, in any of `dirs`.
- */
+/** What the entry under `id` says was stored, in the first of `dirs` that holds one: null where none does or it cannot be read. */
+export async function storedAs(files: Files, dirs: readonly string[], id: string): Promise<string | null> {
+  for (const dir of dirs) {
+    if ((await look(files, entryPath(dir, id))) !== 'file') continue;
+    try {
+      const entry: unknown = JSON.parse(await files.read(entryPath(dir, id)));
+      const tool = typeof entry === 'object' && entry !== null ? (entry as { tool?: unknown }).tool : undefined;
+      return typeof tool === 'string' ? tool : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Whether `id` is a part of a kept conversation, as its entry says, in any of
  * `dirs`; null when the entry is there and cannot be read.
@@ -392,8 +431,12 @@ export async function isPart(files: Files, dirs: readonly string[], id: string):
   return false;
 }
 
+/**
+ * True when `text` is a ticket this store wrote, of a result or of a part of a
+ * kept conversation: its shape, and an entry of that size under its id, in any of `dirs`.
+ */
 export async function isStored(files: Files, dirs: string | readonly string[], text: string): Promise<boolean> {
-  const ticket = readTicket(text) ?? readPartTicket(text) ?? readInputTicket(text);
+  const ticket = readTicket(text) ?? readPartTicket(text) ?? readInputTicket(text) ?? readBodyTicket(text);
   if (!ticket) return false;
   for (const dir of dirsOf(dirs)) {
     if ((await look(files, entryPath(dir, ticket.id))) !== 'file') continue;
@@ -477,6 +520,8 @@ export function idMeant(given: unknown, messages: readonly Message[]): string | 
       ...message.toolUses.map((use) => use.text ?? ''),
       // A value of a call's input that is a whole ticket was put there by this plugin, not written by the agent (ADR 0020).
       ...message.toolUses.flatMap((use) => inputTicketsOf(use.input)),
+      // So is the line in place of the middle of a message of Claude's (ADR 0024).
+      ...(message.role === 'assistant' ? message.text.split('\n').filter((line) => readBodyTicket(line) !== null) : []),
     ];
     for (const text of texts) {
       for (const [id] of text.matchAll(WRITTEN_ID)) {
