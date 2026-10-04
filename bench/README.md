@@ -243,10 +243,14 @@ Everything comes from what a session printed (`--output-format stream-json`).
 What comes back into the context over many turns is measured by `chain`:
 the same questions asked one after another, each going on from the one
 before, in both arms. Before its compaction a chain sends the conversation
-once, as the turn before a `/compact` sends it ("Reply only: ok."): what was
-just sent is in the prompt cache, where a summary reads it from, and what the
-compaction leaves ends with that turn, so that no unit sent the same before
-it and its first question writes the cache as it would in a session. That
+once, as the turn before a `/compact` sends it ("Reply only: ok.", and the
+run): what was
+just sent is in the prompt cache, where a summary could read it from, and what the
+compaction leaves ends with that turn, so that no other unit sent the same
+before it and its first question writes the cache as it would in a session
+(the plugin compacts to the same text each time; in the second run of
+`results/2026-10-04-every-kind/` the turn did not name the run yet, and its
+first questions read what the first run's had written). That
 turn is counted neither to the compaction nor to the questions. Its table
 gives what was in use before the compaction, right after it, and once every
 question was asked; how much it grew in between, the questions and answers
@@ -257,8 +261,8 @@ does; what is read back is the other side of it. A chain's sessions have to
 be kept for the next question to go on from; once the chain ends they are
 moved into the unit's records, so that no session of another unit can read
 what they answered. A chain stopped by a check of the run (a session not the
-one meant) moves those it has; a box where one stopped is not measured on
-again.
+one meant) can leave the session it stopped at, or its turn before the
+compaction, where it ran; a box where one stopped is not measured on again.
 
 Not measured: a compaction on a store that already holds something (every
 attempt at a unit starts with an empty one); an image pasted into a message,

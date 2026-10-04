@@ -91,7 +91,8 @@ export type Unit = {
   questions: Asked[];
   /**
    * In a chain, what was in use once every question had been asked: the first request of one more that needs
-   * no history. Against the first request of the first question, it is what was brought back.
+   * no history. Against the first request of the first question, it is how much the context grew: the questions and
+   * answers, with what they read.
    */
   afterQuestions?: number;
 };
@@ -141,13 +142,17 @@ const unitPath = (places: Places, trace: string, model: string, run: number, arm
   join(places.box, 'units', trace, model, `run-${run}`, `${leaf(arm, variant, mode)}.json`);
 
 /**
+ * What a chain sends before its compaction: a turn of the work, which asks for nothing of the conversation. It names
+ * the run: the plugin compacts to the same text each time, and two runs within the prompt cache's hour would otherwise
+ * send the same first question, the second reading what the first wrote.
+ */
+export const warmOf = (run: number): string => `Reply only: ok. (Run ${run} of the benchmark.)`;
+
+/**
  * One unit, or the one already measured. A unit measured against something else
  * than what is asked for now is never returned as if it were this one, and never
  * written over: the run stops and names it.
  */
-/** What a chain sends before its compaction: a turn of the work, which asks for nothing of the conversation. */
-export const WARM = 'Reply only: ok.';
-
 export async function unit(
   trace: Trace,
   base: Base,
@@ -190,11 +195,16 @@ export async function unit(
   const kept: string[] = [];
 
   // In a chain, the conversation is sent once before the compaction, as the turn before a /compact sends it: what was
-  // just sent is in the prompt cache, where a summary reads it from, and what the compaction leaves ends with that turn,
+  // just sent is in the prompt cache, where a summary could read it from, and what the compaction leaves ends with that turn,
   // so that no other unit has sent it before. The turn is the work's, and is counted neither to the compaction nor to
   // the questions.
-  const warm = chained ? await claude({ ...common, out: join(records, 'warm.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: WARM, kept: true }) : null;
-  if (warm !== null) kept.push(warm.session.sessionId);
+  const warm = chained ? await claude({ ...common, out: join(records, 'warm.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: warmOf(run), kept: true }) : null;
+  if (warm !== null) {
+    kept.push(warm.session.sessionId);
+    // The turn is the work's: compacted at it, or answered by another model, the unit would measure something else.
+    if (warm.session.compaction !== null) throw new Error(`${records}: the conversation was compacted at the turn before the compaction`);
+    if (warm.session.fellBackTo !== null) throw new Error(`${records}: ${model} refused at the turn before the compaction, and ${warm.session.fellBackTo} went on in its place`);
+  }
   const before = warm?.session ?? base;
   const compacted = await claude({ ...common, out: join(records, 'compact.jsonl'), allowedTools: tools, resume: warm?.session.sessionId ?? base.sessionId, prompt: '/compact' });
   const boundary = compacted.session.compaction;
