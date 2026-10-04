@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-04
+
 ### Added
 
 - The README gives the conversation in a window of 1,000,000 as well, measured with Sonnet 5.5 on the same code (`bench/results/2026-10-04-large/`): at 576,000 tokens a `/compact` took 0.26 to 0.27 s against 40 to 52 s; asked one after another, the eleven questions were right 11 times against 6 and cost 2.05 USD against 1.58; asked each of a fresh copy, where every question writes the 270,000 tokens the plugin left to the prompt cache again, 12.28 USD against 1.67, 10 right against 8.
