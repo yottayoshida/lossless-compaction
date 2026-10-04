@@ -135,7 +135,8 @@ export function itemsOf(units: readonly Unit[]): Item[] {
   const asked = new Map<string, Question>();
   for (const trace of ASKED) for (const question of trace.questions) asked.set(`${trace.name}|${question.id}`, question);
   for (const unit of units) {
-    if (unit.mode !== 'ask') continue;
+    // The trace's questions, asked each of a fresh copy or one after another: a probe and `find`'s questions are not these.
+    if (unit.mode !== 'ask' && unit.mode !== 'chain') continue;
     for (const one of unit.questions) {
       const question = asked.get(`${unit.trace}|${one.id}`);
       if (question === undefined || one.verdict !== undefined) continue;
