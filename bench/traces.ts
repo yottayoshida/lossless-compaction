@@ -433,6 +433,8 @@ const short = trace(
 );
 
 // T5. Too full: what cannot be moved out fills the window, so the plugin has to hand over.
+// Sonnet 5.5 counts this text as about 197,000 tokens, more than the 200,000 window of the others lets it build:
+// in 264,000, which the plugin sees as 231,000, it fills 85 % of what the plugin sees, as it did for Haiku 4.5 in 200,000.
 const FULL_DOCS = 8;
 const FULL_PARAGRAPHS = 155;
 const full = trace(
@@ -480,15 +482,17 @@ const full = trace(
       wrong: 'The archive tier ships in the first release; nothing is open.',
     },
   },
-  { accept: { minTokens: 135_000, maxTokens: 162_000 } },
+  { version: 2, window: 264_000, accept: { minTokens: 187_000, maxTokens: 224_000 } },
 );
 
-// T6. Long thinking: the bulk of what is in use is reasoning, which no rebuilt message carries.
-const PUZZLES = 10;
+// T6. Long thinking: the bulk of what is in use is reasoning, which no rebuilt message carries. At high effort
+// Sonnet 5.5 thinks a few hundred tokens a puzzle, and ten puzzles even at max came to 5,044 tokens of thinking in
+// 24,711: twenty, at max.
+const PUZZLES = 20;
 const thinking = trace(
   6,
   'thinking',
-  'long thinking: ten puzzles worked out at high effort; much of what is in use is thinking',
+  'long thinking: twenty puzzles worked out at the highest effort; much of what is in use is thinking',
   'We are checking a set of arithmetic puzzles. Work each one out carefully when I give it.',
   {
     first: {
@@ -510,7 +514,7 @@ const thinking = trace(
       wrong: 'A half is rounded up.',
     },
   },
-  Array.from({ length: PUZZLES }, (_, i): Step => ({ say: puzzle(i + 1).ask, effort: 'high' })),
+  Array.from({ length: PUZZLES }, (_, i): Step => ({ say: puzzle(i + 1).ask, effort: 'max' })),
   {
     status:
       `Where we stand. Puzzles 1 to ${PUZZLES} are worked out. We decided to report a puzzle as doubtful when two workings disagree, rather than taking the later one. ` +
@@ -530,7 +534,7 @@ const thinking = trace(
       wrong: 'We take the later working as correct; nothing is open.',
     },
   },
-  { accept: { minTokens: 25_000, maxTokens: 160_000, minThinkingTokens: 8_000 } },
+  { version: 2, accept: { minTokens: 25_000, maxTokens: 160_000, minThinkingTokens: 8_000 } },
 );
 
 // T7. Mostly pasted prose, and results large enough to move: where a size counted too high hands over what would have fitted (#37).

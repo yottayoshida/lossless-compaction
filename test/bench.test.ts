@@ -28,7 +28,7 @@ import {
 import { cutLine } from '../src/cut.ts';
 import { saidBy, saidIn, type Conversation } from '../bench/build.ts';
 import { FUNCTION_HOOKS, argsOf, envOf, toolsOf } from '../bench/cc.ts';
-import { MISSED, batchName, currentOf, itemsOf, keyOf, promptOf, published, scrubbed, summed, unitsUnder, verdictsIn, type Grades } from '../bench/grade.ts';
+import { MISSED, VERSIONS, batchName, currentOf, itemsOf, keyOf, promptOf, published, scrubbed, summed, unitsUnder, verdictsIn, versionsIn, type Grades } from '../bench/grade.ts';
 import { MIN_CHARS, pick, pickTable, readAnswer, resultsOf, staged, wentOf, type Pick } from '../bench/pick.ts';
 import { chains, estimates, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
 import { QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
@@ -782,12 +782,28 @@ test('a session whose model refused and was replaced says by which: the answer i
   assert.ok(!report([own('plugin', false), own('builtin', false)], null).includes('another model'));
 });
 
+/**
+ * The versions of the traces before `full` and `thinking` were given the shape they have at Sonnet 5.5's counts: what
+ * every directory of results published before then measured, and what the conversations in bench/bases were built from.
+ */
+const BEFORE_SONNET: ReadonlyMap<string, number> = new Map([...VERSIONS, ['full', 1], ['thinking', 1]]);
+
+test('a trace changed since results were published leaves them as they were: read at the versions of then, and by the newest each holds', () => {
+  assert.deepEqual([...VERSIONS].filter(([name, version]) => BEFORE_SONNET.get(name) !== version), [['full', 2], ['thinking', 2]]);
+  const before = unitsUnder(RESULTS);
+  assert.ok(before.length > 0);
+  assert.equal(currentOf(before).units.filter((unit) => unit.trace === 'full' || unit.trace === 'thinking').length, 0);
+  assert.equal(currentOf(before, BEFORE_SONNET).older, 0);
+  assert.deepEqual(currentOf(before, versionsIn(before)), currentOf(before, BEFORE_SONNET));
+});
+
 test('one conversation is built in a window of 1,000,000: the questions of the six, and two about logs that are gone, one read early and one read last', () => {
   assert.deepEqual(LARGE.map((trace) => trace.name), ['large']);
   const [large] = LARGE;
   assert.ok(large !== undefined);
-  // The others name no window: they are built and compacted in the 200,000 a session is started with.
-  assert.ok([...TRACES, ...PROBED, ...FOUND].every((trace) => trace.window === undefined));
+  // The others name no window but `full`: they are built and compacted in the 200,000 a session is started with, and
+  // `full` in 264,000, where Sonnet 5.5's count of it fills what the plugin sees as Haiku 4.5's filled 200,000.
+  assert.deepEqual([...TRACES, ...PROBED, ...FOUND].filter((trace) => trace.window !== undefined).map((trace) => [trace.name, trace.window]), [['full', 264_000]]);
   assert.equal(large.window, 1_000_000);
   assert.equal(described().find((one) => one.trace === 'large')?.window, 1_000_000);
   // Taken by name only: with no trace named a `run` asks the six, and a `build` builds every conversation but this one.
@@ -814,12 +830,15 @@ test('one conversation is built in a window of 1,000,000: the questions of the s
   }
 });
 
-test('the conversations published in bench/bases are the traces as they are now: what was said, in order, at a size the trace accepts', () => {
+test('the conversations published in bench/bases are the traces they were built from: what was said, in order, at a size the trace accepts', () => {
   const read = (name: string) => JSON.parse(readFileSync(new URL(`../bench/bases/${name}`, import.meta.url), 'utf8'));
   for (const trace of BUILT) {
     const built = read(`${trace.name}.json`) as { trace: string; version: number; tokens: number; thinkingTokens: number };
     assert.equal(built.trace, trace.name);
-    assert.equal(built.version, trace.version, `${trace.name}: built from another version of the trace`);
+    // `full` and `thinking` were built at their versions before Sonnet 5.5's counts changed them: what said them then is
+    // no longer in traces.ts, and what was measured on them is read at those versions.
+    assert.equal(built.version, BEFORE_SONNET.get(trace.name), `${trace.name}: built from another version of the trace`);
+    if (built.version !== trace.version) continue;
     assert.ok(built.tokens >= trace.accept.minTokens && built.tokens <= trace.accept.maxTokens, `${trace.name}: ${built.tokens} tokens`);
     assert.ok(built.thinkingTokens >= (trace.accept.minThinkingTokens ?? 0), `${trace.name}: ${built.thinkingTokens} thinking tokens`);
     const conversation = read(`${trace.name}.conversation.json`) as { role: string; blocks: { type: string; text?: string }[] }[];
@@ -1134,7 +1153,7 @@ const RESULTS = fileURLToPath(new URL('../bench/results/2026-10-02', import.meta
 test('the results in the repository: of the traces as they are, of the conversations beside them, every answer graded, and the tables made from them', () => {
   assert.ok(existsSync(RESULTS));
   const all = unitsUnder(RESULTS);
-  const { units, older } = currentOf(all);
+  const { units, older } = currentOf(all, BEFORE_SONNET);
   assert.equal(older, 0);
   const grades = JSON.parse(readFileSync(`${RESULTS}/grades.json`, 'utf8')) as Grades;
   const picks = existsSync(`${RESULTS}/picks.json`) ? (JSON.parse(readFileSync(`${RESULTS}/picks.json`, 'utf8')) as { picks: Pick[] }).picks : null;
@@ -1173,7 +1192,7 @@ const ESTIMATE = fileURLToPath(new URL('../bench/results/2026-10-02-estimate', i
 test('the probes in the repository: the size the plugin counts against what was in use, with the count of ADR 0013 and with 0.6.0', () => {
   assert.ok(existsSync(ESTIMATE));
   const all = unitsUnder(ESTIMATE);
-  const { units, older } = currentOf(all);
+  const { units, older } = currentOf(all, BEFORE_SONNET);
   assert.equal(older, 0);
   assert.ok(units.every((unit) => unit.mode === 'probe' && unit.arm === 'plugin' && unit.questions.length === 1));
   // The table is these units and nothing else: made again, it is the file.
@@ -1271,7 +1290,7 @@ const RECALLS = 92;
 test('the units in the repository measured with the line after a summary: the reading is fetched where it was not, and nothing else moves (#14)', () => {
   assert.ok(existsSync(CHANGED));
   const all = unitsUnder(CHANGED);
-  const { units, older } = currentOf(all);
+  const { units, older } = currentOf(all, BEFORE_SONNET);
   assert.equal(older, 0);
   const grades = JSON.parse(readFileSync(`${CHANGED}/grades.json`, 'utf8')) as Grades;
   // The tables are these units and grades and nothing else: made again, they are the file.
@@ -1288,7 +1307,7 @@ test('the units in the repository measured with the line after a summary: the re
   assert.deepEqual(of(units, /sonnet/, TRACES.map((trace) => trace.name)).map((unit) => unit.trace).sort(), ['prose', 'writes']);
 
   // What they are set against: the plugin's arm of the results of 2026-10-02, on the same buildings of the conversations.
-  const earlier = currentOf(unitsUnder(RESULTS)).units.filter((unit) => unit.arm === 'plugin' && unit.mode === 'ask' && unit.variant === 'default');
+  const earlier = currentOf(unitsUnder(RESULTS), BEFORE_SONNET).units.filter((unit) => unit.arm === 'plugin' && unit.mode === 'ask' && unit.variant === 'default');
   const earlierGrades = JSON.parse(readFileSync(`${RESULTS}/grades.json`, 'utf8')) as Grades;
   for (const unit of units) assert.ok(earlier.some((one) => one.trace === unit.trace && one.base === unit.base), `${unit.trace} ${unit.model}`);
 
@@ -1358,7 +1377,7 @@ const everyOf = (tables: string, traces: readonly string[], arm: 0 | 1): [number
 test('the benchmark run again on 0.6.1: of conversations built again, every answer graded, the tables made from them, and what the documents say of them', () => {
   assert.ok(existsSync(AGAIN));
   const all = unitsUnder(AGAIN);
-  const { units, older } = currentOf(all);
+  const { units, older } = currentOf(all, BEFORE_SONNET);
   assert.equal(older, 0);
   const grades = JSON.parse(readFileSync(`${AGAIN}/grades.json`, 'utf8')) as Grades;
   const tables = readFileSync(`${AGAIN}/report.md`, 'utf8');
@@ -1429,7 +1448,7 @@ test('the benchmark run again on 0.6.1: of conversations built again, every answ
     };
   };
   assert.deepEqual(told(units), { longer: 14, of: 15, seconds: 7.7, tokens: 793 });
-  assert.deepEqual(told(currentOf(unitsUnder(RESULTS)).units), { longer: 10, of: 15, seconds: 1.4, tokens: 268 });
+  assert.deepEqual(told(currentOf(unitsUnder(RESULTS), BEFORE_SONNET).units), { longer: 10, of: 15, seconds: 1.4, tokens: 268 });
   // About 10 ms for a token the summary wrote out, in both arms, and 6 ms or less for the plugin to look for what to move.
   const rate = (arm: 'plugin' | 'builtin') => median(pairsOf(units).map((pair) => pair[arm].durationMs / pair[arm].own.outputTokens));
   for (const arm of ['plugin', 'builtin'] as const) assert.ok(rate(arm) > 9.5 && rate(arm) < 11, `${arm} ${rate(arm)}`);
@@ -1445,7 +1464,7 @@ const LEFT = fileURLToPath(new URL('../bench/results/2026-10-03', import.meta.ur
 test('the benchmark with a /compact left undone (ADR 0015): the plugin measured again on the conversations of the run on 0.6.1, beside its built-in arm', () => {
   assert.ok(existsSync(LEFT));
   const all = unitsUnder(LEFT);
-  const { units, older } = currentOf(all);
+  const { units, older } = currentOf(all, BEFORE_SONNET);
   assert.equal(older, 0);
   const grades = JSON.parse(readFileSync(`${LEFT}/grades.json`, 'utf8')) as Grades;
   const tables = readFileSync(`${LEFT}/report.md`, 'utf8');
@@ -1453,7 +1472,7 @@ test('the benchmark with a /compact left undone (ADR 0015): the plugin measured 
   assert.equal(whole(units, grades, older, null), tables);
 
   // The conversations are those of the run on 0.6.1, and its built-in arm is here unchanged: the plugin's arm alone was measured again, on another state of its code.
-  const again = currentOf(unitsUnder(AGAIN)).units;
+  const again = currentOf(unitsUnder(AGAIN), BEFORE_SONNET).units;
   const builtOn = new Map(again.map((unit) => [unit.trace, unit.base]));
   for (const unit of units) assert.equal(unit.base, builtOn.get(unit.trace), `${unit.trace} ${unit.model} run ${unit.run} ${unit.arm}`);
   const counterpart = (unit: Unit) => again.find((one) => one.trace === unit.trace && one.model === unit.model && one.run === unit.run && one.arm === unit.arm && one.mode === unit.mode);
@@ -1543,7 +1562,7 @@ test('the units in the repository measured where the calls say nothing: every fi
   const changelog = read('../CHANGELOG.md');
   const has = (text: string, phrase: string, what: string) => assert.ok(text.replace(/\s+/g, ' ').includes(phrase), `${what}: ${phrase}`);
   const of = (dir: string) => {
-    const { units, older } = currentOf(unitsUnder(`${FOUND_AT}/${dir}`));
+    const { units, older } = currentOf(unitsUnder(`${FOUND_AT}/${dir}`), BEFORE_SONNET);
     assert.equal(older, 0, dir);
     assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.mode === 'find'), dir);
     assert.equal(new Set(units.map((unit) => unit.plugin)).size, 1, dir);
@@ -1645,7 +1664,7 @@ test('the units and picks in the repository measured with the value match: every
   };
 
   // The tables published beside them are these units and picks and nothing else.
-  const { units, older } = currentOf(unitsUnder(VALUES_AT));
+  const { units, older } = currentOf(unitsUnder(VALUES_AT), BEFORE_SONNET);
   const picks = picksOf(`${VALUES_AT}/picks.json`);
   assert.equal(older, 0);
   assert.equal(whole(units, null, older, picks), read('../bench/results/2026-10-03-values/report.md'));
@@ -1764,7 +1783,7 @@ test('the units and picks in the repository measured with the value match: every
   assert.deepEqual(third.filter((one) => one.kind === 'two lines').map((one) => one.went), ['said none', 'said none', 'said none']);
 
   // With an agent in between, against the units of #51 (the plugin as it was then, with a key and without).
-  const was = currentOf(unitsUnder(`${FOUND_AT}/named-and-none`)).units.filter((unit) => /haiku/.test(unit.model));
+  const was = currentOf(unitsUnder(`${FOUND_AT}/named-and-none`), BEFORE_SONNET).units.filter((unit) => /haiku/.test(unit.model));
   const of = (set: readonly Unit[], trace: string, variant: string) => set.filter((unit) => unit.trace === trace && unit.variant === variant).sort((a, b) => a.run - b.run);
   type Asked = Unit['questions'][number];
   const right = (one: Asked) => one.verdict === 'correct';
@@ -1855,7 +1874,7 @@ test('the units in the repository measured with Opus 5.5, three conversations an
   const listed = (values: readonly number[]) => `${values.slice(0, -1).join(', ')} and ${values.at(-1)}`;
 
   // What is published is what the tables beside it are made of, and every answer in it has a verdict: the program's, or the grader's.
-  const { units, older } = currentOf(unitsUnder(OPUS_AT));
+  const { units, older } = currentOf(unitsUnder(OPUS_AT), BEFORE_SONNET);
   const grades = JSON.parse(read('../bench/results/2026-10-03-opus/grades.json')) as Grades;
   assert.equal(older, 0);
   assert.equal(whole(units, grades, older, null), read('../bench/results/2026-10-03-opus/report.md'));
@@ -1958,7 +1977,7 @@ test('the units in the repository measured with Opus 5.5, three conversations an
   const scripts = (unit: Unit) => unit.questions.filter((one) => one.id === 'gone-1' || one.id === 'gone-2');
   assert.equal(count(theirs, scripts), count(theirs, (unit) => scripts(unit).filter((one) => one.outside)));
   // Haiku on the same questions, in its three runs on the six conversations: how often it read that record, and how often it was then right.
-  const haiku = currentOf(unitsUnder(fileURLToPath(new URL('../bench/results/2026-10-02', import.meta.url)))).units.filter((unit) => /haiku/.test(unit.model) && unit.arm === 'builtin' && unit.mode === 'ask');
+  const haiku = currentOf(unitsUnder(fileURLToPath(new URL('../bench/results/2026-10-02', import.meta.url))), BEFORE_SONNET).units.filter((unit) => /haiku/.test(unit.model) && unit.arm === 'builtin' && unit.mode === 'ask');
   const readOutside = (set: readonly Unit[]) => count(set, (unit) => scripts(unit).filter((one) => one.outside));
   const rightOutside = (set: readonly Unit[]) => count(set, (unit) => scripts(unit).filter((one) => one.outside && one.verdict === 'correct'));
   assert.equal(count(haiku, scripts), 36);
@@ -2101,7 +2120,7 @@ test('the units in the repository measured the tools listed in front of the agen
   type Asked = Unit['questions'][number];
   type Key = 'default' | 'find';
   const of = (dir: string) => {
-    const { units, older } = currentOf(unitsUnder(`${LISTED_AT}/${dir}`));
+    const { units, older } = currentOf(unitsUnder(`${LISTED_AT}/${dir}`), BEFORE_SONNET);
     assert.equal(older, 0, dir);
     assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.mode === 'find'), dir);
     assert.equal(new Set(units.map((unit) => unit.plugin)).size, 1, dir);
@@ -2317,7 +2336,7 @@ test('the units in the repository measured a note in place of a file shown again
   const has = (phrase: string, what: string) => assert.ok(measurements.includes(phrase), `${what}: ${phrase}`);
   type Asked = Unit['questions'][number];
   const of = (dir: string) => {
-    const { units, older } = currentOf(unitsUnder(`${SHOWN_AT}/${dir}`));
+    const { units, older } = currentOf(unitsUnder(`${SHOWN_AT}/${dir}`), BEFORE_SONNET);
     assert.equal(older, 0, dir);
     // The plugin's arm, asked the benchmark's questions with maxAfterPercent at 1: every one went to the summary, which is where a file is shown again.
     assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.mode === 'ask' && unit.variant === 'max-after-1' && unit.compaction.summarized), dir);
@@ -2450,7 +2469,7 @@ test('the units in the repository measured a note in place of a file shown again
 
   // Every call to `recall` in the units measured for #54, these and those of the tools listed: how many of them were refused is of the records.
   const recalls = (units: readonly Unit[]) => units.flatMap((unit) => unit.questions).reduce((total, one) => total + one.retrieval.recalls, 0);
-  const total = recalls(Object.values(all).flat()) + recalls(['baseline', 'listed', 'line', 'merged'].flatMap((dir) => currentOf(unitsUnder(`${LISTED_AT}/${dir}`)).units));
+  const total = recalls(Object.values(all).flat()) + recalls(['baseline', 'listed', 'line', 'merged'].flatMap((dir) => currentOf(unitsUnder(`${LISTED_AT}/${dir}`), BEFORE_SONNET).units));
   has(`Over every unit above \`recall\` was called ${total} times.`, 'recall, counted');
   // Those are the calls from before `recall` took an id by its first characters: what it refused then is what the documents count.
   assert.ok(limits.includes(`refused 15 times in ${total} calls before this, over every plugin measured for it`), 'limits, recall');
@@ -2473,7 +2492,7 @@ test('the units in the repository measured with recall taking the id that was me
   const has = (phrase: string, what: string) => assert.ok(section.includes(phrase), `${what}: ${phrase}`);
   type Asked = Unit['questions'][number];
   const under = (path: string) => {
-    const { units, older } = currentOf(unitsUnder(path));
+    const { units, older } = currentOf(unitsUnder(path), BEFORE_SONNET);
     assert.equal(older, 0, path);
     assert.ok(units.every((unit) => unit.arm === 'plugin'), path);
     return units;

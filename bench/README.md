@@ -178,7 +178,13 @@ Every session is started the same way (`cc.ts`):
   can read what an earlier one was asked and answered.
 - `--autocompact 200000`: the same window for every model (the plugin sees
   167,000). A trace that names a window of its own is built, compacted and
-  asked in that one: `large` in 1,000,000, where the plugin sees 967,000.
+  asked in that one: `large` in 1,000,000, where the plugin sees 967,000, and
+  `full` in 264,000, where it sees 231,000: Sonnet 5.5 counts its text as
+  about 197,000 tokens, which fills 85 % of that as it filled 85 % of
+  167,000 for Haiku 4.5.
+- A model is named for each of building, answering and grading; where none
+  is, it is Sonnet 5.5. `thinking` asks its puzzles at the highest effort:
+  at high, Sonnet 5.5 thinks a few hundred tokens a puzzle.
 - `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`: no memory shared between forks.
 - The plugin's store is a directory in the box, never the store of the
   person running it.
@@ -292,8 +298,8 @@ It is written to no file and is on no command line.
 ```sh
 export BENCH_BOX=~/somewhere/outside/the/repository
 node bench/main.ts build                                   # every conversation but `large`, which is built by name
-node bench/main.ts run --runs 3                            # every trace, Haiku 4.5
-node bench/main.ts run --traces results,writes,prose --models claude-sonnet-5-5 --runs 1
+node bench/main.ts run --runs 3                            # every trace, Sonnet 5.5
+node bench/main.ts run --traces results,writes,prose --models claude-opus-5-5 --runs 1
 node bench/main.ts build --traces large --build-model claude-sonnet-5-5   # the conversation in a window of 1,000,000
 node bench/main.ts run --traces large --models claude-opus-5-5 --build-model claude-sonnet-5-5   # asked by another model than built it
 node bench/main.ts chain --models claude-sonnet-5-5 --build-model claude-sonnet-5-5   # the questions one after another: what came back into the context

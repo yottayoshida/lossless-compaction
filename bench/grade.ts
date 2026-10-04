@@ -43,11 +43,23 @@ export function unitsUnder(box: string): Unit[] {
   return out;
 }
 
-/** The units that measured the traces as they are now, and how many measured an older version of one and are left out. */
-export function currentOf(units: readonly Unit[]): { units: Unit[]; older: number } {
-  const versions = new Map(BUILT.map((trace) => [trace.name, trace.version]));
+/** The version each trace is at now. */
+export const VERSIONS: ReadonlyMap<string, number> = new Map(BUILT.map((trace) => [trace.name, trace.version]));
+
+/**
+ * The units that measured the traces at `versions`, and how many measured another version of one and are left out. By
+ * default the traces as they are now; results published before a trace changed are read at the versions of then.
+ */
+export function currentOf(units: readonly Unit[], versions: ReadonlyMap<string, number> = VERSIONS): { units: Unit[]; older: number } {
   const current = units.filter((unit) => typeof unit.version === 'number' && versions.get(unit.trace) === unit.version);
   return { units: current, older: units.length - current.length };
+}
+
+/** The newest version of each trace that units measured: what results as they were published were of. */
+export function versionsIn(units: readonly Unit[]): Map<string, number> {
+  const versions = new Map<string, number>();
+  for (const unit of units) if (typeof unit.version === 'number') versions.set(unit.trace, Math.max(versions.get(unit.trace) ?? 0, unit.version));
+  return versions;
 }
 
 /**

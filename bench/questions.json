@@ -525,8 +525,9 @@
   },
   {
     "trace": "full",
-    "version": 1,
+    "version": 2,
     "shape": "too full: about 440,000 characters pasted into messages, which moving results out cannot reduce",
+    "window": 264000,
     "said": 12,
     "filesBeforeCompaction": [
       "removed: report.sh",
@@ -650,9 +651,9 @@
   },
   {
     "trace": "thinking",
-    "version": 1,
-    "shape": "long thinking: ten puzzles worked out at high effort; much of what is in use is thinking",
-    "said": 14,
+    "version": 2,
+    "shape": "long thinking: twenty puzzles worked out at the highest effort; much of what is in use is thinking",
+    "said": 24,
     "filesBeforeCompaction": [
       "removed: report.sh",
       "regenerated: changing-6.log"
@@ -707,9 +708,9 @@
         "id": "next",
         "kind": "continuity",
         "ask": "Without starting on it yet: what is the next step?",
-        "reference": "Work out puzzles 11 to 13.",
-        "rubric": "Right if it says the next step is working out puzzles 11 to 13. Wrong if it names other puzzles or another task, or does not know.",
-        "right": "Working out puzzles 11, 12 and 13.",
+        "reference": "Work out puzzles 21 to 23.",
+        "rubric": "Right if it says the next step is working out puzzles 21 to 23. Wrong if it names other puzzles or another task, or does not know.",
+        "right": "Working out puzzles 21, 22 and 23.",
         "wrong": "Re-doing puzzles 1 to 3 with a different method."
       },
       {
