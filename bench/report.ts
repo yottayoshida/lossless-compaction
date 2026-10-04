@@ -164,7 +164,7 @@ export function whole(units: readonly Unit[], grades: Grades | null, older = 0, 
     '',
     estimates(units.filter((unit) => unit.mode === 'probe' || (unit.mode === 'ask' && unit.variant === tabled(units)))),
   ];
-  if (units.some((unit) => unit.mode === 'chain')) parts.push('', '### The questions asked one after another: what came back into the context', '', chains(units, grades));
+  if (units.some((unit) => unit.mode === 'chain')) parts.push('', '### The questions asked one after another: how much the context grew', '', chains(units, grades));
   if (units.some((unit) => unit.mode === 'find')) parts.push('', '### The questions `find` is for, asked of an agent', '', finds(units));
   if (picks !== null) parts.push('', '### What `find` picks, against a word match', '', pickTable(picks));
   return `${parts.join('\n')}\n`;
@@ -173,9 +173,10 @@ export function whole(units: readonly Unit[], grades: Grades | null, older = 0, 
 /**
  * The units that asked a trace's questions one after another, each going on from the one before: what was in use
  * before the compaction, right after it (the first request of the first question) and once every question had
- * been asked, what came back in between, and how much of the room the compaction made it took again. A summary
- * makes more room than moving out does; what is brought back afterwards is the other side of that, for both arms:
- * `recall` in the plugin's, a file read again or Claude Code's own record read in the built-in's.
+ * been asked; how much it grew in between, the questions and answers with what they read, and how much of the room
+ * the compaction made that growth took. A summary makes more room than moving out does; what is read back afterwards
+ * is the other side of that, for both arms: `recall` in the plugin's, a file read again or Claude Code's own record
+ * read in the built-in's.
  */
 export function chains(units: readonly Unit[], grades: Grades | null): string {
   const rows = units
@@ -205,7 +206,7 @@ export function chains(units: readonly Unit[], grades: Grades | null): string {
       ];
     });
   return table(
-    ['Trace', 'Model', 'Run', 'Arm', 'In use before', 'Right after', 'After the questions', 'Brought back', 'Of the room made, taken again', '`recall` calls', 'Files read again', 'Questions that read outside the work', 'Right'],
+    ['Trace', 'Model', 'Run', 'Arm', 'In use before', 'Right after', 'After the questions', 'Grew by', 'Of the room made, taken again', '`recall` calls', 'Files read again', 'Questions that read outside the work', 'Right'],
     rows,
   );
 }

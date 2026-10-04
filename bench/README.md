@@ -237,20 +237,28 @@ Everything comes from what a session printed (`--output-format stream-json`).
   What is there to be read: Claude Code files records by the directory a
   session ran in, each building of a trace has a directory no session ran
   in before, and of the sessions run there only the building of the trace
-  and each unit's compaction are kept. Both hold the conversation as it
-  was, and no answer to any question.
+  and each unit's compaction, with a chain's turn before it (below), are
+  kept. They hold the conversation as it was, and no answer to any question.
 
-What is brought back into the context over many turns is measured by
-`chain`: the same questions asked one after another, each going on from the
-one before, in both arms. Its table gives what was in use before the
-compaction, right after it, and once every question was asked, what came back
-in between, and how much of the room the compaction made it took again:
-`recall` in the plugin's arm, a file read again or Claude Code's own record
-read in the built-in's. A summary makes more room than moving out does; what
-is brought back is the other side of it. A chain's sessions have to be kept
-for the next question to go on from; once the chain ends, or stops, they are
+What comes back into the context over many turns is measured by `chain`:
+the same questions asked one after another, each going on from the one
+before, in both arms. Before its compaction a chain sends the conversation
+once, as the turn before a `/compact` sends it ("Reply only: ok."): what was
+just sent is in the prompt cache, where a summary reads it from, and what the
+compaction leaves ends with that turn, so that no unit sent the same before
+it and its first question writes the cache as it would in a session. That
+turn is counted neither to the compaction nor to the questions. Its table
+gives what was in use before the compaction, right after it, and once every
+question was asked; how much it grew in between, the questions and answers
+with what they read (`recall` in the plugin's arm, a file read again or
+Claude Code's own record in the built-in's); and how much of the room the
+compaction made that growth took. A summary makes more room than moving out
+does; what is read back is the other side of it. A chain's sessions have to
+be kept for the next question to go on from; once the chain ends they are
 moved into the unit's records, so that no session of another unit can read
-what they answered.
+what they answered. A chain stopped by a check of the run (a session not the
+one meant) moves those it has; a box where one stopped is not measured on
+again.
 
 Not measured: a compaction on a store that already holds something (every
 attempt at a unit starts with an empty one); an image pasted into a message,
@@ -309,7 +317,7 @@ node bench/main.ts run --runs 3                            # every trace, Sonnet
 node bench/main.ts run --traces results,writes,prose --models claude-opus-5-5 --runs 1
 node bench/main.ts build --traces large --build-model claude-sonnet-5-5   # the conversation in a window of 1,000,000
 node bench/main.ts run --traces large --models claude-opus-5-5 --build-model claude-sonnet-5-5   # asked by another model than built it
-node bench/main.ts chain --models claude-sonnet-5-5 --build-model claude-sonnet-5-5   # the questions one after another: what came back into the context
+node bench/main.ts chain --models claude-sonnet-5-5 --build-model claude-sonnet-5-5   # the questions one after another: how much the context grew
 node bench/main.ts probe --plugin-dirs current=.,v0.5.2=../v0.5.2   # estimate against the next request
 node bench/main.ts probe --traces mixed --plugin-dirs v0.6.0=../v0.6.0 --max-after 100   # a checkout made to compact what it would hand over
 node bench/main.ts grade                                   # every answer in the box, again when a unit was added: grade what is to be published in a box of its own

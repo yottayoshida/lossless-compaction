@@ -145,6 +145,9 @@ const unitPath = (places: Places, trace: string, model: string, run: number, arm
  * than what is asked for now is never returned as if it were this one, and never
  * written over: the run stops and names it.
  */
+/** What a chain sends before its compaction: a turn of the work, which asks for nothing of the conversation. */
+export const WARM = 'Reply only: ok.';
+
 export async function unit(
   trace: Trace,
   base: Base,
@@ -182,8 +185,18 @@ export async function unit(
     ...(trace.window !== undefined ? { window: trace.window } : {}),
   };
   const tools = variant.tools ?? QUESTION_TOOLS;
+  // In a chain, each question goes on from the one before, and its session is kept for the next to go on from.
+  const chained = mode === 'chain';
+  const kept: string[] = [];
 
-  const compacted = await claude({ ...common, out: join(records, 'compact.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: '/compact' });
+  // In a chain, the conversation is sent once before the compaction, as the turn before a /compact sends it: what was
+  // just sent is in the prompt cache, where a summary reads it from, and what the compaction leaves ends with that turn,
+  // so that no other unit has sent it before. The turn is the work's, and is counted neither to the compaction nor to
+  // the questions.
+  const warm = chained ? await claude({ ...common, out: join(records, 'warm.jsonl'), allowedTools: tools, resume: base.sessionId, prompt: WARM, kept: true }) : null;
+  if (warm !== null) kept.push(warm.session.sessionId);
+  const before = warm?.session ?? base;
+  const compacted = await claude({ ...common, out: join(records, 'compact.jsonl'), allowedTools: tools, resume: warm?.session.sessionId ?? base.sessionId, prompt: '/compact' });
   const boundary = compacted.session.compaction;
   // The plugin's line at a compaction; of a `/compact` it left undone (ADR 0015) its line is the reason Claude Code gives for not compacting.
   const line = compacted.session.uiLog.map(readLine).find((read) => read !== null) ?? (compacted.session.skipped === null ? null : readLine(compacted.session.skipped));
@@ -202,16 +215,13 @@ export async function unit(
       ? { durationMs: compacted.session.durationMs, preTokens: inUse, postTokens: inUse }
       : { durationMs: boundary.durationMs, preTokens: boundary.preTokens, postTokens: boundary.postTokens };
   // A fork prints the usage of the session it came from with its own. Were that missing, taking one from the other would give a compaction that cost nothing.
-  const unseen = Object.keys(base.modelUsage).filter((name) => !(name in compacted.session.modelUsage));
-  if (unseen.length > 0) throw new Error(`${records}: the compaction's session does not carry the usage of the trace it was forked from (${unseen.join(', ')})`);
-  const own = ownUsage(compacted.session, base);
+  const unseen = Object.keys(before.modelUsage).filter((name) => !(name in compacted.session.modelUsage));
+  if (unseen.length > 0) throw new Error(`${records}: the compaction's session does not carry the usage of the session it was forked from (${unseen.join(', ')})`);
+  const own = ownUsage(compacted.session, before);
   log(`${trace.name} ${model} run ${run} ${arm} ${variant.name}: ${undone ? 'left undone' : 'compacted'} in ${sizes.durationMs} ms, ${sizes.preTokens} -> ${sizes.postTokens}${line ? `, ${line.outcome}` : ''}`);
 
   const asked: Asked[] = [];
-  // In a chain, each question goes on from the one before, and its session is kept for the next to go on from.
-  const chained = mode === 'chain';
   let parent = compacted.session;
-  const kept: string[] = [];
   let afterQuestions: number | undefined;
   try {
     for (const question of questions) {

@@ -527,7 +527,7 @@ test('the grader is sent a number, the question, the facts, the rubric and the a
   assert.ok(controls.filter((item) => item.rubric === MISSED).every((item) => item.expected !== 'correct'), 'no answer under that rubric is right');
   // Only the units that asked a trace's questions are graded: a probe asks nothing of the conversation.
   assert.equal(itemsOf(units.map((unit) => ({ ...unit, mode: 'probe' as const }))).filter((item) => item.expected === undefined).length, 0);
-  // Asked one after another, they are graded as well, each answer under its own key.
+  // Asked one after another, they are graded as well: an answer word for word the same as one asked of a fresh copy shares its key, and its verdict.
   assert.equal(itemsOf(units.map((unit) => ({ ...unit, mode: 'chain' as const }))).filter((item) => item.expected === undefined).length, items.filter((item) => item.expected === undefined).length);
 
   const prompt = promptOf(shuffled(items, 28).slice(0, 20));
@@ -2585,7 +2585,7 @@ test('the units in the repository measured with recall taking the id that was me
   assert.ok(!/[\/-]Users[\/-]|[\/-]home[\/-][a-z]|cctmp|CLOUDFLARE_API_TOKEN|TYPESAFE_API_KEY/.test(JSON.stringify([sent.meant, asked.meant])));
 });
 
-test('the questions asked one after another are tabled by what came back into the context, both arms alike', () => {
+test('the questions asked one after another are tabled by how much the context grew, both arms alike', () => {
   const chained = (arm: 'plugin' | 'builtin', right: number, after: number | undefined, calls: string[]): Unit => {
     const unit = unitOf(arm, 1, [
       { ...answered('gone', 'exact-gone', 'cd8', calls, 'correct'), requests: [right, right + 4000] },
@@ -2598,14 +2598,14 @@ test('the questions asked one after another are tabled by what came back into th
   const table = chains([plugin, builtin, chained('plugin', 1, undefined, [])], null).split('\n');
 
   assert.equal(table.length, 4, 'a chain whose last request was not measured is left out');
-  assert.match(table[0] as string, /^\| Trace \| Model \| Run \| Arm \| In use before \| Right after \| After the questions \| Brought back \| Of the room made, taken again \|/);
+  assert.match(table[0] as string, /^\| Trace \| Model \| Run \| Arm \| In use before \| Right after \| After the questions \| Grew by \| Of the room made, taken again \|/);
   // 30,000 - 13,704 came back of 60,882 - 13,704 made: 35 %. 9,000 - 2,462 of 60,882 - 2,462: 11 %.
   assert.equal(table[2], '| results | haiku | 1 | builtin | 60882 | 2462 | 9000 | 6538 | 11 % | 0 | 1 | 0 | 1 of 1 graded |');
   assert.equal(table[3], '| results | haiku | 1 | plugin | 60882 | 13704 | 30000 | 16296 | 35 % | 1 | 0 | 0 | 1 of 1 graded |');
 
   // The tables of the questions asked each of its own copy hold no unit of a chain, and the whole report names the chain's.
   const all = whole([plugin, builtin], null);
-  assert.ok(all.includes('### The questions asked one after another: what came back into the context'));
+  assert.ok(all.includes('### The questions asked one after another: how much the context grew'));
   assert.ok(!report([plugin, builtin], null).includes('### results, haiku'));
 });
 
@@ -2641,7 +2641,7 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
     for (const unit of units.filter((one) => one.trace === trace.name)) assert.equal(unit.base, built.sessionId, `${trace.name} ${unit.arm} ${unit.mode}`);
   }
   // Every answer has a verdict; the grader's, as docs/measurements.md gives them.
-  assert.deepEqual([outcomesOf(units, grades).ungraded, grades.ungraded.length, grades.disagreements, grades.controls.asExpected, grades.controls.count], [0, 0, 7, 214, 217]);
+  assert.deepEqual([outcomesOf(units, grades).ungraded, grades.ungraded.length, grades.disagreements, grades.controls.asExpected, grades.controls.count], [0, 0, 10, 215, 217]);
   has(section, `The grader graded ${grades.disagreements} answers differently in its two passes`, 'measurements');
   has(section, `Of ${grades.controls.count} answers of known grade mixed in, it graded ${grades.controls.asExpected} as expected`, 'measurements');
 
@@ -2671,10 +2671,11 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
   assert.deepEqual(TRACES.filter((trace) => next(of(trace.name, 'plugin', 'chain')) < next(of(trace.name, 'builtin', 'chain'))).map((trace) => trace.name), ['short']);
   has(readme, 'the next request was larger in five kinds of six, and smaller in the one of many short calls.', 'README');
   const summaries = sum(theirs.map((unit) => unit.compaction.own.costUSD));
-  assert.ok(sum(ours.map(cost)) > sum(theirs.map(cost)) - summaries && sum(ours.map(cost)) < summaries);
-  has(readme, "the plugin's questions cost more than those after a summary and less than the summary itself.", 'README');
+  // The plugin cost less in five kinds and more in the one that fills the window.
+  assert.deepEqual(TRACES.filter((trace) => cost(of(trace.name, 'plugin', 'chain')) > cost(of(trace.name, 'builtin', 'chain'))).map((trace) => trace.name), ['full']);
+  const [fullMine, fullBuilt] = [of('full', 'plugin', 'chain'), of('full', 'builtin', 'chain')];
+  has(readme, `the plugin cost less in five kinds of six, and more in the one that fills the window, ${cost(fullMine).toFixed(2)} USD against ${cost(fullBuilt).toFixed(2)}`, 'README');
   const fresh = (arm: 'plugin' | 'builtin') => sum(all(arm, 'ask').map(cost)).toFixed(2);
-  has(readme, `Each asked of a fresh copy, nothing cached: ${fresh('plugin')} USD against ${fresh('builtin')}`, 'README');
 
   // docs/measurements.md: a row a conversation, the plugin's figure first, and what is said under the table.
   const KINDS = [['results', 'Large tool results'], ['writes', 'Files the agent wrote'], ['prose', 'Text pasted into messages'], ['short', 'Many short calls'], ['full', 'Text filling most of the window'], ['thinking', 'Thinking']] as const;
@@ -2685,7 +2686,7 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
     assert.match(section, new RegExp(`\\| ${label} +\\| +${cells.map((cell) => cell.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join(' \\| +')} \\|`), label);
   }
   const back = (unit: Unit) => after(unit) - next(unit);
-  has(section, `the plugin's context grew by ${range(ours.map(back), n).replace('–', ' to ')} tokens over the nine questions, the built-in's by ${range(theirs.map(back), n).replace('–', ' to ')}.`, 'measurements');
+  has(section, `the plugin's context grew by ${range(ours.map(back), n).replace('–', ' to ')} tokens over the nine questions, the built-in's by ${range(theirs.map(back), n).replace('–', ' to ')}:`, 'measurements');
   const calls = (set: readonly Unit[], name: string) => sum(set.map((unit) => sum(unit.questions.map((asked) => asked.calls.filter((call) => call === name).length))));
   // Files read again, as the table of the questions asked one after another counts them: its eleventh cell.
   const chainRows = read(`${EVERY_KIND}/report.md`).split('\n').filter((line) => / \| claude-sonnet-5-5 \| 1 \| (plugin|builtin) \| /.test(line));
@@ -2693,12 +2694,20 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
   const outside = (set: readonly Unit[]) => sum(set.map((unit) => unit.questions.filter((asked) => asked.outside).length));
   assert.equal(outside(ours), 0);
   has(section, `With the plugin the agent called \`recall\` ${calls(ours, 'mcp__lossless-compaction__recall')} times`, 'measurements');
-  has(section, `${outside(theirs)} of its questions read outside the working directory`, 'measurements');
+  has(section, `${outside(theirs)} of its questions did so outside the working directory`, 'measurements');
   assert.equal(chainRows.length, 12);
-  has(section, `times and read ${readAgain('plugin')} files again; after a summary it read ${readAgain('builtin')} files again`, 'measurements');
-  has(section, `0.81 USD in all for the plugin, against 2.07, of which the summaries were ${summaries.toFixed(2)} and the questions after them ${(sum(theirs.map(cost)) - summaries).toFixed(2)}.`, 'measurements');
-  assert.equal(`${sum(ours.map(cost)).toFixed(2)} ${sum(theirs.map(cost)).toFixed(2)}`, '0.81 2.07');
-  has(section, `Each of a fresh copy, with nothing cached: ${fresh('plugin')} against ${fresh('builtin')}`, 'measurements');
+  has(section, `times and read or searched files ${readAgain('plugin')} times; after a summary it read or searched files ${readAgain('builtin')} times`, 'measurements');
+  const [paidOurs, paidTheirs] = [sum(ours.map(cost)).toFixed(2), sum(theirs.map(cost)).toFixed(2)];
+  assert.equal(`${paidOurs} ${paidTheirs}`, '2.82 2.17');
+  // The parts add up to the whole as written: the questions after the summaries are the whole less them, both rounded.
+  const afterSummaries = (Number(paidTheirs) - Number(summaries.toFixed(2))).toFixed(2);
+  assert.equal(afterSummaries, (sum(theirs.map(cost)) - summaries).toFixed(2));
+  has(section, `${paidOurs} USD in all for the plugin, against ${paidTheirs}, of which the summaries were ${summaries.toFixed(2)} and the questions after them ${afterSummaries}.`, 'measurements');
+  has(section, `more in \`full\`, ${cost(fullMine).toFixed(2)} against ${cost(fullBuilt).toFixed(2)}: each request after its \`/compact\` carries the ${n(next(fullMine))} tokens it left`, 'measurements');
+  // The summary read the system prompt from the cache and wrote the conversation afresh, the turn sent just before it read by nothing.
+  assert.ok(fullBuilt.compaction.own.cacheReadInputTokens < 10_000);
+  has(section, `in \`full\` it wrote ${n(fullBuilt.compaction.own.cacheCreationInputTokens)} tokens afresh.`, 'measurements');
+  has(section, `Each of a fresh copy, where no question reads what another wrote to the cache: ${fresh('plugin')} against ${fresh('builtin')}.`, 'measurements');
   has(section, `${sum(ours.map(right))} of 54 right against ${sum(theirs.map(right))} one after another, ${sum(all('plugin', 'ask').map(right))} against ${sum(all('builtin', 'ask').map(right))} each of a fresh copy.`, 'measurements');
 
   // The same figures where docs/comparison.md opens and in the CHANGELOG.
@@ -2707,13 +2716,13 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
   const [ourTook, theirTook] = [took(ours, (ms) => (ms / 1000).toFixed(2)), took(theirs, (ms) => String(Math.round(ms / 1000)))];
   const [paid, paidThen] = [sum(ours.map(cost)).toFixed(2), sum(theirs.map(cost)).toFixed(2)];
   has(comparison, `a \`/compact\` took ${ourTook} s against ${theirTook} s, and left the next request larger in five of them.`, 'comparison');
-  has(comparison, `right ${sum(ours.map(right))} times of 54 against ${sum(theirs.map(right))}, and the \`/compact\`s and their questions cost ${paid} USD against ${paidThen} with the prompt cache warm; asked each of a fresh copy, with nothing cached, ${fresh('plugin')} against ${fresh('builtin')}`, 'comparison');
+  has(comparison, `right ${sum(ours.map(right))} times of 54 against ${sum(theirs.map(right))}, and the \`/compact\`s and their questions cost ${paid} USD against ${paidThen}; asked each of a fresh copy, where no question reads what another wrote to the prompt cache, ${fresh('plugin')} against ${fresh('builtin')}`, 'comparison');
   has(
     changelog,
     `the \`/compact\` took ${ourTook} s against ${theirTook} s; the next request carried ${range(ours.map(next), n).replace('–', ' to ')} tokens against ${range(theirs.map(next), n).replace('–', ' to ')}, ` +
-      `and ${range(ours.map(after), n).replace('–', ' to ')} once the nine questions had brought back what they needed, against ${range(theirs.map(after), n).replace('–', ' to ')}; ` +
-      `${sum(ours.map(right))} answers of 54 were right against ${sum(theirs.map(right))}; and the \`/compact\`s with their questions cost ${paid} USD against ${paidThen}. ` +
-      `Asked each of a fresh copy, with no prompt cache to read, the questions cost ${fresh('plugin')} USD against ${fresh('builtin')}.`,
+      `and ${range(ours.map(after), n).replace('–', ' to ')} once the nine questions had been asked, against ${range(theirs.map(after), n).replace('–', ' to ')}; ` +
+      `${sum(ours.map(right))} answers of 54 were right against ${sum(theirs.map(right))}; and the \`/compact\`s with their questions cost ${paid} USD against ${paidThen}, the plugin less in five kinds and more in the one that fills the window. ` +
+      `Asked each of a fresh copy, the \`/compact\`s with their questions cost ${fresh('plugin')} USD against ${fresh('builtin')}.`,
     'CHANGELOG',
   );
 });
