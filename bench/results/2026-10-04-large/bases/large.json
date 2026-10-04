@@ -1,0 +1,23 @@
+{
+  "trace": "large",
+  "version": 1,
+  "sessionId": "f61042c5-f56c-4b3f-b92c-1b027131d328",
+  "model": "claude-sonnet-5-5",
+  "claudeCode": "2.1.289",
+  "tokens": 575506,
+  "thinkingTokens": 541,
+  "toolCalls": 35,
+  "work": "large-mutkaqif",
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 94,
+      "outputTokens": 3844,
+      "cacheReadInputTokens": 11817530,
+      "cacheCreationInputTokens": 576277,
+      "costUSD": 4.707241999999999,
+      "thinkingTokens": 541
+    }
+  },
+  "recordSha256": "1fbbf4d442122fb8ef54b3b2bffb2cb49d6b849d7fe358ec2dd21e4f2bc3a53b",
+  "builtAt": "2026-10-04T08:35:07.918Z"
+}

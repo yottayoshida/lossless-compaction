@@ -9,6 +9,10 @@ answered right 106 times of 108 against 96, and in the first run the
 fresh copy, where no question reads what another wrote to the prompt cache,
 7.68 against 4.02
 ([every table](measurements.md#every-kind-of-conversation-with-sonnet-55)).
+In a window of 1,000,000, at 576,000 tokens, a `/compact` took 0.26 to 0.27 s
+against 40 to 52 s; one after another the eleven questions were answered
+right 11 times against 6 and cost 2.05 USD against 1.58, and each of a fresh
+copy 12.28 against 1.67.
 What follows is how it stood before.
 
 What follows was measured with Haiku 4.5, but for the one point on Opus 5.5.

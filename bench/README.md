@@ -48,7 +48,9 @@ Sonnet 5.5, `full` and `thinking` at version 2, compacted by the plugin as it
 is on `main` at `65c4ec2` and by Claude Code, the questions asked each of a
 fresh copy and one after another (`chain`), and graded by Sonnet 5.5. Its
 `bases/` holds the conversations as they were built: they are not those of
-`bases/` here.
+`bases/` here. `results/2026-10-04-large/` is `large` on the same code, built
+again with Sonnet 5.5, asked each way once and graded apart from the six, so
+that no verdict published with them moved.
 
 ## What is fixed before anything is compared
 

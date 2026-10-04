@@ -17,7 +17,7 @@ a larger conversation afterwards ([limits](docs/limits.md)).
 ![Built-in compaction leaves one summary; lossless-compaction moves tool results to local files, and recall brings one back exact. Measured: a compaction in 61 ms.](docs/assets/lossless-compaction-animated.svg)
 
 The 61 ms is the plugin's own count for one recorded compaction
-([how it was taken](docs/measurements.md)); no model is called.
+([how](docs/measurements.md)).
 
 ## Quick start
 
@@ -40,9 +40,8 @@ compaction then go through it, each with a line marked `lossless-compaction:`
   the SHA-256 of its content and read back before a ticket replaces it;
   nothing is sent anywhere ([how it works](docs/how-it-works.md)).
 - **Gives a result back as it was.** The agent calls `recall` with the id on
-  a ticket. With a key for [Jev](https://typesafe.ai), a model reached
-  through TypeSafe AI or Cloudflare, it can also ask in words with `find`
-  ([usage](docs/usage.md)).
+  a ticket. With a key for [Jev](https://typesafe.ai), it can also ask in
+  words with `find` ([usage](docs/usage.md)).
 - **Saves the conversation before a summary.** When Claude Code's summary
   does run, the plugin keeps what it replaces first, for `recall` to read:
   not images, documents or thinking ([what is kept](docs/limits.md#what-a-summary-replaces)).
@@ -62,9 +61,9 @@ one after another:
 | Right answers, of 108            |           106 |            96 |
 | The first run cost               |      2.82 USD |      2.17 USD |
 
-- **`/compact` is instant, calls no model, and leaves more.** What fills the
-  conversation is moved out, not summarized: the next request was larger in
-  five kinds of six, and smaller in the one of many short calls.
+- **`/compact` is instant, calls no model, and leaves more:** the next
+  request was larger in five kinds of six, and smaller in the one of many
+  short calls.
 - **What left comes back by its id.** With the plugin the agent called
   `recall`; after a summary it read files again and Claude Code's record of
   the session. Either way, what it read went back into context.
@@ -72,6 +71,8 @@ one after another:
   the plugin cost less in five kinds, and more in the one that fills the
   window, where Claude Code wrote it to the cache again at four questions
   ([every table](docs/measurements.md#every-kind-of-conversation-with-sonnet-55)).
+- **In a window of 1,000,000**, at 576,000 tokens: `/compact` 0.26–0.27 s
+  against 40–52 s; eleven questions in a row, 11 right against 6, 2.05 USD against 1.58.
 
 ## Before you install
 
@@ -84,7 +85,7 @@ one after another:
 - [Usage](docs/usage.md) — what a compaction prints, `recall`, what `find` sends
 - [How it works](docs/how-it-works.md) — what is stored, what leaves, what is deleted
 - [Limits](docs/limits.md) — when the summary still runs, what is not kept, setup
-- [The comparison measured with Haiku 4.5](docs/comparison.md), and every [measurement](docs/measurements.md)
+- [The comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
 - [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](.claude-plugin/plugin.json) and [decision records](docs/adr/)
 
 The idea comes from [fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction), with which this shares no code. Not affiliated with TypeSafe AI or Anthropic.
