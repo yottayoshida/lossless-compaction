@@ -2746,3 +2746,83 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
     'CHANGELOG',
   );
 });
+
+const LARGE_AT = fileURLToPath(new URL('../bench/results/2026-10-04-large', import.meta.url));
+
+test('large in a window of 1,000,000 with Sonnet 5.5, on the code of every kind: graded apart, the tables made from it, and every figure the documents give of it', () => {
+  const read = (path: string) => readFileSync(path, 'utf8');
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const has = (text: string, phrase: string, what: string) => assert.ok(flat(text).includes(phrase), `${what}: ${phrase}`);
+  const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
+  const n = (value: number) => value.toLocaleString('en-US');
+  const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const doc = (name: string) => read(fileURLToPath(new URL(`../${name}`, import.meta.url)));
+  const [readme, measurements, comparison, changelog] = [doc('README.md'), doc('docs/measurements.md'), doc('docs/comparison.md'), doc('CHANGELOG.md')];
+
+  const { units, older } = currentOf(unitsUnder(LARGE_AT));
+  assert.equal(older, 0);
+  const grades = JSON.parse(read(`${LARGE_AT}/grades.json`)) as Grades;
+  assert.equal(whole(units, grades, older, null), read(`${LARGE_AT}/report.md`));
+  assert.deepEqual(units.map((unit) => leaf(unit.arm, unit.variant, unit.mode)).sort(), ['builtin', 'builtin-chain', 'plugin', 'plugin-chain']);
+  const [large] = LARGE;
+  assert.ok(large !== undefined);
+  assert.ok(units.every((unit) => unit.trace === 'large' && unit.model === 'claude-sonnet-5-5' && unit.run === 1 && unit.questions.length === 11 && unit.plugin === (unit.arm === 'plugin' ? '214978c94372' : null)));
+  // Of the conversation published beside it, built again from the trace as it is, and nothing of the machine.
+  const built = JSON.parse(read(`${LARGE_AT}/bases/large.json`)) as { sessionId: string; version: number; tokens: number; model: string };
+  assert.ok(built.version === large.version && built.model === 'claude-sonnet-5-5' && built.tokens >= large.accept.minTokens && built.tokens <= large.accept.maxTokens);
+  const conversation = JSON.parse(read(`${LARGE_AT}/bases/large.conversation.json`)) as Conversation;
+  assert.deepEqual(saidIn(conversation), saidBy(large));
+  assert.ok(!/\/Users\/|\/home\/|\.cctmp|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(JSON.stringify(conversation)));
+  assert.ok(units.every((unit) => unit.base === built.sessionId && !/\/Users\/|\.cctmp/.test(JSON.stringify(unit))));
+  assert.equal(outcomesOf(units, grades).ungraded, 0);
+  has(measurements, `built again with Sonnet 5.5 (${n(built.tokens)} tokens)`, 'measurements');
+
+  const of = (arm: 'plugin' | 'builtin', mode: 'ask' | 'chain') => {
+    const unit = units.find((one) => one.arm === arm && one.mode === mode);
+    assert.ok(unit !== undefined, `${arm} ${mode}`);
+    return unit;
+  };
+  const right = (unit: Unit) => unit.questions.filter((asked) => verdictOf(unit, asked, grades) === 'correct').length;
+  const cost = (unit: Unit) => unit.compaction.own.costUSD + sum(unit.questions.map((asked) => asked.own.costUSD));
+  const next = (unit: Unit) => unit.questions[0]?.requests[0] ?? NaN;
+  const seconds = (ms: number) => (ms < 1000 ? (ms / 1000).toFixed(2) : (ms / 1000).toFixed(1));
+  const [freshMine, freshBuilt, chainMine, chainBuilt] = [of('plugin', 'ask'), of('builtin', 'ask'), of('plugin', 'chain'), of('builtin', 'chain')];
+  assert.ok(!freshMine.compaction.summarized && !chainMine.compaction.summarized && freshBuilt.compaction.summarized && chainBuilt.compaction.summarized);
+
+  // docs/measurements.md: the table, each cell the plugin's figure first.
+  const section = measurements.slice(measurements.indexOf('In a window of 1,000,000: `large`'), measurements.indexOf('## The benchmark\n'));
+  const row = (label: string, cells: readonly string[]) => assert.match(section, new RegExp(`\\| ${escaped(label)} +\\| +${cells.map(escaped).join(' \\| +')} \\|`), label);
+  const pair = (mine: Unit, built: Unit, cell: (unit: Unit) => string) => `${cell(mine)} · ${cell(built)}`;
+  row('Tokens before', [pair(freshMine, freshBuilt, (unit) => n(unit.compaction.preTokens)), pair(chainMine, chainBuilt, (unit) => n(unit.compaction.preTokens))]);
+  row('`/compact` took, s', [pair(freshMine, freshBuilt, (unit) => seconds(unit.compaction.durationMs)), pair(chainMine, chainBuilt, (unit) => seconds(unit.compaction.durationMs))]);
+  row('The next request, tokens', [pair(freshMine, freshBuilt, (unit) => n(next(unit))), pair(chainMine, chainBuilt, (unit) => n(next(unit)))]);
+  assert.match(section, new RegExp(`\\| After the eleven, tokens +\\| +\\| +${escaped(pair(chainMine, chainBuilt, (unit) => n(unit.afterQuestions ?? NaN)))} \\|`));
+  row('Right, of 11', [pair(freshMine, freshBuilt, (unit) => String(right(unit))), pair(chainMine, chainBuilt, (unit) => String(right(unit)))]);
+  row('Cost, USD', [pair(freshMine, freshBuilt, (unit) => cost(unit).toFixed(2)), pair(chainMine, chainBuilt, (unit) => cost(unit).toFixed(2))]);
+  // One after another, the first question wrote what was left to the cache and the others read it; each of a fresh copy, every question wrote it.
+  const wrote = chainMine.questions.map((asked) => asked.own.cacheCreationInputTokens);
+  assert.ok((wrote[0] ?? 0) > next(chainMine) * 0.9 && wrote.slice(1).every((one) => one < next(chainMine) / 10));
+  assert.ok(freshMine.questions.every((asked) => asked.own.cacheCreationInputTokens > next(freshMine) * 0.9));
+  has(section, `the plugin's first question wrote the ${n(wrote[0] ?? 0)} tokens the compaction left to the prompt cache`, 'measurements');
+  const recalls = (unit: Unit) => sum(unit.questions.map((asked) => asked.calls.filter((call) => call === 'mcp__lossless-compaction__recall').length));
+  const outside = (unit: Unit) => unit.questions.filter((asked) => asked.outside).length;
+  assert.equal(outside(freshBuilt), outside(chainBuilt));
+  has(section, `With the plugin the agent called \`recall\` ${recalls(freshMine)} and ${recalls(chainMine)} times; after a summary, ${outside(freshBuilt)} of its answers each way came after reading outside the working directory.`, 'measurements');
+
+  // The README's line, the opening of docs/comparison.md and the CHANGELOG: one after another, with the time of both ways.
+  const took = (mine: readonly Unit[], form: (ms: number) => string, joint: string) => {
+    const values = mine.map((unit) => unit.compaction.durationMs);
+    return `${form(Math.min(...values))}${joint}${form(Math.max(...values))}`;
+  };
+  const tokens = n(Math.round(freshMine.compaction.preTokens / 1000) * 1000);
+  const [ourTook, theirTook] = [took([freshMine, chainMine], (ms) => (ms / 1000).toFixed(2), '–'), took([freshBuilt, chainBuilt], (ms) => String(Math.round(ms / 1000)), '–')];
+  has(readme, `In a window of 1,000,000**, at ${tokens} tokens: \`/compact\` ${ourTook} s against ${theirTook} s; eleven questions in a row, ${right(chainMine)} right against ${right(chainBuilt)}, ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}.`, 'README');
+  const spoken = (text: string) => text.replace('–', ' to ');
+  has(comparison, `In a window of 1,000,000, at ${tokens} tokens, a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; one after another the eleven questions were answered right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}, and each of a fresh copy ${cost(freshMine).toFixed(2)} against ${cost(freshBuilt).toFixed(2)}.`, 'comparison');
+  has(
+    changelog,
+    `at ${tokens} tokens a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; asked one after another, the eleven questions were right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}; ` +
+      `asked each of a fresh copy, where every question writes the 270,000 tokens the plugin left to the prompt cache again, ${cost(freshMine).toFixed(2)} USD against ${cost(freshBuilt).toFixed(2)}, ${right(freshMine)} right against ${right(freshBuilt)}.`,
+    'CHANGELOG',
+  );
+});

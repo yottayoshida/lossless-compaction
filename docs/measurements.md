@@ -101,6 +101,30 @@ The second run:
   and 50, then 53 and 52. Of 217 answers of known grade mixed in, it graded
   every one as expected.
 
+In a window of 1,000,000: `large`, the shape of `results` with thirty-two
+logs read, built again with Sonnet 5.5 (575,506 tokens), each compacted once
+by the plugin and once by Claude Code for each way of asking its eleven
+questions. Its units, grades and tables are in
+`bench/results/2026-10-04-large/`, graded apart from the six so that no
+verdict published with them moved. In every cell the plugin's figure is
+first:
+
+|                          | Each of a fresh copy | One after another |
+| ------------------------ | -------------------: | ----------------: |
+| Tokens before            |    576,136 · 576,136 | 578,124 · 577,763 |
+| `/compact` took, s       |          0.27 · 39.8 |       0.26 · 51.8 |
+| The next request, tokens |      272,134 · 7,042 |   272,163 · 9,669 |
+| After the eleven, tokens |                      |  300,460 · 13,853 |
+| Right, of 11             |               10 · 8 |            11 · 6 |
+| Cost, USD                |         12.28 · 1.67 |       2.05 · 1.58 |
+
+One after another, the plugin's first question wrote the 270,870 tokens the
+compaction left to the prompt cache and every question after it read them;
+each of a fresh copy, every question wrote them again, which is most of its
+12.28 USD. With the plugin the agent called `recall` 5 and 4 times; after a
+summary, 5 of its answers each way came after reading outside the working
+directory.
+
 Not shown here: two runs of one model; made-up conversations, each of one
 kind; and, one after another, an answer that leans on the one before it.
 
