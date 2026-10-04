@@ -129,7 +129,7 @@ the version the README was last read against. The test fails unless
 raised without coming here. The test cannot tell that the README was read,
 only that this line was set.
 
-README read against version: `0.6.1`
+README read against version: `0.7.0`
 
 To read it, for the release being made:
 

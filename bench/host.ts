@@ -12,7 +12,7 @@
 //   node bench/host.ts --plugin-dir <a copy>     the running plugin's checks on another copy (the not-running
 //                                                 copy is always made from the working tree)
 //
-// Signs in as you do and spends a few cents of Haiku. The files it reads and
+// Signs in as you do and spends some cents of Sonnet 5.5. The files it reads and
 // the plugin's store are in a directory of its own; Claude Code keeps its record
 // of each session where it keeps every session's (`--resume` needs it), and what
 // hooks/notice.sh remembers (told, held) goes where it keeps the plugin's data,
@@ -28,10 +28,11 @@ import { FUNCTION_HOOKS, argsOf, envOf } from './cc.ts';
 import { logFile } from './fixtures.ts';
 import { readLine } from './lib.ts';
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-sonnet-5-5';
 /** Long enough that a /compact moves some of them out: about 20,000 characters each, past the newest 60,000 kept. */
 const FILES = 6;
-const LINES = 340;
+// Each read is a pair larger than a part (src/keep.ts PART_BYTES), so that the cut below is not met by folding old calls into lists (#83).
+const LINES = 700;
 const NOT_RUNNING = 'is enabled but is not running in this session';
 const HELD = 'Compaction blocked by PreCompact hook';
 /** A session that has not ended by now is stopped. */

@@ -9,7 +9,7 @@
       "name": "lossless-compaction",
       "source": "./",
       "description": "Lossless context compaction for Claude Code: old tool output moves to local files and comes back unchanged by id, or by what it is about with a Jev key.",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "license": "MIT OR Apache-2.0"
     }
   ]
