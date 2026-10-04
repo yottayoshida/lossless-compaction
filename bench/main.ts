@@ -4,6 +4,7 @@
 //   node bench/main.ts build   --traces a,b          build the conversations: the six that are asked questions, the two that are only probed, and the one asked only what `find` is for
 //   node bench/main.ts run     --traces a,b --models m1,m2 --runs 3
 //   node bench/main.ts probe   --traces a,b --models m1 [--plugin-dirs name=path,...] [--max-after 100] [--target 1]   (each checkout at those settings; `run` takes them too)
+//   node bench/main.ts chain   --traces a,b --models m1 --runs 1   the questions one after another, each going on from the one before
 //   node bench/main.ts pick                          what `find` picks against a word match (asks Jev: BENCH_JEV_ENV)
 //   node bench/main.ts pick    --questions file.json  the same of a file's questions: [{ trace, kind, ask, target }]
 //   node bench/main.ts find    [--traces a,b] [--variants find]   the same questions with an agent in between, with and without `find`
@@ -95,15 +96,15 @@ async function main(): Promise<void> {
     }
     return;
   }
-  if (command === 'run' || command === 'probe') {
-    const unasked = command === 'run' ? traces.filter((name) => [...PROBED, ...FOUND].some((one) => one.name === name)) : [];
+  if (command === 'run' || command === 'probe' || command === 'chain') {
+    const unasked = command !== 'probe' ? traces.filter((name) => [...PROBED, ...FOUND].some((one) => one.name === name)) : [];
     if (unasked.length > 0) throw new Error(`no question but those of \`find\` is asked of ${unasked.join(', ')}: built for \`probe\`, \`find\` or \`pick\` only`);
     const models = list(flag(args, 'models'), [HAIKU]);
     const runs = Number(flag(args, 'runs') ?? 1);
     const variants = variantsOf(flag(args, 'plugin-dirs'), flag(args, 'max-after'), pluginDir, flag(args, 'target'));
     const arms = flag(args, 'arms');
     const units = await runAll(
-      { traces, models, runs, buildModel, mode: command === 'probe' ? 'probe' : 'ask', ...(variants ? { variants } : {}), ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}) },
+      { traces, models, runs, buildModel, mode: command === 'probe' ? 'probe' : command === 'chain' ? 'chain' : 'ask', ...(variants ? { variants } : {}), ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}) },
       places,
       log,
     );

@@ -227,10 +227,21 @@ Everything comes from what a session printed (`--output-format stream-json`).
   and each unit's compaction are kept. Both hold the conversation as it
   was, and no answer to any question.
 
-Not measured: what brought-back results add to the context over many turns
-(each question is its own fork); a compaction on a store that already holds
-something (every attempt at a unit starts with an empty one); an image pasted
-into a message, and a document.
+What is brought back into the context over many turns is measured by
+`chain`: the same questions asked one after another, each going on from the
+one before, in both arms. Its table gives what was in use before the
+compaction, right after it, and once every question was asked, what came back
+in between, and how much of the room the compaction made it took again:
+`recall` in the plugin's arm, a file read again or Claude Code's own record
+read in the built-in's. A summary makes more room than moving out does; what
+is brought back is the other side of it. A chain's sessions have to be kept
+for the next question to go on from; once the chain ends, or stops, they are
+moved into the unit's records, so that no session of another unit can read
+what they answered.
+
+Not measured: a compaction on a store that already holds something (every
+attempt at a unit starts with an empty one); an image pasted into a message,
+and a document.
 
 ## `find`
 
@@ -285,6 +296,7 @@ node bench/main.ts run --runs 3                            # every trace, Haiku 
 node bench/main.ts run --traces results,writes,prose --models claude-sonnet-5-5 --runs 1
 node bench/main.ts build --traces large --build-model claude-sonnet-5-5   # the conversation in a window of 1,000,000
 node bench/main.ts run --traces large --models claude-opus-5-5 --build-model claude-sonnet-5-5   # asked by another model than built it
+node bench/main.ts chain --models claude-sonnet-5-5 --build-model claude-sonnet-5-5   # the questions one after another: what came back into the context
 node bench/main.ts probe --plugin-dirs current=.,v0.5.2=../v0.5.2   # estimate against the next request
 node bench/main.ts probe --traces mixed --plugin-dirs v0.6.0=../v0.6.0 --max-after 100   # a checkout made to compact what it would hand over
 node bench/main.ts grade                                   # every answer in the box, again when a unit was added: grade what is to be published in a box of its own

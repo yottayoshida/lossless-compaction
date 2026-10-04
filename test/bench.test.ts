@@ -30,7 +30,7 @@ import { saidBy, saidIn, type Conversation } from '../bench/build.ts';
 import { FUNCTION_HOOKS, argsOf, envOf, toolsOf } from '../bench/cc.ts';
 import { MISSED, batchName, currentOf, itemsOf, keyOf, promptOf, published, scrubbed, summed, unitsUnder, verdictsIn, type Grades } from '../bench/grade.ts';
 import { MIN_CHARS, pick, pickTable, readAnswer, resultsOf, staged, wentOf, type Pick } from '../bench/pick.ts';
-import { estimates, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
+import { chains, estimates, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
 import { QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
 import { BUILT, FOUND, LARGE, PROBED, TRACES, described, unnamed, type Question } from '../bench/traces.ts';
 import { unnumbered } from '../src/changed.ts';
@@ -2576,4 +2576,28 @@ test('the units in the repository measured with recall taking the id that was me
 
   // Nothing of the machine in what was published.
   assert.ok(!/[\/-]Users[\/-]|[\/-]home[\/-][a-z]|cctmp|CLOUDFLARE_API_TOKEN|TYPESAFE_API_KEY/.test(JSON.stringify([sent.meant, asked.meant])));
+});
+
+test('the questions asked one after another are tabled by what came back into the context, both arms alike', () => {
+  const chained = (arm: 'plugin' | 'builtin', right: number, after: number | undefined, calls: string[]): Unit => {
+    const unit = unitOf(arm, 1, [
+      { ...answered('gone', 'exact-gone', 'cd8', calls, 'correct'), requests: [right, right + 4000] },
+      { ...answered('rule', 'constraint', 'kept', []), requests: [right + 4000] },
+    ]);
+    return { ...unit, mode: 'chain', ...(after !== undefined ? { afterQuestions: after } : {}) };
+  };
+  const plugin = chained('plugin', 13704, 30000, ['mcp__lossless-compaction__recall']);
+  const builtin = chained('builtin', 2462, 9000, ['Read']);
+  const table = chains([plugin, builtin, chained('plugin', 1, undefined, [])], null).split('\n');
+
+  assert.equal(table.length, 4, 'a chain whose last request was not measured is left out');
+  assert.match(table[0] as string, /^\| Trace \| Model \| Run \| Arm \| In use before \| Right after \| After the questions \| Brought back \| Of the room made, taken again \|/);
+  // 30,000 - 13,704 came back of 60,882 - 13,704 made: 35 %. 9,000 - 2,462 of 60,882 - 2,462: 11 %.
+  assert.equal(table[2], '| results | haiku | 1 | builtin | 60882 | 2462 | 9000 | 6538 | 11 % | 0 | 1 | 0 | 1 of 1 graded |');
+  assert.equal(table[3], '| results | haiku | 1 | plugin | 60882 | 13704 | 30000 | 16296 | 35 % | 1 | 0 | 0 | 1 of 1 graded |');
+
+  // The tables of the questions asked each of its own copy hold no unit of a chain, and the whole report names the chain's.
+  const all = whole([plugin, builtin], null);
+  assert.ok(all.includes('### The questions asked one after another: what came back into the context'));
+  assert.ok(!report([plugin, builtin], null).includes('### results, haiku'));
 });
