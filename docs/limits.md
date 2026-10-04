@@ -26,11 +26,13 @@ What the plugin does not do, and what a repository or a version can change.
 - **Long inputs leave after results.** Where moving results out is not
   enough, long values handed to `Write`, `Edit`, `MultiEdit`, `NotebookEdit`
   and Bash leave too, each a line in its call; the newest stay up to
-  `keepTokens` of their own. The inputs of other tools stay (ADR 0020).
+  `keepTokens` of their own, but at a `/compact` typed without instructions
+  (ADR 0023). The inputs of other tools stay (ADR 0020).
 - **Old small calls fold into a list after that.** Calls of `Bash`, `Read`,
   `Grep`, `Glob`, the tools that write, `WebFetch` and `WebSearch` whose
   inputs and results are all short and hold no ticket, older than the newest
-  `keepTokens`, leave with their results, kept as a part; a list of what was
+  `keepTokens` (at a `/compact` typed without instructions, older than the
+  last thing you said), leave with their results, kept as a part; a list of what was
   called stands where they stood, and what was said stays. A call that holds
   a ticket stays, so the ticket goes on naming what it stands for. A run
   folds only where its list is smaller than it. The agent sees an old step by
@@ -76,8 +78,12 @@ and uses no more than `maxAfterPercent` of the size at which Claude Code
 compacts on its own, is not carried out: Claude Code's summary does not run,
 and a line says so.
 
+Where the conversation was counted, the line says what takes the room: what
+every request carries, which no compaction makes smaller, the first message,
+which always stays, and the rest (ADR 0023).
+
 ```text
-Not compacted · lossless-compaction: nothing to move out, 28425 of 167000 tokens in use: the conversation is left as it is. /compact with instructions runs Claude Code's summary
+Not compacted · lossless-compaction: nothing to move out, 28425 of 167000 tokens in use: the conversation is left as it is; of what is in use, 12100 are sent with every request (the system prompt, tools, memory and the like), 15700 the first message and 625 the rest. /compact with instructions runs Claude Code's summary
 ```
 
 - The line is the one Claude Code shows for a compaction a plugin skipped,
@@ -416,6 +422,16 @@ together add up to at most `keepTokens` tokens (three characters to a token,
 20,000 by default); every older one is a candidate to leave, whatever message
 it is in. A result a later call made obsolete is a candidate even when it is
 the newest.
+
+A `/compact` typed without instructions goes on where that is not enough:
+once every result, long input and old call older than the newest
+`keepTokens` is out, the same three are taken from the newer ones, up to
+the last thing you said (a turn stopped with Esc, a Stop hook's answer, a
+message from another session and a command run with `!` are not things you
+said); the second round leaves that message and what came
+after it as they were (what is older than the newest `keepTokens` there
+leaves as at any compaction) (ADR 0023). The line then says
+`; 3 of these from the newest turns`.
 
 `keepTokens` has a second meaning where the oldest messages are kept in
 place of a summary ([above](#when-the-conversation-is-too-full)): the least
