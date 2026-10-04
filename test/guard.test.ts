@@ -30,7 +30,7 @@ const HELD: [string, unknown][] = [
   ['the ticket of a kept part', { content: partTicketText({ part: 1, parts: 3, first: 1, last: 14, bytes: 39000, id: ID }) }],
   [
     'the ticket of the middle of a message',
-    { content: `Read this.\n[moved out] 31204 bytes from the middle of this message; recall returns the whole message, head and tail included, with ${RECALL_TOOL} id ${ID}\nThe end.` },
+    { content: `Read this.\n[moved out] the middle of this message; recall returns the whole message, 31204 bytes, head and tail included, with ${RECALL_TOOL} id ${ID}\nThe end.` },
   ],
   ['a ticket in the wording of 0.2.0', { content: `[moved out] Read result, 10 bytes; recall with mcp__jev-lossless-compaction__recall id ${ID}` }],
   [

@@ -129,10 +129,11 @@ test("where results are kept and where find sends both go through the repository
   assert.ok(user !== undefined && both?.includes('repo = null;') && !user.includes('repo = null'), 'the user file is read on its own');
   assert.ok(hooks.includes('placeTaints(taints, options)'), 'the place');
   assert.ok(hooks.includes('sendTaints(taints, options)'), 'the sending');
-  // Each of recall, find, the compaction, the clean-up and /lossless-store takes the place from storeOf and gives up on its reason.
+  // Each of recall, find, the compaction, the clean-up, /lossless-store and a message sent again from a rewind (ADR 0024)
+  // takes the place from storeOf and gives up on its reason.
   const givingUp = hooks.split("if (typeof store === 'string')").length - 1;
   // The compaction calls it `place` until the place is known to be private (it keeps the conversation after that).
-  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 5, 'five callers');
+  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 6, 'six callers');
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes("const store = await storeOf($, options);\n    if (typeof store === 'string') return;"), 'the clean-up too');
 });

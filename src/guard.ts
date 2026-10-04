@@ -7,8 +7,9 @@
 // stopped: tools that write come and go faster than this plugin does, and one it has never heard of is looked at.
 // A ticket nothing knows goes through, since a document about tickets holds examples of them.
 
+import { MIDDLE_CHARS, readBody } from './body.ts';
 import { readFoldedReadLine } from './changed.ts';
-import { PLUGIN, RECALL_TOOL, inputTicketsOf, isOwnTool, readInputTicket, readPartTicket, readTicket } from './store.ts';
+import { PLUGIN, RECALL_TOOL, inputTicketsOf, isOwnTool, readBodyTicket, readInputTicket, readPartTicket, readTicket } from './store.ts';
 import type { Message } from './types.ts';
 
 // The built-in tools known only to read. A ticket handed to one of them puts nothing anywhere, and refusing it
@@ -83,7 +84,11 @@ export function placedTicketIds(messages: readonly Message[], exceptCall?: strin
       if (use.text !== undefined) add(readTicket(use.text));
       for (const line of inputTicketsOf(use.input)) add(readInputTicket(line));
     }
-    if (message.role === 'user') for (const line of message.text.split('\n')) add(readPartTicket(line) ?? readFoldedReadLine(line));
+    for (const line of message.text.split('\n')) {
+      if (message.role === 'user') add(readPartTicket(line) ?? readFoldedReadLine(line));
+      // The middle of a long message stands in a person's message or in Claude's (ADR 0024).
+      add(readBodyTicket(line));
+    }
   }
   return ids;
 }
@@ -112,4 +117,65 @@ export async function refused(input: unknown, known: (id: string) => Promise<boo
     if (is) return refusal(id);
   }
   return null;
+}
+
+/** Every string of a value, however deep, keys too. */
+function stringsOf(value: unknown, into: string[] = [], depth = 0): string[] {
+  if (typeof value === 'string') into.push(value);
+  else if (typeof value === 'object' && value !== null && depth < DEPTH) {
+    for (const [key, inner] of Array.isArray(value) ? value.entries() : Object.entries(value)) {
+      if (typeof key === 'string') into.push(key);
+      stringsOf(inner, into, depth + 1);
+    }
+  }
+  return into;
+}
+
+/** The longest string an input holds: under 200 characters, nothing is looked up for `middleDropped`. */
+export const longestIn = (input: unknown): number => Math.max(0, ...stringsOf(input).map((one) => one.length));
+
+/**
+ * The id of a message whose middle left, where an input holds its first and last paragraphs close together: written
+ * with the line between them dropped, what lands is the message without its middle (ADR 0024). The middle of a
+ * message is never shorter than `MIDDLE_CHARS`, so the whole message, recalled and written, holds them further apart.
+ */
+export function middleDropped(input: unknown, messages: readonly Message[]): string | null {
+  const edges = messages.flatMap((message) => {
+    const body = readBody(message.text);
+    return body === null || body.head.trim() === '' || body.tail.trim() === '' ? [] : [body];
+  });
+  if (edges.length === 0) return null;
+  for (const value of stringsOf(input)) {
+    for (const { head, tail, ticket } of edges) {
+      // A first and a last paragraph this short stand apart in writing of any kind ("Hi" and "Thanks"): only together,
+      // nothing but blank space between them, are they the message without its middle (yotta, 2026-10-04).
+      if (head.length + tail.length < SHORT_EDGES) {
+        if (together(value, head, tail)) return ticket.id;
+        continue;
+      }
+      const at = value.indexOf(head);
+      if (at < 0) continue;
+      // Where the tail stands last: in the whole message written as it was, a tail said more than once (a signature,
+      // say) is first met in the middle.
+      const after = value.lastIndexOf(tail);
+      if (after >= at + head.length && after - (at + head.length) < MIDDLE_CHARS) return ticket.id;
+    }
+  }
+  return null;
+}
+
+/** A first and a last paragraph shorter than this together are looked for only side by side (`middleDropped`). */
+const SHORT_EDGES = 40;
+
+/** Whether a value holds `head` and right after it, with nothing but blank space between, `tail`. */
+function together(value: string, head: string, tail: string): boolean {
+  for (let at = value.indexOf(head); at >= 0; at = value.indexOf(head, at + 1)) {
+    if (value.slice(at + head.length).trimStart().startsWith(tail)) return true;
+  }
+  return false;
+}
+
+/** What the model is told when what it hands on is a message without its middle: fixed wording and the id. */
+export function middleRefusal(id: string): string {
+  return `[${PLUGIN}] Not run: the input holds the first and last paragraphs of a message whose middle was moved out, without the middle. Call ${RECALL_TOOL} with id ${id} and use the whole message it returns.`;
 }

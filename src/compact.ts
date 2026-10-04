@@ -1,10 +1,11 @@
 // One compaction: choose what leaves, move it out, hand the conversation back.
 
+import { bodyText, selectBodies, type BodyCandidate } from './body.ts';
 import { fold, runsIn, type Run } from './fold.ts';
 import { messagesFromApi } from './keep.ts';
 import { IMAGE_TOKENS, encodeMedia, type MediaPart } from './media.ts';
 import { lastSaid, ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
-import { isStored, moveInputOut, moveOut, readTicket, ticketText, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
+import { isStored, moveBodyOut, moveInputOut, moveOut, readTicket, ticketText, type BodyTicket, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
 export type Config = {
@@ -67,9 +68,11 @@ export type Report = {
   moved: number;
   /** Long values of the inputs of the tools that write a file and of Bash that left, each a ticket now in its call. */
   inputs: number;
+  /** Long messages whose middles left, each kept whole (ADR 0024). */
+  bodies?: number;
   /** Old tool calls folded into lists, each run kept as a part (ADR 0022). */
   folded: number;
-  /** Of the results, inputs and calls above, those taken from the newest turns by a /compact typed by hand (ADR 0023). */
+  /** Of the results, inputs, middles and calls above, those taken from the newest turns by a /compact typed by hand (ADR 0023). */
   recent?: number;
   /** The images that left with their results; those results are among `moved`. */
   images: number;
@@ -234,13 +237,14 @@ function rebuild(
   moved: ReadonlyMap<string, Moved>,
   stored: ReadonlyMap<string, Ticket>,
   inputs: ReadonlyMap<string, readonly MovedValue[]> = new Map(),
+  bodies: ReadonlyMap<number, string> = new Map(),
 ): Message[] {
   const lineFor = (id: string): string | undefined => {
     const ticket = moved.get(id) ?? stored.get(id);
     return ticket && ticketText(ticket);
   };
   const out: Message[] = [];
-  for (const message of messages) {
+  for (const [at, message] of messages.entries()) {
     const toolUses = message.toolUses.map((use): ToolUse => {
       const values = inputs.get(use.tool_use_id);
       const input = values === undefined ? use.input : withValues(use.input, values);
@@ -254,7 +258,7 @@ function rebuild(
       return line === undefined ? { ...result } : { tool_use_id: result.tool_use_id, text: line, isError: false };
     });
     if (message.text === '' && toolUses.length === 0 && toolResults.length === 0) continue;
-    const rebuilt: Message = { role: message.role, text: message.text, toolUses };
+    const rebuilt: Message = { role: message.role, text: bodies.get(at) ?? message.text, toolUses };
     if (toolResults.length > 0) rebuilt.toolResults = toolResults;
     out.push(rebuilt);
   }
@@ -607,6 +611,37 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     return n;
   };
 
+  // Then the middles of long messages, a person's or Claude's: the whole message kept, its first and last paragraphs
+  // and a line in its place (ADR 0024).
+  const bodies = new Map<number, string>();
+  let bodiesMoved = 0;
+  const triedBodies = new Set<number>();
+  const moveBodies = async (queue: readonly BodyCandidate[]): Promise<number> => {
+    const waiting = [...queue];
+    let n = 0;
+    while (short() && waiting.length > 0) {
+      const wave: BodyCandidate[] = [];
+      let expected = saved;
+      do {
+        const candidate = waiting.shift() as BodyCandidate;
+        triedBodies.add(candidate.at);
+        wave.push(candidate);
+        expected += measure(candidate.text);
+      } while (waiting.length > 0 && expected * perUnit < need);
+      const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) => moveBodyOut(files, config.store.write, candidate.role, candidate.text));
+      wave.forEach((candidate, at) => {
+        const result = written[at] as (BodyTicket & { text: string }) | NotMoved;
+        if ('reason' in result) return missed(result);
+        const text = bodyText(candidate.head, result.text, candidate.tail);
+        bodies.set(candidate.at, text);
+        bodiesMoved += 1;
+        n += 1;
+        saved += Math.max(0, measure(candidate.text) - measure(text));
+      });
+    }
+    return n;
+  };
+
   // Then runs of old calls, oldest first: each kept whole as a part, and a list of the calls in its place. What the
   // person and Claude said stays as it was (ADR 0022).
   const lists = new Map<number, { run: Run; list: Message }>();
@@ -647,10 +682,11 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   const keepChars = config.keepTokens * CHARS_PER_TOKEN;
   await moveResults(order);
   await moveInputs(selectInputs(input.messages, { keepChars, minChars: config.minChars }));
-  let rebuilt = rebuild(input.messages, moved, stored, inputs);
+  await moveBodies(selectBodies(input.messages, { keepChars, minChars: config.minChars }));
+  let rebuilt = rebuild(input.messages, moved, stored, inputs, bodies);
   if (config.fold !== false && short()) await foldRuns(runsIn(rebuilt, keepChars, config.minChars));
 
-  // Then, for a /compact typed without instructions and while still short, the same three into the newest calls,
+  // Then, for a /compact typed without instructions and while still short, the same four into the newest calls,
   // up to what the person said last: they asked for it now, and what they asked for and what was done for it since
   // stays (ADR 0023).
   let recent = 0;
@@ -666,7 +702,8 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     recent += await moveResults(ruleOrder(newer.candidates, input.goal));
     const values = selectInputs(older, { keepChars: 0, minChars: config.minChars, keepNewest: false });
     recent += await moveInputs(values.filter((one) => !late.has(one.id) && !triedValues.has(valueOf(one))));
-    rebuilt = rebuild(input.messages, moved, stored, inputs);
+    recent += await moveBodies(selectBodies(older, { keepChars: 0, minChars: config.minChars, keepNewest: false }).filter((one) => !triedBodies.has(one.at)));
+    rebuilt = rebuild(input.messages, moved, stored, inputs, bodies);
     const saidHere = lastSaid(rebuilt);
     const runs = saidHere > 0 ? runsIn(rebuilt.slice(0, saidHere), 0, config.minChars) : [];
     const earlier = runs.filter((run) => !run.messages.some((message) => message.toolUses.some((use) => late.has(use.tool_use_id))));
@@ -695,13 +732,14 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   const over = tokensAfter - mayStay(input.window, config.maxAfterPercent);
   return {
     messages,
-    enough: moved.size + inputsMoved + folded > 0 && (over <= 0 || conversationAfter < over),
+    enough: moved.size + inputsMoved + bodiesMoved + folded > 0 && (over <= 0 || conversationAfter < over),
     target,
     report: {
       results: resultCount,
       candidates: candidates.length,
       moved: moved.size,
       inputs: inputsMoved,
+      bodies: bodiesMoved,
       folded,
       recent,
       images,
@@ -727,6 +765,7 @@ export function reportLine(report: Report): string {
     `moved ${report.moved} of ${report.results} tool results out` +
     (report.images === 0 ? '' : `, ${report.images} ${report.images === 1 ? 'image' : 'images'} with them`) +
     (report.inputs === 0 ? '' : ` and ${report.inputs} tool ${report.inputs === 1 ? 'input' : 'inputs'}`) +
+    (report.bodies ? `, the middle of ${report.bodies} long ${report.bodies === 1 ? 'message' : 'messages'}` : '') +
     (report.folded === 0 ? ' ' : `, ${report.folded} old tool ${report.folded === 1 ? 'call' : 'calls'} folded into lists `) +
     `(${report.charsBefore} -> ${report.charsAfter} chars` +
     (report.counted ? `, about ${report.tokensAfter} of ${report.window} tokens in use) ` : ') ') +

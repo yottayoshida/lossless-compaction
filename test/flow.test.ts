@@ -189,3 +189,9 @@ test('a /compact by hand with room, where what could have left could not be writ
   // A result whose call holds another text is not one that could not be written: that one is still left undone.
   assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, notMoved: { 'call-differs': 1 } } })).step, 'skip');
 });
+
+test('middles of long messages moved out are something moved out: handed back when enough, and never a /compact left undone (ADR 0024)', () => {
+  assert.deepEqual(nextStep(tried(WIDE, { report: { bodies: 1 }, enough: true })), { step: 'back', line: reportLine(report({ bodies: 1 })) });
+  const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, bodies: 1 }, enough: true } as const;
+  assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
+});
