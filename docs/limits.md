@@ -767,7 +767,10 @@ too, so they are counted without the plugin keeping a list of its own.
 - `recall`, `find` and a compaction put back from the trash what the
   conversation names before reading it, and what the kept parts among that
   hold, through the parts of earlier summaries. A result moved there while a
-  session used it is not lost.
+  session used it is not lost. A clean-up does the same before it counts
+  what is named: a kept part that is in the trash and named again goes back
+  first, with what it names, and where something named is still in the trash
+  and not in its place, the clean-up stops before anything moves.
 - A recorded place that is gone is skipped: nothing can be resumed from it.
   A place on a disk that is not mounted at the time looks gone too, and what
   only its transcripts name can go to the trash; it comes back from there if

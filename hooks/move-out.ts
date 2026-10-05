@@ -33,6 +33,7 @@ import {
   noteStopped,
   noteTried,
   partIds,
+  putBackNamed,
   restoreThroughParts,
   rootFor,
   sentinelOf,
@@ -324,8 +325,15 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
       await stoppedAs(files, store.write, record, live.kind);
       return;
     }
+    // What is named and in the trash goes back first: a part there is not known for a part, and what only it names would not be counted.
+    const inTrash = await putBackNamed(files, list, execOf($), dirs, live.ids);
+    if ('stop' in inTrash) {
+      say($, `moved-out results are kept, not cleaned up: ${inTrash.stop}`);
+      await stoppedAs(files, store.write, record, inTrash.kind);
+      return;
+    }
     // A result kept with a summarized conversation is named in its part, not in a transcript (ADR 0007).
-    const named = await namedThroughParts(files, dirs, live.ids);
+    const named = await namedThroughParts(files, dirs, live.ids, inTrash);
     if ('stop' in named) {
       say($, `moved-out results are kept, not cleaned up: ${named.stop}`);
       await stoppedAs(files, store.write, record, named.kind);
