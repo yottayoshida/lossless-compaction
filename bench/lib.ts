@@ -7,7 +7,8 @@ export type Arm = 'plugin' | 'builtin';
 /** The token counts of one model over a session and every session it was forked from. */
 export type Usage = { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number; thinkingTokens: number };
 
-export type ToolCall = { name: string; input: Record<string, unknown> };
+/** A call the session made: its id, and what came back to it, where the session printed that (a question's calls, not a built trace's). */
+export type ToolCall = { name: string; input: Record<string, unknown>; id?: string; result?: string };
 
 export type Compaction = { trigger: string; preTokens: number; postTokens: number; durationMs: number; preserved: boolean };
 
@@ -48,6 +49,18 @@ export type Session = {
 };
 
 const number = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+
+/** Every string in a value, however deep. */
+const stringsIn = (value: unknown): string[] =>
+  typeof value === 'string' ? [value] : typeof value === 'object' && value !== null ? Object.values(value).flatMap(stringsIn) : [];
+
+/** The text of a block's content: a string, or the text of each block of text in it, a line apart. */
+const textOf = (content: unknown): string =>
+  typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.flatMap((part) => (part?.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('\n')
+      : '';
 
 /** Reads the events `claude -p --output-format stream-json --verbose` printed. Lines that are not JSON are passed over. */
 export function readSession(text: string): Session {
@@ -139,7 +152,14 @@ export function readSession(text: string): Session {
         const callId = String(block.id ?? '');
         if (callId !== '' && called.has(callId)) continue;
         called.add(callId);
-        session.toolCalls.push({ name: String(block.name ?? ''), input: block.input ?? {} });
+        session.toolCalls.push({ name: String(block.name ?? ''), input: block.input ?? {}, ...(callId !== '' ? { id: callId } : {}) });
+      }
+    } else if (event['type'] === 'user') {
+      // What came back to a call: the first time it is printed, since a compaction prints the conversation again.
+      for (const block of event['message']?.['content'] ?? []) {
+        if (block?.type !== 'tool_result') continue;
+        const call = session.toolCalls.find((one) => one.id !== undefined && one.id === String(block.tool_use_id ?? ''));
+        if (call !== undefined && call.result === undefined) call.result = textOf(block.content);
       }
     } else if (event['type'] === 'result') {
       session.answer = typeof event['result'] === 'string' ? event['result'] : '';
@@ -349,6 +369,89 @@ const flat = (text: string): string =>
 export function holdsAll(answer: string, needles: readonly string[]): boolean {
   const hay = flat(answer);
   return needles.length > 0 && needles.every((needle) => hay.includes(flat(needle)));
+}
+
+/**
+ * How a question was answered whose answer was moved out of the conversation, step by step: whether the answer
+ * had left at all, whether the agent went for it, whether it chose a piece that holds it, whether what came back
+ * held it. Whether it then answered right is the question's verdict. Kept apart so that an answer that went wrong
+ * can be told a failure to fetch from a failure after fetching.
+ */
+export type Fetched = {
+  /** The ids of what the compaction moved out and that holds the answer: a result, an input, a message, a kept part. */
+  holders: string[];
+  /** Whether the answer still stood in the conversation the compaction left: then nothing had to be fetched. */
+  inContext: boolean;
+  /** Whether the agent called `recall` or `find`. */
+  tried: boolean;
+  /** Whether an id it handed `recall`, or the one `find` gave as its answer, is one of the holders. */
+  chose: boolean;
+  /** Whether what `recall` gave back, or the text `find` gave as its answer, holds the answer. */
+  restored: boolean;
+};
+
+/** Whether the answer had to be fetched: it had left the conversation, and something moved out holds it. */
+export const needed = (fetched: Fetched): boolean => !fetched.inContext && fetched.holders.length > 0;
+
+/** The line `find` opens with when it gives one result: what it is, its size, its id. */
+const FOUND = /^\[found\] [^\n]*?; id ([0-9a-f]{64});[^\n]*\n/;
+
+/**
+ * The steps of `Fetched` for one question: `needles` are what a right answer holds, `conversation` the text of
+ * the conversation the compaction left, `stored` what it moved out by id, `calls` what the agent called with what
+ * came back.
+ */
+export function fetchedOf(needles: readonly string[], conversation: string, stored: ReadonlyMap<string, string>, calls: readonly ToolCall[]): Fetched {
+  const holders = [...stored].filter(([, text]) => holdsAll(text, needles)).map(([id]) => id);
+  const recalls = calls.filter((call) => isRecall(call.name));
+  const finds = calls.filter((call) => isFind(call.name));
+  // What `find` gave as its answer: the one id on the line it opens with, and under it the text itself. The ids it lists
+  // when it is not sure, or that stand in a text it gave, are not a choice.
+  const given = finds.flatMap((call) => {
+    const match = FOUND.exec(call.result ?? '');
+    // The text it gave ends where the plugin's own lines about other results begin: those say the question's values back.
+    return match === null ? [] : [{ id: match[1] as string, text: (call.result ?? '').slice(match[0].length).split('\n[lossless-compaction] ')[0] as string }];
+  });
+  const chosen = new Set([...recalls.map((call) => String(call.input['id'] ?? '')), ...given.map((one) => one.id)]);
+  return {
+    holders,
+    inContext: holdsAll(conversation, needles),
+    tried: recalls.length + finds.length > 0,
+    chose: holders.some((id) => chosen.has(id)),
+    restored: recalls.some((call) => call.result !== undefined && holdsAll(call.result, needles)) || given.some((one) => holdsAll(one.text, needles)),
+  };
+}
+
+/**
+ * The text of the conversation as the compaction left it, out of Claude Code's own record of the session that
+ * compacted: every message after the last boundary, or all of them where the compaction wrote none (the plugin left
+ * it undone). What was said, the calls' inputs, what came back to them, one after another.
+ */
+export function conversationAfter(record: string): string {
+  const rows = record
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as Record<string, any>];
+      } catch {
+        return [];
+      }
+    });
+  const boundary = rows.map((row) => row['subtype'] === 'compact_boundary').lastIndexOf(true);
+  const texts: string[] = [];
+  for (const row of rows.slice(boundary + 1)) {
+    if ((row['type'] !== 'user' && row['type'] !== 'assistant') || row['isSidechain'] === true) continue;
+    const content = row['message']?.['content'];
+    if (typeof content === 'string') texts.push(content);
+    for (const block of Array.isArray(content) ? content : []) {
+      if (block?.type === 'text' && typeof block.text === 'string') texts.push(block.text);
+      // A call's input, and each text in it as it is: written as JSON a line break or a quote in it is escaped.
+      else if (block?.type === 'tool_use') texts.push(JSON.stringify(block.input ?? {}), ...stringsIn(block.input));
+      else if (block?.type === 'tool_result') texts.push(textOf(block.content));
+    }
+  }
+  return texts.join('\n');
 }
 
 export type Outcome =

@@ -2253,3 +2253,69 @@ The next request sent 20,523, 11.5 % under the estimate.
 Not measured: a cut in a window of 1,000,000 in Claude Code, where the two
 replays above are all there is; Opus 5.5 after a cut; and, with Sonnet 5.5,
 anything but the one `/compact` by hand above.
+
+## Where the answer went, and whether the agent fetched it
+
+Whether an answer is right says nothing of why it is wrong when it is. What
+the plugin moves out is still there; what can fail is the agent fetching it.
+So for each question whose answer no file of the work holds any more (the
+output of a script since removed, and what a file said before it was written
+again), a unit now records where the answer went in the compaction and how
+far the agent got: whether the answer still stood in the conversation;
+whether something moved out holds it; whether the agent called `recall` or
+`find`; whether it chose a piece that holds the answer; whether what came
+back held it. Whether it then answered right is the question's verdict. A
+failure to fetch is thereby told from a failure after fetching (#90).
+
+Measured on 2026-10-05, with Sonnet 5.5 and no key for Jev, so with `recall`
+alone, on the plugin as it is on `main` at 0.7.0 (code `23ff90df6625`) and
+Claude Code 2.1.289; each question asked of a fresh copy, three runs
+(`bench/results/2026-10-05-fetched/`). The conversations are those of
+`bench/results/2026-10-04-every-kind/`, and `opaque` built again.
+
+| Conversation | What the compaction did | Had to be fetched | `recall` called | A piece holding it chosen | It came back | Right |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `results` | moved 10 of 15 results out | 9 | 9 | 9 | 9 | 9 |
+| `short` | moved 3 results out, folded 26 calls | 9 | 9 | 9 | 9 | 9 |
+| `thinking` | moved 3 of 3 results out | 9 | 9 | 9 | 9 | 9 |
+| `writes` | moved 3 results, 7 inputs, 2 messages' middles out | 9 | 9 | 9 | 9 | 9 |
+| `results`, cut | moved 10 out, then kept messages 2 to 39 of 44 in 1 part | 9 | 9 | 9 | 9 | 9 |
+| `writes`, cut | moved out as above, then kept messages 2 to 39 of 54 in 2 parts | 9 | 9 | 9 | 9 | 9 |
+| `opaque`, the questions `find` is for | moved 16 of 20 results out | 30 | 27 | 27 | 27 | 27 |
+
+- In every one of the 84 questions the answer had left the conversation and
+  something moved out held it: none was answered from what stayed.
+- In the six that ask the benchmark's questions, the agent fetched the answer
+  54 times of 54, and answered right each time: after a cut as after moving
+  out. The cut is what `maxAfterPercent` at 10 gives: the conversation is
+  still over that line once its results are out, and its oldest messages are
+  kept in parts, with no summary. After it the next request carried 12,567
+  and 13,673 tokens, against 43,586 and 35,215.
+- In `opaque` nothing in a call says what it returned, and with no key there
+  is no `find`: the agent recalled the tickets a batch at a time, the one
+  asked about among them, 8 to 16 calls a question. It reached the answer 27
+  times of 30. The other three are one question in each run, which Sonnet
+  5.5's safeguards stopped; Claude Code went on with another model, which
+  called nothing and said there was no such result. Of the questions Sonnet
+  5.5 answered itself, 27 of 27.
+- No answer that came back was then answered wrong.
+
+Before the measurement, the line for calling `recall` alone useful without a
+key was set at 90 % of the answers that had to be fetched, in the
+conversations that ask the benchmark's questions: there it was 54 of 54. With
+`opaque` counted in, which was to be shown apart, 81 of 84 answers that had to be fetched were, 96 %.
+Without `find` the agent makes many more calls there: a run of `opaque`'s ten
+questions made 97 to 113 calls to `recall` and cost 1.59 to 3.20 USD, where a
+run of nine elsewhere made 3 to 9 and cost 0.08 to 1.55; the first run of
+each paid to write the conversation to the prompt cache, the later ones read
+it.
+
+Not in these figures: `full` and `prose`, where no result leaves and the
+answers stay in the conversation (`full` was cut this way once: the agent
+recalled eight parts for a question, and Sonnet 5.5's safeguards stopped a
+question of that run, which was not measured again); the questions asked one after
+another, where an earlier answer puts back what a later one needs; a cut
+where the answer is only in a kept part (in the two cut here the results had
+left first, and the answer was in a result); what a
+model grades (where the work stands, a rule), which is not fetched; and the
+middle of a long message that left, which no question here asks for.
