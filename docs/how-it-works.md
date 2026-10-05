@@ -31,3 +31,5 @@
   A file that neither they nor a part kept before a summary names goes to a
   trash, and is removed a week later if still named by none. `/lossless-store`
   says how much is kept and how the clean-up went, without opening a result.
+
+What the plugin promises of all this, and the tests that keep each promise, are in [What "lossless" holds to](invariants.md).

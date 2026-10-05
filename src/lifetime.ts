@@ -442,6 +442,26 @@ export async function restoreThroughParts(
   return restored;
 }
 
+/**
+ * Before a collection reads what the kept parts name: puts back from the trash
+ * what the transcripts name, with what the parts among it name, as far as it
+ * can, and resolves with the ids the trash still holds. A part whose entry is
+ * in the trash is not known for a part, so what only it names would not be
+ * counted as named: `namedThroughParts` stops at an id that is named, in the
+ * trash and not in place. An id in both places is in place, and its copy in
+ * the trash is the collection's to remove.
+ */
+export async function putBackNamed(files: Files, list: List, exec: Exec, dirs: readonly string[], live: ReadonlySet<string>): Promise<Set<string> | Stop> {
+  await restoreThroughParts(files, list, exec, dirs, live);
+  const left = new Set<string>();
+  for (const dir of dirs) {
+    const trashed = await trashIn(list, dir);
+    if (trashed === null) return { stop: `the trash of ${dir} could not be listed`, kind: 'trash' };
+    for (const item of trashed) left.add(item.id);
+  }
+  return left;
+}
+
 async function putBack(exec: Exec, dir: string, items: readonly Trashed[]): Promise<boolean> {
   const blobs = items.map((item) => trashedAt(dir, item)[0]);
   const entries = items.map((item) => trashedAt(dir, item)[1]);

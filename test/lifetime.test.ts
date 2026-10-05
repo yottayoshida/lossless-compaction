@@ -15,6 +15,7 @@ import {
   noteStopped,
   planGc,
   restore,
+  putBackNamed,
   restoreThroughParts,
   RETRY_MS,
   SENTINEL_ID,
@@ -29,6 +30,7 @@ import {
   whyNotNow,
   writeSentinel,
 } from '../src/lifetime.ts';
+import { namedThroughParts } from '../src/keep.ts';
 import { PART, idOf, inputTicketText, partTicketText, ticketText } from '../src/store.ts';
 import type { DirEntry, Exec } from '../src/types.ts';
 import { MemoryFiles, output } from './helpers.ts';
@@ -408,6 +410,69 @@ test('a kept part the conversation names comes back from the trash, and with it 
   assert.equal(await restoreThroughParts(files, list(files), exec, [DIR], ticketIds(conversation), partIds(conversation)), 3);
   for (const id of [newer, older, result]) assert.ok(files.files.has(`${DIR}/blobs/${id}.txt`) && files.files.has(`${DIR}/index/${id}.json`), `${id} is back`);
   assert.deepEqual(await trashIn(list(files), DIR), []);
+});
+
+test('a part named again while it is in the trash keeps what only it names: both go back before a collection counts what is named', async () => {
+  const files = new MemoryFiles();
+  const [result] = await storeWith(files, [output('read once', 40)], 3 * DAY);
+  const part = await storePart(files, `[call Read t1] {"file_path":"/p/a"}\n[result t1]\n${ticketText({ tool: 'Read', bytes: 40, id: result as string })}`, 3 * DAY);
+  const { exec } = commands(files);
+  // A collection that did not see the transcript naming the part, its disk not mounted say: both go to the trash.
+  assert.deepEqual(await collect(list(files), exec, DIR, new Set(), NOW), { trashed: 2, restored: 0, removed: 0 });
+  const live = new Set([part]);
+  // The hole: with its entry in the trash the part is not known for one, and what it names is not counted as named.
+  assert.deepEqual(await namedThroughParts(files, [DIR], live), live);
+  // Put back first, the part is read, what it names is named, and a collection past the week removes nothing.
+  const inTrash = await putBackNamed(files, list(files), exec, [DIR], live);
+  assert.deepEqual(inTrash, new Set());
+  const named = await namedThroughParts(files, [DIR], live, inTrash as Set<string>);
+  assert.ok(!('stop' in named) && named.has(result as string));
+  assert.deepEqual(await collect(list(files), exec, DIR, named as Set<string>, NOW + GRACE_MS + 2 * DAY), { trashed: 0, restored: 0, removed: 0 });
+  assert.ok(files.files.has(`${DIR}/blobs/${result}.txt`) && files.files.has(`${DIR}/blobs/${part}.txt`));
+});
+
+test('where what is named cannot be put back from the trash, the collection is stopped before it counts what is named', async () => {
+  const files = new MemoryFiles();
+  const [result] = await storeWith(files, [output('read once', 40)], 3 * DAY);
+  const inner = await storePart(files, ticketText({ tool: 'Read', bytes: 40, id: result as string }), 3 * DAY);
+  const outer = await storePart(files, `kept before\n${partTicketText({ part: 1, parts: 1, first: 1, last: 4, bytes: 9, id: inner })}`, 3 * DAY);
+  await collect(list(files), commands(files).exec, DIR, new Set(), NOW);
+  // A mv that moves nothing: the part named stays in the trash, and nothing may be collected against what it would have named.
+  const stuck = await putBackNamed(files, list(files), commands(files, { mvExit: 1 }).exec, [DIR], new Set([outer]));
+  assert.deepEqual(stuck, new Set([result, inner, outer]));
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), stuck as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  // The part named comes back and the part it names does not: stopped at the inner one, which only the outer names.
+  const moved = commands(files).exec;
+  const onlyOuter: Exec = async (argv, timeoutMs) => (argv.some((arg) => arg.includes(inner) || arg.includes(result as string)) ? { exitCode: 1, stdout: '', truncated: false } : moved(argv, timeoutMs));
+  const half = await putBackNamed(files, list(files), onlyOuter, [DIR], new Set([outer]));
+  assert.deepEqual(half, new Set([result, inner]));
+  assert.ok(files.files.has(`${DIR}/index/${outer}.json`));
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), half as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  // A trash that cannot be listed stops it too.
+  const unlisted = async (path: string) => {
+    if (path.includes('/trash/')) throw new Error('EACCES');
+    return list(files)(path);
+  };
+  assert.deepEqual(await putBackNamed(files, unlisted, moved, [DIR], new Set([outer])), { stop: `the trash of ${DIR} could not be listed`, kind: 'trash' });
+});
+
+test('a result in place and in the trash at once does not stop a collection: it is in place, and the copy in the trash is removed', async () => {
+  const files = new MemoryFiles();
+  const text = output('read twice', 40);
+  const [id] = await storeWith(files, [text], 3 * DAY);
+  const { exec } = commands(files);
+  await collect(list(files), exec, DIR, new Set(), NOW);
+  // The same text is stored again while its first copy is in the trash, and a transcript names it.
+  await storeWith(files, [text], 0);
+  const live = new Set([id as string]);
+  const inTrash = await putBackNamed(files, list(files), exec, [DIR], live);
+  assert.deepEqual(inTrash, live);
+  assert.deepEqual(await namedThroughParts(files, [DIR], live, inTrash as Set<string>), live);
+  await collect(list(files), exec, DIR, live, NOW + DAY);
+  assert.deepEqual(await trashIn(list(files), DIR), []);
+  assert.ok(files.files.has(`${DIR}/blobs/${id}.txt`));
+  // An id that is named and nowhere, a commit's hash say, stops nothing.
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set(['f'.repeat(64)]), new Set()), new Set(['f'.repeat(64)]));
 });
 
 test('a part in place still has what it names put back: a part put back by an earlier version came back alone', async () => {

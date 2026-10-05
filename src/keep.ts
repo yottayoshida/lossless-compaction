@@ -8,7 +8,7 @@
 
 import { inputLine } from './ask.ts';
 import { changedLines } from './changed.ts';
-import { PART, PLUGIN, bytesOf, isPart, moveOut, partTicketText, readTicket, recall, type NotMoved } from './store.ts';
+import { PART, PLUGIN, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, recall, type NotMoved } from './store.ts';
 import type { Stop } from './lifetime.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
@@ -308,10 +308,13 @@ const ID = /[0-9a-f]{64}/g;
  * that cannot be read stops the collection, as a transcript that cannot be
  * read does.
  */
-export async function namedThroughParts(files: Files, dirs: readonly string[], live: ReadonlySet<string>): Promise<Set<string> | Stop> {
+export async function namedThroughParts(files: Files, dirs: readonly string[], live: ReadonlySet<string>, inTrash: ReadonlySet<string> = new Set()): Promise<Set<string> | Stop> {
   const named = new Set(live);
   const queue = [...live];
   for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    // Named, in the trash and not in place: it may be a part, and with its entry there it cannot be told. What it
+    // names would go uncounted, so nothing is collected until it is back.
+    if (inTrash.has(id) && !(await holds(files, dirs, id))) return { stop: 'what is named could not be put back from the trash', kind: 'move' };
     const part = await isPart(files, dirs, id);
     if (part === null) return { stop: `the entry of ${id} could not be read`, kind: 'part' };
     if (!part) continue;

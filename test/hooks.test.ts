@@ -234,7 +234,11 @@ test('every way the main conversation reaches the built-in summary keeps it firs
 
 test('a clean-up keeps what kept parts name: it collects against the ids followed through them, and stops when they cannot be read', () => {
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
-  assert.ok(collecting.includes('const named = await namedThroughParts(files, dirs, live.ids);'), 'followed');
+  assert.ok(collecting.includes('const named = await namedThroughParts(files, dirs, live.ids, inTrash);'), 'followed');
+  // What is named and in the trash goes back before the parts are followed: a part in the trash is not known for one.
+  const back = collecting.indexOf('const inTrash = await putBackNamed(files, list, execOf($), dirs, live.ids);');
+  assert.ok(back > 0 && back < collecting.indexOf('namedThroughParts('), 'put back first');
+  assert.ok(collecting.slice(back, collecting.indexOf('namedThroughParts(')).includes("if ('stop' in inTrash) {"), 'and stopped where the trash cannot be read');
   assert.ok(collecting.includes("if ('stop' in named) {"), 'stops');
   assert.ok(collecting.includes('collect(list, execOf($), dir, named, now)'), 'collected against them');
   assert.ok(!collecting.includes('collect(list, execOf($), dir, live.ids, now)'), 'not against the transcripts alone');
@@ -408,7 +412,8 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   assert.ok(collecting.includes('if (stopped === null) await noteRun(files, store.write, now);\n    else await stoppedAs(files, store.write, record, stopped);'));
   assert.ok(collecting.includes("if (tried !== null) await stoppedAs(filesOf($), tried.dir, tried.record, 'unexpected');"));
   // The words are said, and only said.
-  assert.equal(collecting.split('stoppedAs(').length - 1, 5, 'four places it stops and the declaration');
+  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, inTrash.kind);'));
+  assert.equal(collecting.split('stoppedAs(').length - 1, 6, 'five places it stops and the declaration');
   assert.ok(!/noteStopped\([^)]*\.stop\b/.test(collecting));
 });
 
