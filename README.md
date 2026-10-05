@@ -85,8 +85,8 @@ one after another:
 - [Usage](docs/usage.md) — what a compaction prints, `recall`, what `find` sends
 - [How it works](docs/how-it-works.md) — what is stored, what leaves, what is deleted
 - [Limits](docs/limits.md) — when the summary still runs, what is not kept, setup
-- [The comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
-- [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](.claude-plugin/plugin.json) and [decision records](docs/adr/)
+- [Comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
+- [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](.claude-plugin/plugin.json), [privacy](PRIVACY.md) and [decision records](docs/adr/)
 
 The idea comes from [fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction), with which this shares no code. Not affiliated with TypeSafe AI or Anthropic.
 

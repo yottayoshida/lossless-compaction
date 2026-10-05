@@ -100,6 +100,17 @@ test('the README: every link of its own reaches a file, and a heading where it n
   assert.ok(others.length > 5 && linksOf(README).length > 10);
 });
 
+test('PRIVACY.md, which the README links to: every link of its own reaches a file, and a heading where it names one', () => {
+  const page = read('PRIVACY.md');
+  for (const target of linksOf(page)) {
+    const [path = '', anchor] = target.split('#');
+    const file = path === '' ? 'PRIVACY.md' : path;
+    assert.ok(existsSync(join(ROOT, file)), `PRIVACY.md links to ${target}: no such file`);
+    if (anchor !== undefined && file.endsWith('.md')) assert.ok(anchorsOf(read(file)).has(anchor), `PRIVACY.md links to ${target}: no such heading`);
+  }
+  assert.ok(linksOf(page).some((target) => target.includes('#')), 'PRIVACY.md names the sections of the docs it draws on');
+});
+
 test('how links and headings are read: a link with a title, a reference defined below, a heading that holds a link or closes with hashes', () => {
   assert.deepEqual(linksOf('[a](docs/a.md "A") [b](<docs/b.md>) [c](https://example.com) [d][ref]\n\n[ref]: docs/d.md#x\n'), ['docs/a.md', 'docs/b.md', 'docs/d.md#x']);
   assert.deepEqual([...anchorsOf('# Setting it up\n\n## With [Opus 5.5](x.md), and 1,000,000 ##\n\n## Setting it up\n\n```sh\n# not one\n```\n')], [

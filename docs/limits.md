@@ -742,8 +742,8 @@ compaction says why (ADR 0008):
   (`cleanupPeriodDays`) name, below. On the machine this was measured on,
   two days of use left 157 files, 4.9 MB, before every summary kept the
   conversation (ADR 0007). The trash is on the same disk: space comes back
-  when it is emptied, up to about fifteen days after a result stops being
-  named. A full disk can keep the clean-up from running too, since it
+  when it is emptied, one to three weeks after a result stops being
+  named with sessions started every day. A full disk can keep the clean-up from running too, since it
   writes a few small files first.
 
 ## How long results are kept
