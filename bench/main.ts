@@ -6,6 +6,8 @@
 //   node bench/main.ts probe   --traces a,b --models m1 [--plugin-dirs name=path,...] [--max-after 100] [--target 1]   (each checkout at those settings; `run` takes them too)
 //   node bench/main.ts chain   --traces a,b --models m1 --runs 1   the questions one after another, each going on from the one before
 //   node bench/main.ts pick                          what `find` picks against a word match (asks Jev: BENCH_JEV_ENV)
+//   node bench/main.ts session [--settings builtin,target-40,target-1] [--runs 1,2]   one session that compacts several times, under each setting
+//   node bench/main.ts session-report [--from dir]   its table, of the box or of results that were published
 //   node bench/main.ts pick    --questions file.json  the same of a file's questions: [{ trace, kind, ask, target }]
 //   node bench/main.ts find    [--traces a,b] [--variants find]   the same questions with an agent in between, with and without `find`
 //   node bench/main.ts grade   [--model m]           grade what a program cannot
@@ -27,6 +29,7 @@ import { keysIn } from './lib.ts';
 import { pick, pickTable, wentOf, type Pick } from './pick.ts';
 import { whole } from './report.ts';
 import { leaf, runAll, variantsOf } from './run.ts';
+import { SETTINGS, drive, figuresOf, sessionTable, sessionsUnder } from './session.ts';
 import { BUILT, FOUND, PROBED, TRACES, described, unnamed } from './traces.ts';
 
 /** The model that builds, answers and grades where none is named: the least the benchmark is measured with. */
@@ -78,6 +81,10 @@ async function main(): Promise<void> {
     else writeFileSync(out, text);
     return;
   }
+  if (command === 'session-report' && flag(args, 'from') !== undefined) {
+    process.stdout.write(`${sessionTable(sessionsUnder(resolve(flag(args, 'from') as string)))}\n`);
+    return;
+  }
   if (command === 'report' && flag(args, 'from') !== undefined) {
     const { units, older, grades, picks } = measuredUnder(resolve(flag(args, 'from') as string), true);
     process.stdout.write(whole(units, grades, older, picks?.picks ?? null));
@@ -114,6 +121,27 @@ async function main(): Promise<void> {
       log,
     );
     console.log(`${units.length} units under ${places.box}/units`);
+    return;
+  }
+  if (command === 'session-report') {
+    process.stdout.write(`${sessionTable(sessionsUnder(places.box))}\n`);
+    return;
+  }
+  if (command === 'session') {
+    // One long session a setting, driven to its end: `--settings builtin,target-40,target-20,target-1,hybrid`. From run to run the settings take turns at going first.
+    const names = list(flag(args, 'settings'), Object.keys(SETTINGS));
+    const runs = list(flag(args, 'runs'), ['1']).map(Number);
+    for (const model of list(flag(args, 'models'), [SONNET])) {
+      for (const run of runs) {
+        for (const name of [...names.slice(run % names.length), ...names.slice(0, run % names.length)]) {
+          const setting = SETTINGS[name];
+          if (setting === undefined) throw new Error(`no setting named ${name}: ${Object.keys(SETTINGS).join(', ')}`);
+          const measured = await drive(setting, model, run, places, log);
+          const figures = figuresOf(measured);
+          console.log(JSON.stringify({ setting: measured.setting, run, ...figures, compactions: figures.compactions.length }));
+        }
+      }
+    }
     return;
   }
   if (command === 'pick') {

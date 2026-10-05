@@ -334,6 +334,46 @@ The key is read from the file `BENCH_JEV_ENV` names, lines of `NAME=value`:
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or `TYPESAFE_API_KEY`.
 It is written to no file and is on no command line.
 
+## One session, several compactions
+
+Everything above compacts once. `session` drives one session through
+several: a turn at a time in the same session (`--resume` with no fork),
+thirty-six logs read one after another, some removed or written again right
+after they are read, and six questions on the way that the program grades
+(`session.ts`). It is driven under each of five settings: Claude Code's own
+compaction; the plugin with `targetPercent` at 40, 20 and 1; and `hybrid`,
+where the plugin moves results out and hands what is left to Claude Code's
+summary, for which the driver types a `/compact` with instructions before the
+turn that could take the session past the size Claude Code compacts at. A
+compaction other than the setting's stops the run: Claude Code compacting on
+its own where the driver was to, the plugin handing over where it was to move
+out, two in one turn.
+
+What a run records, a turn at a time: each request with what it sent fresh,
+read from the prompt cache and wrote to it (the responses Claude Code prints
+again after a compaction, with no usage, are not requests); the compaction,
+with what was in use at the last request before it; the turn's own cost; the
+tools it called; for a question, the answer, whether it holds the line asked
+for, and whether the turn read outside the working directory.
+`session-report` tables them a setting a row, with what a session had cost by
+the twenty-fourth and the thirtieth log beside its total, since the settings
+end at different places between two compactions. The first message names the
+setting and the run, so that no session reads what another wrote to the
+cache. `results/2026-10-05-session/` is two runs of each with Sonnet 5.5.
+They were driven by version 1 of the script's driver, which counted among a
+turn's calls those Claude Code printed again after a compaction in that turn;
+what is published has the calls of each turn counted again from the records
+of the sessions, as the driver counts them now (version 2), and nothing else
+of a run changed. Two more sessions were driven before them and are not
+published: one at 40 by the driver as it was before that, and one `hybrid`
+that stopped at its last question, where Claude Code compacted on its own.
+
+```sh
+node bench/main.ts session --settings builtin,target-40,target-1 --runs 1,2
+node bench/main.ts session-report                 # of the box
+node bench/main.ts session-report --from bench/results/2026-10-05-session
+```
+
 ## Running it
 
 ```sh

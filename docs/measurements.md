@@ -2319,3 +2319,89 @@ where the answer is only in a kept part (in the two cut here the results had
 left first, and the answer was in a result); what a
 model grades (where the work stands, a rule), which is not fetched; and the
 middle of a long message that left, which no question here asks for.
+
+## One session that compacts several times, under each setting
+
+Every measure above compacts once and asks right after. What a setting costs
+over a session that compacts again and again is in none of them, and
+`targetPercent`, how far a compaction goes, was never set from it (#53).
+`bench/session.ts` drives one session a turn at a time: thirty-six station
+logs of about 12,000 tokens read one after another, three of them removed and
+one written again right after it is read, a long message near the start with
+a rule in its middle paragraph, and six questions on the way that a program
+grades. Five ways of compacting it, each driven twice with Sonnet 5.5, in the
+benchmark's window (the plugin sees 167,000), on the plugin at 0.7.0 (code
+`23ff90df6625`) and Claude Code 2.1.289, on 2026-10-05
+(`bench/results/2026-10-05-session/`):
+
+- `builtin`: Claude Code's own compaction, no plugin;
+- `target-40`, `target-20`, `target-1`: the plugin, with `targetPercent` at
+  40 (the default then), 20 and 1;
+- `hybrid`: the plugin moves results out down to 1 % and, with
+  `maxAfterPercent` at 10, hands what is left to Claude Code's summary, the
+  conversation kept first. The plugin hands over only at a `/compact` given
+  instructions, so the driver types `/compact Summarize the conversation so
+  far.` before the turn that could take the session past 167,000, where the
+  others are compacted by Claude Code on its own.
+
+Each cell gives the two runs in turn; the sizes are means over a run's
+compactions.
+
+| Setting | Runs | Compactions | In use before each | Right after each | Read from the cache right after | Written to it right after | Sent per request | Right | Right after reading outside the work | `recall` calls | Cost by log 24, USD | Cost by log 30, USD | Cost, USD | Time, s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| builtin | 2 | 3, 3 | 169123, 167826 | 21930, 21624 | 3937, 3937 | 17991, 17685 | 87690, 85402 | 5/6, 5/6 | 3, 3 | 0, 0 | 2.45, 2.41 | 3.30, 3.13 | 4.03, 3.85 | 314, 275 |
+| target-40 | 2 | 5, 5 | 169730, 171652 | 64500, 65273 | 4128, 4128 | 60370, 61143 | 101599, 101951 | 6/6, 5/6 | 0, 0 | 5, 6 | 3.06, 2.93 | 4.02, 4.13 | 5.02, 5.13 | 299, 436 |
+| target-20 | 2 | 4, 4 | 170150, 170094 | 26108, 26080 | 4128, 4128 | 21978, 21950 | 87690, 87663 | 6/6, 6/6 | 0, 0 | 5, 5 | 2.34, 2.33 | 3.16, 3.16 | 4.04, 4.03 | 319, 227 |
+| target-1 | 2 | 3, 4 | 171472, 170140 | 25974, 26131 | 4128, 4128 | 21844, 22001 | 93807, 87700 | 5/6, 6/6 | 0, 0 | 9, 5 | 2.54, 2.34 | 3.39, 3.16 | 4.23, 4.03 | 344, 229 |
+| hybrid | 2 | 4, 4 | 159389, 160403 | 9046, 8785 | 4128, 4128 | 4916, 4655 | 78507, 79028 | 6/6, 6/6 | 0, 0 | 7, 11 | 2.42, 2.49 | 3.28, 3.35 | 4.25, 4.38 | 537, 416 |
+
+- **At 40 the session compacted five times and cost a quarter more.** Each
+  compaction moved 7 or 8 results out and left about 65,000 tokens in use, so
+  the next came five to seven logs later; at 20 and at 1 it moved 10 out, left
+  about 26,000, and the next came eight to ten logs later. Right after a compaction every setting
+  read from the prompt cache only what stands before the conversation (about
+  4,000 tokens) and wrote the rest again: 60,000 tokens five times at 40,
+  22,000 three or four times at 20 and at 1. That is the difference: 5.02 and 5.13 USD
+  at 40 against 4.03 to 4.23 at 20 and at 1, and so it was by the
+  twenty-fourth log and by the thirtieth, not only at the end.
+- **20 and 1 did the same here.** In this window 20 % is 33,400 tokens, and
+  the newest 20,000 tokens of results stay whatever the target, with what
+  stands before the conversation: neither could go further than about 26,000.
+  In a larger window they differ, and that was not measured: in a window of
+  1,000,000 a compaction at 20 leaves up to 193,000 tokens of results where
+  one at 1 leaves the newest 20,000.
+- **The built-in compaction cost least, 3.85 and 4.03 USD, and answered
+  least from what it kept.** It compacted three times and left 22,000 tokens.
+  Of its five right answers a run, three came from reading Claude Code's own
+  record of the session, which its summary names; the one it missed each run,
+  a line of the log written again in one and of a removed log in the other,
+  it said was no longer in what it had. The
+  plugin's settings read nothing outside the work.
+- **`hybrid` left least, about 9,000 tokens, and answered every question, for
+  4.25 and 4.38 USD**: each of its four compactions waited for a summary, 24
+  to 44 seconds, where the plugin's own take a fraction of one. The driver
+  types its `/compact` before the turn that would pass 167,000, so it is
+  compacted a log earlier than the others. (In the table its size before a
+  compaction is what the last request sent; for the others it is Claude Code's
+  count when it compacted, the log just read with it.)
+- **The two answers the plugin's settings missed were ids copied wrong.**
+  Asked for a line of the first log removed, fourteen logs after it was read,
+  the agent called `recall` and was refused the id it gave, at 40 in one run
+  and at 1 in one run. Every other answer about a removed or rewritten log came back through
+  `recall`, 5 to 11 calls a run.
+- **The rule tells the plugin's targets apart in nothing.** At 40, 20 and 1
+  the long message kept its middle in every run: moving results out reached
+  the target each time, and a message's middle leaves only after that. The
+  built-in summary wrote the rule out, and under `hybrid` the agent fetched
+  it from the conversation kept before the summary, with 2 and 4 calls to
+  `recall`. The question was answered right in all ten runs.
+
+What this does not show: a window of 1,000,000, where what 40 leaves is
+larger still and 20 and 1 differ; Opus 5.5; a session that writes files or
+runs commands instead of reading; more than two runs a setting, though the
+two are within 5 % of each other in cost in every setting. The first run at 1
+did not get the first removed log back, went on a log's worth smaller, and
+compacted three times where the second compacted four: how often a session
+compacts turns on what it fetches, which is why the cost by the
+twenty-fourth and the thirtieth log is given beside the total.
+The times are of five sessions run side by side, and are not compared.
