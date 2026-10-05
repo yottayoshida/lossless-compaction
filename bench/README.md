@@ -242,6 +242,26 @@ Everything comes from what a session printed (`--output-format stream-json`).
   and each unit's compaction, with a chain's turn before it (below), are
   kept. They hold the conversation as it was, and no answer to any question.
 
+Whether an answer was fetched is recorded apart from whether it was right,
+for the questions whose answer no file holds any more (the script's output,
+and what a file said before it was written again), in the plugin's arm
+(`fetched` in a unit): whether the answer still stood in the conversation the
+compaction left, read from Claude Code's record of the session that
+compacted; which of the pieces in the unit's store hold it; whether the agent
+called `recall` or `find`; whether an id it gave `recall`, or the one `find`
+gave as its answer, is of such a piece; and whether what `recall` returned,
+or the text `find` gave, held the answer. It is recorded where the questions
+are asked one at a time, and a unit whose compaction left no record to read
+stops the run.
+`report` tables them where a unit has them, all runs of a setting together.
+A question whose answer had to be fetched and that went wrong is thereby one
+the agent did not go for, one it fetched the wrong piece for, or one it
+answered wrong with the answer in front of it; one whose answer was left in
+the conversation, or that nothing moved out holds, is counted apart. `results/2026-10-05-fetched/` is that, with Sonnet 5.5 and no
+key: four conversations as they are compacted by default, two of them cut as
+well (`--max-after 10`), and `opaque` with `recall` alone
+(`find --variants default`, which needs no key).
+
 What comes back into the context over many turns is measured by `chain`:
 the same questions asked one after another, each going on from the one
 before, in both arms. Before its compaction a chain sends the conversation

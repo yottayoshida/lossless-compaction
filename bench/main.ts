@@ -147,8 +147,9 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'find') {
-    const { keys, provider } = jevKeys();
     const only = flag(args, 'variants')?.split(',');
+    // The key is read only where the arm with `find` is measured: `--variants default` measures `recall` alone, with no key.
+    const { keys, provider } = only === undefined || only.includes('find') ? jevKeys() : { keys: {}, provider: 'typesafe' as const };
     const units = await runAll(
       {
         traces: list(flag(args, 'traces'), ['results', 'short']),

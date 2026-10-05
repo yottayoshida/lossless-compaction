@@ -6,12 +6,15 @@ import { test } from 'node:test';
 import {
   KEY_VARS,
   OUTCOMES,
+  conversationAfter,
+  fetchedOf,
   gapsOf,
   holdsAll,
   keysIn,
   lexicalPick,
   lookedOutside,
   median,
+  needed,
   outcomeOf,
   ownUsage,
   problemsOf,
@@ -30,8 +33,8 @@ import { saidBy, saidIn, type Conversation } from '../bench/build.ts';
 import { FUNCTION_HOOKS, argsOf, envOf, toolsOf } from '../bench/cc.ts';
 import { MISSED, VERSIONS, batchName, currentOf, itemsOf, keyOf, promptOf, published, scrubbed, summed, unitsUnder, verdictsIn, versionsIn, type Grades } from '../bench/grade.ts';
 import { MIN_CHARS, pick, pickTable, readAnswer, resultsOf, staged, wentOf, type Pick } from '../bench/pick.ts';
-import { chains, estimates, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
-import { QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
+import { chains, estimates, fetches, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
+import { FETCHED, QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
 import { BUILT, FOUND, LARGE, PROBED, TRACES, described, unnamed, type Question } from '../bench/traces.ts';
 import { unnumbered } from '../src/changed.ts';
 import { find, lineHolds, valuesOf } from '../src/find.ts';
@@ -620,6 +623,99 @@ test('probes alone are tabled without the tables of questions, and a checkout ca
   // The share a compaction aims at, alone or with the share that may stay.
   assert.deepEqual(variantsOf(undefined, undefined, '/here', '50'), [{ name: 'target-50', pluginDir: '/here', options: { targetPercent: 50 } }]);
   assert.deepEqual(variantsOf('new=/a', '75', '/here', '1'), [{ name: 'new-max-after-75-target-1', pluginDir: '/a', options: { maxAfterPercent: 75, targetPercent: 1 } }]);
+});
+
+test('what came back to a call is read with it, by the call\'s id: the first time it is printed, as text however it is held', () => {
+  const call = (id: string, callId: string, name = 'mcp__plugin_lossless-compaction_lossless-compaction__recall') =>
+    JSON.stringify({ type: 'assistant', message: { id, usage: { input_tokens: 10 }, content: [{ type: 'tool_use', id: callId, name, input: { id: 'a'.repeat(64) } }] } });
+  const back = (callId: string, content: unknown) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: callId, content }] } });
+  const session = readSession(
+    [call('m1', 'toolu_1'), back('toolu_1', 'batch 07: 8 warnings'), call('m2', 'toolu_2', 'Read'), back('toolu_2', [{ type: 'text', text: 'one' }, { type: 'image' }, { type: 'text', text: 'two' }]), back('toolu_1', 'printed again')].join('\n'),
+  );
+  assert.deepEqual(
+    session.toolCalls.map((one) => [one.id, one.result]),
+    [
+      ['toolu_1', 'batch 07: 8 warnings'],
+      ['toolu_2', 'one\ntwo'],
+    ],
+  );
+  // A call no result came back to has none, and one that carries no id is never given another's.
+  const bare = JSON.stringify({ type: 'assistant', message: { id: 'm3', content: [{ type: 'tool_use', name: 'Grep', input: {} }] } });
+  assert.deepEqual(readSession([call('m1', 'toolu_9'), bare, back('', 'stray')].join('\n')).toolCalls.map((one) => one.result), [undefined, undefined]);
+});
+
+test('where the answer went and how far the agent got: each step is counted from what it is, and a failure at one is told from one at the next', () => {
+  const RECALL = 'mcp__plugin_lossless-compaction_lossless-compaction__recall';
+  const FIND = 'mcp__plugin_lossless-compaction_lossless-compaction__find';
+  const [holder, other] = ['1'.repeat(64), '2'.repeat(64)];
+  const stored = new Map([
+    [holder, 'build log\nbatch 07: 8 warnings, checksum 5384f20e\n'],
+    [other, 'another log\n'],
+  ]);
+  const needles = ['8 warnings', '5384f20e'];
+  const recall = (id: string, result?: string): ToolCall => ({ name: RECALL, input: { id }, id: `t-${id.slice(0, 4)}`, ...(result !== undefined ? { result } : {}) });
+  // Fetched as meant: every step.
+  assert.deepEqual(fetchedOf(needles, '[moved out] Bash result ...', stored, [recall(holder, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true });
+  // The wrong piece: tried, chose none that holds it, nothing came back that holds it.
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(other, 'another log')]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  // An id copied wrong that recall took for the one meant: what came back holds it, though the id given was not the holder's.
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 16)}${'0'.repeat(48)}`, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: false, restored: true });
+  // `find` gave the holder as its answer, with its text under the line it opens with: chosen, and it came back, with no `recall`.
+  const finding = (result: string): ToolCall => ({ name: FIND, input: { question: 'which batch warned?' }, result });
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 40 bytes; id ${holder}; probability 0.9\n\n${stored.get(holder)}`)]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true });
+  // It gave another: neither. And an id it only lists when it is not sure, or that stands in the text it gave, is no choice.
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 12 bytes; id ${other}; probability 0.9\n\nanother log, which names ${holder}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[not sure] the likeliest:\n- Bash result; id ${holder}\n- Bash result; id ${other}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  // Nothing called.
+  assert.deepEqual(fetchedOf(needles, '', stored, [{ name: 'Read', input: {} }]), { holders: [holder], inContext: false, tried: false, chose: false, restored: false });
+  // Left in the conversation: nothing had to be fetched, whatever was moved out holds it too.
+  const left = fetchedOf(needles, 'the agent said: batch 07: 8 warnings, checksum 5384f20e', stored, []);
+  assert.equal(left.inContext, true);
+  assert.equal(needed(left), false);
+  // Held by nothing moved out, and not in the conversation either (a summary dropped it): nothing to fetch it from.
+  const gone = fetchedOf(needles, 'a summary', new Map([[other, 'another log']]), []);
+  assert.deepEqual([gone.holders, needed(gone)], [[], false]);
+  assert.equal(needed(fetchedOf(needles, '', stored, [])), true);
+  // The kinds it is recorded for: an answer no file holds any more.
+  assert.deepEqual(FETCHED, ['exact-gone', 'exact-then']);
+});
+
+test('the conversation a compaction left is read from the record after its last boundary, every message but a subagent\'s', () => {
+  const row = (value: Record<string, unknown>) => JSON.stringify(value);
+  const record = [
+    row({ type: 'user', message: { role: 'user', content: 'before the first' } }),
+    row({ type: 'system', subtype: 'compact_boundary' }),
+    row({ type: 'user', message: { role: 'user', content: 'between the two' } }),
+    row({ type: 'system', subtype: 'compact_boundary' }),
+    row({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'said after' }] } }),
+    row({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'Bash', input: { command: 'sh show.sh' } }] } }),
+    row({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: [{ type: 'text', text: 'batch 07' }] }] } }),
+    row({ type: 'assistant', isSidechain: true, message: { role: 'assistant', content: [{ type: 'text', text: 'a subagent' }] } }),
+    'not json',
+  ].join('\n');
+  assert.equal(conversationAfter(record), ['said after', JSON.stringify({ command: 'sh show.sh' }), 'sh show.sh', 'batch 07'].join('\n'));
+  // With no boundary, as where the plugin left a /compact undone: all of it.
+  assert.equal(conversationAfter(row({ type: 'user', message: { role: 'user', content: 'all' } })), 'all');
+});
+
+test('the table of fetching: per setting, all runs together, each step counted of the questions whose answer had to be fetched', () => {
+  const fetched = (inContext: boolean, steps: number) => ({ holders: inContext ? [] : ['h'], inContext, tried: steps >= 1, chose: steps >= 2, restored: steps >= 3 });
+  const question = (id: string, kind: Unit['questions'][number]['kind'], f: ReturnType<typeof fetched> | undefined, right: boolean) => ({
+    ...answered(id, kind, 'x', [], right ? 'correct' : undefined),
+    ...(f !== undefined ? { fetched: f } : {}),
+  });
+  const one = unitOf('plugin', 1, [question('gone-1', 'exact-gone', fetched(false, 3), true), question('gone-2', 'exact-gone', fetched(false, 3), false), question('then', 'exact-then', fetched(true, 0), true), question('rule-1', 'constraint', undefined, true)]);
+  const two = unitOf('plugin', 2, [question('gone-1', 'exact-gone', fetched(false, 1), false), question('gone-2', 'exact-gone', fetched(false, 2), true), question('then', 'exact-then', fetched(false, 0), false)]);
+  const cut = { ...unitOf('plugin', 1, [question('gone-1', 'exact-gone', fetched(false, 3), true)]), variant: 'v070-max-after-10' };
+  const rows = fetches([one, two, cut, unitOf('builtin', 1, [question('gone-1', 'exact-gone', fetched(false, 0), false)])]).split('\n').slice(2);
+  assert.deepEqual(rows, [
+    // runs, questions, left in, had to be fetched, called, chose, came back, right, came back and wrong
+    '| results | haiku | default | 2 | 6 | 1 | 5 | 4 | 3 | 2 | 2 | 1 |',
+    '| results | haiku | v070-max-after-10 | 1 | 1 | 0 | 1 | 1 | 1 | 1 | 1 | 0 |',
+  ]);
+  // Where no question carries the steps, as in every unit measured before they were recorded, there is no such table.
+  assert.ok(!whole([unitOf('plugin', 1, [answered('gone-1', 'exact-gone', 'x', [])])], null).includes('how far the agent got in fetching'));
+  assert.ok(whole([one], null).includes('### Where the answer went, and how far the agent got in fetching it'));
 });
 
 test('two conversations are built and probed and asked nothing: they are no part of the questions, the grading or the comparison', () => {
@@ -2824,5 +2920,81 @@ test('large in a window of 1,000,000 with Sonnet 5.5, on the code of every kind:
     `at ${tokens} tokens a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; asked one after another, the eleven questions were right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}; ` +
       `asked each of a fresh copy, where every question writes the 270,000 tokens the plugin left to the prompt cache again, ${cost(freshMine).toFixed(2)} USD against ${cost(freshBuilt).toFixed(2)}, ${right(freshMine)} right against ${right(freshBuilt)}.`,
     'CHANGELOG',
+  );
+});
+
+const FETCHED_AT = fileURLToPath(new URL('../bench/results/2026-10-05-fetched', import.meta.url));
+
+test('the run that tells fetching from answering: the tables made from its units, and every figure docs/measurements.md gives of it', () => {
+  const read = (path: string) => readFileSync(path, 'utf8');
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const measurements = read(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)));
+  const section = flat(measurements.slice(measurements.indexOf('## Where the answer went, and whether the agent fetched it')));
+  assert.ok(section.length > 1000);
+  const has = (phrase: string) => assert.ok(section.includes(phrase), phrase);
+
+  const units = unitsUnder(FETCHED_AT);
+  assert.equal(whole(units, null, 0, null), read(`${FETCHED_AT}/report.md`));
+  // Three runs of each: four conversations as compacted by default, two of them cut, and the one asked what `find` is for, with no key.
+  const settings = ['opaque default find', 'results v070 ask', 'results v070-max-after-10 ask', 'short v070 ask', 'thinking v070 ask', 'writes v070 ask', 'writes v070-max-after-10 ask'];
+  assert.deepEqual(units.map((unit) => `${unit.trace} ${unit.variant} ${unit.mode} ${unit.run}`).sort(), settings.flatMap((one) => [1, 2, 3].map((run) => `${one} ${run}`)).sort());
+  assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.model === 'claude-sonnet-5-5' && unit.plugin === '23ff90df6625' && unit.claudeCode === '2.1.289'));
+  has('(code `23ff90df6625`) and Claude Code 2.1.289');
+  // No summary ran: moved out, or cut where the share that may stay was 10 %; and no `find` was there to call.
+  for (const unit of units) assert.equal(unit.compaction.line?.outcome, unit.variant === 'v070-max-after-10' ? 'cut' : 'moved', `${unit.trace} ${unit.variant}`);
+  assert.ok(units.every((unit) => !unit.compaction.summarized && unit.questions.every((one) => one.retrieval.finds === 0)));
+  // Nothing of the machine it ran on.
+  assert.ok(!/\/Users\/|\/home\/|\.cctmp/.test(JSON.stringify(units)));
+
+  // The table: a row a setting, as `fetches` counts them.
+  const rows = new Map<string, number[]>(fetches(units).split('\n').slice(2).map((row) => {
+    const cells = row.split(' | ').map((cell) => cell.replace(/^\| | \|$/g, ''));
+    return [`${cells[0]} ${cells[2]}`, cells.slice(3).map(Number)] as [string, number[]];
+  }));
+  const named: [string, string][] = [
+    ['results v070', '| `results` | moved 10 of 15 results out |'],
+    ['short v070', '| `short` | moved 3 results out, folded 26 calls |'],
+    ['thinking v070', '| `thinking` | moved 3 of 3 results out |'],
+    ['writes v070', "| `writes` | moved 3 results, 7 inputs, 2 messages' middles out |"],
+    ['results v070-max-after-10', '| `results`, cut | moved 10 out, then kept messages 2 to 39 of 44 in 1 part |'],
+    ['writes v070-max-after-10', '| `writes`, cut | moved out as above, then kept messages 2 to 39 of 54 in 2 parts |'],
+    ["opaque default, find's questions", '| `opaque`, the questions `find` is for | moved 16 of 20 results out |'],
+  ];
+  assert.equal(rows.size, named.length);
+  let [had, back] = [0, 0];
+  for (const [key, label] of named) {
+    // runs, questions, left in the conversation, had to be fetched, called, chose, came back, right, came back and wrong
+    const [runs, questions, left, needs, called, chose, restored, right, wrongAfter] = rows.get(key) as number[];
+    assert.deepEqual([runs, left, wrongAfter, needs], [3, 0, 0, questions], key);
+    has(`${label} ${needs} | ${called} | ${chose} | ${restored} | ${right} |`);
+    had += needs as number;
+    back += restored as number;
+  }
+  assert.deepEqual([had, back], [84, 81]);
+  has(`${back} of ${had} answers that had to be fetched were, ${Math.round((back / had) * 100)} %`);
+  has('In every one of the 84 questions the answer had left the conversation');
+  has('the agent fetched the answer 54 times of 54');
+  // What the compactions did, as their lines say.
+  const line = (trace: string, variant: string) => units.find((unit) => unit.trace === trace && unit.variant === variant)?.compaction.line;
+  assert.deepEqual([line('results', 'v070')?.moved, line('results', 'v070')?.results, line('short', 'v070')?.folded, line('writes', 'v070')?.inputs, line('writes', 'v070')?.bodies], [10, 15, 26, 7, 2]);
+  assert.deepEqual([line('results', 'v070-max-after-10')?.cut, line('writes', 'v070-max-after-10')?.cut], [{ first: 2, last: 39, of: 44, parts: 1 }, { first: 2, last: 39, of: 54, parts: 2 }]);
+  assert.deepEqual([line('opaque', 'default')?.moved, line('opaque', 'default')?.results], [16, 20]);
+  // The next request after a cut, against after moving out alone.
+  const next = (trace: string, variant: string) => units.find((unit) => unit.trace === trace && unit.variant === variant && unit.run === 1)?.questions[0]?.requests[0];
+  const n = (value: number | undefined) => (value as number).toLocaleString('en-US');
+  has(`carried ${n(next('results', 'v070-max-after-10'))} and ${n(next('writes', 'v070-max-after-10'))} tokens, against ${n(next('results', 'v070'))} and ${n(next('writes', 'v070'))}`);
+  // `opaque`: the three not fetched are one question a run, answered by another model after a refusal; the calls and the cost.
+  const opaque = units.filter((unit) => unit.trace === 'opaque');
+  const missed = opaque.flatMap((unit) => unit.questions.filter((one) => one.fetched?.tried !== true));
+  assert.deepEqual(missed.map((one) => [one.id, one.fellBackTo !== undefined, one.calls.length]), [1, 2, 3].map(() => ['find-doc-1', true, 0]));
+  assert.ok(opaque.every((unit) => unit.questions.filter((one) => one.fellBackTo !== undefined).length === 1));
+  const perQuestion = opaque.flatMap((unit) => unit.questions.filter((one) => one.fetched?.tried === true).map((one) => one.retrieval.recalls));
+  has(`${Math.min(...perQuestion)} to ${Math.max(...perQuestion)} calls a question`);
+  const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
+  const calls = (unit: Unit) => sum(unit.questions.map((one) => one.retrieval.recalls));
+  const cost = (unit: Unit) => sum(unit.questions.map((one) => one.own.costUSD));
+  const others = units.filter((unit) => unit.trace !== 'opaque');
+  has(
+    `made ${Math.min(...opaque.map(calls))} to ${Math.max(...opaque.map(calls))} calls to \`recall\` and cost ${Math.min(...opaque.map(cost)).toFixed(2)} to ${Math.max(...opaque.map(cost)).toFixed(2)} USD, where a run of nine elsewhere made ${Math.min(...others.map(calls))} to ${Math.max(...others.map(calls))} and cost ${Math.min(...others.map(cost)).toFixed(2)} to ${Math.max(...others.map(cost)).toFixed(2)}`,
   );
 });

@@ -6,12 +6,12 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { build, recordPath, workDir, type Base, type Places } from './build.ts';
 import { claude } from './cc.ts';
-import { gapsOf, holdsAll, lookedOutside, ownUsage, readLine, retrievalOf, summarizedBy, tellsIn, type Arm, type Line, type Retrieval, type Usage } from './lib.ts';
+import { conversationAfter, fetchedOf, gapsOf, holdsAll, lookedOutside, ownUsage, readLine, retrievalOf, summarizedBy, tellsIn, type Arm, type Fetched, type Line, type Retrieval, type Usage } from './lib.ts';
 import { BUILT, FIND_TOOL, QUESTION_TOOLS, type Kind, type Trace } from './traces.ts';
 
 export type Asked = {
@@ -31,6 +31,11 @@ export type Asked = {
   /** The model that answered instead, where the unit's model refused and Claude Code went on with another: the answer is then not the unit's model's. */
   fellBackTo?: string;
   retrieval: Retrieval;
+  /**
+   * Of a question whose answer is a text no file holds any more (`FETCHED`): where the answer went in the compaction,
+   * and how far the agent got in fetching it. Absent in a unit measured before it was recorded.
+   */
+  fetched?: Fetched;
   outside: boolean;
   /** Calls the session made that were refused: something it tried that a question does not allow. */
   refused: number;
@@ -114,6 +119,24 @@ export type Mode = 'ask' | 'probe' | 'find' | 'chain';
 
 /** The name of a unit's file: its arm, then what sets it apart from the plain unit of that arm. */
 export const leaf = (arm: Arm, variant: string, mode: Mode) => [arm, ...(variant === 'default' ? [] : [variant]), ...(mode === 'ask' ? [] : [mode])].join('-');
+
+/**
+ * The kinds of question whose answer no file of the work holds at the time it is asked: the output of a script that is
+ * gone, and what a file said before it was written again. Reading a file is no way to them, so whether the agent
+ * fetched what was moved out is what decides them.
+ */
+export const FETCHED: readonly Kind[] = ['exact-gone', 'exact-then'];
+
+/** What a store holds, by id: the text of every result, input, message and part moved out into it. Empty where there is no store. */
+export function storedIn(storeDir: string): Map<string, string> {
+  const blobs = join(storeDir, 'blobs');
+  if (!existsSync(blobs)) return new Map();
+  return new Map(
+    readdirSync(blobs)
+      .filter((name) => /^[0-9a-f]{64}\.txt$/.test(name))
+      .map((name) => [name.slice(0, 64), readFileSync(join(blobs, name), 'utf8')] as const),
+  );
+}
 
 /** What of a checkout is the plugin's code. */
 const CODE = ['src', 'hooks', '.claude-plugin', 'package.json'] as const;
@@ -228,6 +251,14 @@ export async function unit(
   const unseen = Object.keys(before.modelUsage).filter((name) => !(name in compacted.session.modelUsage));
   if (unseen.length > 0) throw new Error(`${records}: the compaction's session does not carry the usage of the session it was forked from (${unseen.join(', ')})`);
   const own = ownUsage(compacted.session, before);
+  // What the compaction left, from Claude Code's own record of the session, and what it moved out, from the store:
+  // where each question's answer went, so that a failure to fetch it is told from one after fetching it.
+  // Recorded in the plugin's arm, of questions asked one at a time: in a chain an earlier answer puts back what a later one needs.
+  const fetching = arm === 'plugin' && (mode === 'ask' || mode === 'find');
+  const record = recordPath(cwd, compacted.session.sessionId);
+  if (fetching && !existsSync(record)) throw new Error(`${records}: Claude Code's record of the compaction's session is not at ${record}`);
+  const left = fetching ? conversationAfter(readFileSync(record, 'utf8')) : null;
+  const stored = fetching ? storedIn(common.storeDir) : new Map<string, string>();
   log(`${trace.name} ${model} run ${run} ${arm} ${variant.name}: ${undone ? 'left undone' : 'compacted'} in ${sizes.durationMs} ms, ${sizes.preTokens} -> ${sizes.postTokens}${line ? `, ${line.outcome}` : ''}`);
 
   const asked: Asked[] = [];
@@ -258,6 +289,7 @@ export async function unit(
         wallMs: ran.wallMs,
         own: ownUsage(session, parent),
       };
+      if (question.needles !== undefined && left !== null && FETCHED.includes(question.kind)) one.fetched = fetchedOf(question.needles, left, stored, session.toolCalls);
       if (question.needles !== undefined && holdsAll(session.answer, question.needles)) one.verdict = 'correct';
       // A question calls the model: one that cost nothing is one whose usage was not taken from its parent's as meant.
       if (!(one.own.costUSD > 0)) throw new Error(`${records}, ${question.id}: the question's own cost came out as ${one.own.costUSD}`);

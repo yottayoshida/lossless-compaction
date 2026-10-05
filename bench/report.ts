@@ -2,7 +2,7 @@
 // runs of a unit are shown as they are when there are three or fewer, as a median
 // and range otherwise. Nothing is added up across traces into one score.
 
-import { OUTCOMES, outcomeOf, spread, type Arm, type Outcome, type ToolCall } from './lib.ts';
+import { needed, OUTCOMES, outcomeOf, spread, type Arm, type Outcome, type ToolCall } from './lib.ts';
 import { keyOf, type Grades, type Verdict } from './grade.ts';
 import { pickTable, type Pick } from './pick.ts';
 import { type Asked, type Unit } from './run.ts';
@@ -167,7 +167,51 @@ export function whole(units: readonly Unit[], grades: Grades | null, older = 0, 
   if (units.some((unit) => unit.mode === 'chain')) parts.push('', '### The questions asked one after another: how much the context grew', '', chains(units, grades));
   if (units.some((unit) => unit.mode === 'find')) parts.push('', '### The questions `find` is for, asked of an agent', '', finds(units));
   if (picks !== null) parts.push('', '### What `find` picks, against a word match', '', pickTable(picks));
+  if (units.some((unit) => unit.arm === 'plugin' && (unit.mode === 'ask' || unit.mode === 'find') && unit.questions.some((one) => one.fetched !== undefined))) {
+    parts.push('', '### Where the answer went, and how far the agent got in fetching it', '', fetches(units));
+  }
   return `${parts.join('\n')}\n`;
+}
+
+/**
+ * Of the questions whose answer no file holds any more, asked of the plugin's arm one at a time: whether the
+ * compaction left the answer in the conversation, and of those it had moved out, how far the agent got in
+ * fetching it, all runs of a setting together. Each step counts the questions that reached it: the agent called
+ * `recall` or `find`; it chose a piece that holds the answer (an id it gave `recall`, or the one `find` gave as its
+ * answer); what `recall` gave back, or the text `find` gave, held it; and the answer was right, as the program decides. An answer can be right
+ * without the steps before it, and wrong after all of them: the last column counts those, which went wrong after
+ * fetching rather than in it.
+ */
+export function fetches(units: readonly Unit[]): string {
+  const groups = new Map<string, Unit[]>();
+  for (const unit of units) {
+    if (unit.arm !== 'plugin' || (unit.mode !== 'ask' && unit.mode !== 'find') || !unit.questions.some((one) => one.fetched !== undefined)) continue;
+    const key = [unit.trace, unit.model, unit.mode === 'find' ? `${unit.variant}, find's questions` : unit.variant].join('\t');
+    groups.set(key, [...(groups.get(key) ?? []), unit]);
+  }
+  const rows = [...groups]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, group]) => {
+      const asked = group.flatMap((unit) => unit.questions.filter((one) => one.fetched !== undefined));
+      const had = asked.filter((one) => needed(one.fetched as NonNullable<Asked['fetched']>));
+      const reached = (step: (one: Asked) => boolean) => String(had.filter(step).length);
+      return [
+        ...key.split('\t'),
+        String(new Set(group.map((unit) => unit.run)).size),
+        String(asked.length),
+        String(asked.filter((one) => one.fetched?.inContext === true).length),
+        String(had.length),
+        reached((one) => one.fetched?.tried === true),
+        reached((one) => one.fetched?.chose === true),
+        reached((one) => one.fetched?.restored === true),
+        reached((one) => one.verdict === 'correct'),
+        reached((one) => one.fetched?.restored === true && one.verdict !== 'correct'),
+      ];
+    });
+  return table(
+    ['Trace', 'Model', 'Setting', 'Runs', 'Questions', 'Answer left in the conversation', 'Had to be fetched', '`recall` or `find` called', 'A piece holding it chosen', 'It came back', 'Right', 'Came back, answered wrong'],
+    rows,
+  );
 }
 
 /**
