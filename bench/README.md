@@ -258,7 +258,8 @@ A question whose answer had to be fetched and that went wrong is thereby one
 the agent did not go for, one it fetched the wrong piece for, or one it
 answered wrong with the answer in front of it; one whose answer was left in
 the conversation, or that nothing moved out holds, is counted apart. `results/2026-10-05-fetched/` is that, with Sonnet 5.5 and no
-key: four conversations as they are compacted by default, two of them cut as
+key: four conversations as they were compacted by default then
+(`targetPercent` 40), two of them cut as
 well (`--max-after 10`), and `opaque` with `recall` alone
 (`find --variants default`, which needs no key).
 
@@ -333,6 +334,15 @@ leaves it out unless it is named.
 The key is read from the file `BENCH_JEV_ENV` names, lines of `NAME=value`:
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or `TYPESAFE_API_KEY`.
 It is written to no file and is on no command line.
+
+The variant `default` is the plugin at its default settings when it was
+measured: up to ADR 0025, `targetPercent` 40; since, 1. A unit says which
+code it measured, not which settings that code had.
+
+`results/2026-10-05-targets/` is the six conversations of
+`results/2026-10-04-every-kind/` compacted once by hand with `targetPercent` at
+40 and at 1 on one state of the code (`run --target`), the plugin's arm
+alone, asked each of a fresh copy and graded by Sonnet 5.5.
 
 ## One session, several compactions
 

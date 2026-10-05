@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { logLine } from '../bench/fixtures.ts';
-import { ASKS, AUTO_LINE, LOGS, MARKS, REMOVED, REWRITTEN, RULE, SESSION_VERSION, SETTINGS, type SessionRun, type Turn, callsIn, figuresOf, logPath, longMessage, scriptOf, sessionTable, sessionsUnder } from '../bench/session.ts';
+import { ASKS, defaultFrom, AUTO_LINE, LOGS, MARKS, REMOVED, REWRITTEN, RULE, SESSION_VERSION, SETTINGS, type SessionRun, type Turn, callsIn, figuresOf, logPath, longMessage, scriptOf, sessionTable, sessionsUnder } from '../bench/session.ts';
 
 const usage = (costUSD: number) => ({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD, thinkingTokens: 0 });
 const request = (read: number, written: number, fresh = 5) => ({ fresh, read, written });
@@ -168,4 +168,44 @@ test('the sessions that were measured: the table made from them, and every figur
 test('the calls of a turn are those of the responses it was sent: what a compaction prints again of earlier turns is not', () => {
   const said = (id: string, callId: string, name: string, tokens: number) => JSON.stringify({ type: 'assistant', message: { id, usage: { input_tokens: tokens }, content: [{ type: 'tool_use', id: callId, name, input: {} }] } });
   assert.deepEqual(callsIn([said('m1', 't1', 'Read', 10), said('m1', 't1', 'Read', 10), said('old', 't0', 'Grep', 0), 'not json', said('m2', 't2', 'mcp__lossless-compaction__recall', 4)].join('\n')), ['Read', 'mcp__lossless-compaction__recall']);
+});
+
+test('the rule for the default of targetPercent: 1 only where every condition holds against 40, and 40 where any one does not', () => {
+  // A run that read to each mark at a cost, then cost `rest` more, and answered `right` of two questions.
+  const stepOf = (log: number) => scriptOf('').findIndex((step) => step.kind === 'read' && step.log === log);
+  const made = (setting: string, run: number, at24: number, at30: number, total: number, right: number): SessionRun =>
+    runOf(setting, run, [
+      { step: stepOf(24), kind: 'read', requests: [request(1, 1)], own: usage(at24), wallMs: 0, calls: [] },
+      { step: stepOf(30), kind: 'read', requests: [request(1, 1)], own: usage(at30 - at24), wallMs: 0, calls: [] },
+      { step: stepOf(36), kind: 'read', requests: [request(1, 1)], own: usage(total - at30), wallMs: 0, calls: [] },
+      ...[0, 1].map((n): Turn => ({ step: stepOf(36) + 1 + n, kind: 'ask', id: `q${n}`, requests: [], own: usage(0), wallMs: 0, answer: '', right: n < right, calls: [] })),
+    ]);
+  const forty = [made('target-40', 1, 3, 4, 5, 2), made('target-40', 2, 3, 4, 5.2, 2)];
+  const ruled = (one: SessionRun[]) => defaultFrom([...forty, ...one]);
+  // Cheaper in both, by more than 5 %, as many right, cheaper on the way.
+  assert.deepEqual(ruled([made('target-1', 1, 2.5, 3.3, 4.2, 2), made('target-1', 2, 2.4, 3.2, 4, 1)]), { targetPercent: 1, cheaperInBoth: true, byFivePercent: true, asManyRight: true, cheaperOnTheWay: true });
+  // One run at 1 no cheaper than the cheapest at 40.
+  assert.deepEqual(ruled([made('target-1', 1, 2.5, 3.3, 5.1, 2), made('target-1', 2, 2.4, 3.2, 3, 2)]), { targetPercent: 40, cheaperInBoth: false, byFivePercent: true, asManyRight: true, cheaperOnTheWay: true });
+  // Cheaper in both, but by less than 5 % on average.
+  assert.deepEqual(ruled([made('target-1', 1, 2.5, 3.3, 4.95, 2), made('target-1', 2, 2.4, 3.2, 4.9, 2)]), { targetPercent: 40, cheaperInBoth: true, byFivePercent: false, asManyRight: true, cheaperOnTheWay: true });
+  // More than one answer fewer on average.
+  assert.deepEqual(ruled([made('target-1', 1, 2.5, 3.3, 4.2, 0), made('target-1', 2, 2.4, 3.2, 4, 1)]), { targetPercent: 40, cheaperInBoth: true, byFivePercent: true, asManyRight: false, cheaperOnTheWay: true });
+  // Exactly one answer fewer on average is as many as the rule asks.
+  assert.equal(ruled([made('target-1', 1, 2.5, 3.3, 4.2, 1), made('target-1', 2, 2.4, 3.2, 4, 1)]).targetPercent, 1);
+  // Cheaper at the end and by the thirtieth log, and not by the twenty-fourth.
+  assert.deepEqual(ruled([made('target-1', 1, 3.1, 3.3, 4.2, 2), made('target-1', 2, 2.4, 3.2, 4, 2)]), { targetPercent: 40, cheaperInBoth: true, byFivePercent: true, asManyRight: true, cheaperOnTheWay: false });
+  // Cheaper at the end and not by the thirtieth log: the end alone decided it.
+  assert.deepEqual(ruled([made('target-1', 1, 2.5, 4.1, 4.2, 2), made('target-1', 2, 2.4, 3.2, 4, 2)]), { targetPercent: 40, cheaperInBoth: true, byFivePercent: true, asManyRight: true, cheaperOnTheWay: false });
+  // One run of each decides nothing.
+  assert.equal(defaultFrom([forty[0] as SessionRun, made('target-1', 1, 1, 1, 1, 2)]).targetPercent, 40);
+});
+
+test("the default of targetPercent is what the rule gives of the sessions published, and the manifest and the code give the same", () => {
+  const ruling = defaultFrom(sessionsUnder(fileURLToPath(new URL('../bench/results/2026-10-05-session', import.meta.url))));
+  assert.deepEqual(ruling, { targetPercent: 1, cheaperInBoth: true, byFivePercent: true, asManyRight: true, cheaperOnTheWay: true });
+  const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url)), 'utf8')) as { userConfig: Record<string, { default?: unknown }> };
+  assert.equal(manifest.userConfig['targetPercent']?.default, ruling.targetPercent);
+  // The decision record gives the figures the rule was applied to.
+  const adr = readFileSync(fileURLToPath(new URL('../docs/adr/0025-everything-that-may-leave-does.md', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
+  assert.ok(adr.includes('It held: 4.23 and 4.03 USD at 1 against 5.02 and 5.13 at 40, 81 % on average'));
 });

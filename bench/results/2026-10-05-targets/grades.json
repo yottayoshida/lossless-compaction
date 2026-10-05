@@ -1,0 +1,1075 @@
+{
+ "model": "claude-sonnet-5-5",
+ "verdicts": {
+  "full|claude-sonnet-5-5|1|plugin|target-1|decided|10cb859fd7f1": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-1|rule-1|afd3f399947b": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-1|rule-2|81f20da1b15c": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-40|decided|cc38348be31f": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-40|rule-1|afd3f399947b": [
+   "correct",
+   "correct"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-40|rule-2|79892e26c223": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-1|decided|32c8a67ede63": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-1|rule-1|e2e126cf49e7": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-1|rule-2|11cbe571214a": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-40|decided|822eaeaf4825": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-40|rule-1|e2e126cf49e7": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-40|rule-2|2b523045989a": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-1|decided|caf05355946b": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-1|rule-1|c32922164ee3": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-1|rule-2|cf4c4aa03263": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-40|next|4e79892d583c": [
+   "incorrect",
+   "incorrect"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-40|decided|243449fc8835": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-40|rule-1|ea8507005799": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-40|rule-2|c491875573d4": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-1|next|1d4eb2bb57d5": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-1|decided|e034e8a1e2d6": [
+   "incorrect",
+   "incorrect"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-1|rule-1|8606d0fbb7dc": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-1|rule-2|9beadac4c9f2": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-40|next|7f4d63e33ed1": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-40|decided|f75a0d6efc91": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-40|rule-1|a55a4f450999": [
+   "correct",
+   "correct"
+  ],
+  "short|claude-sonnet-5-5|1|plugin|target-40|rule-2|e72e1a663f63": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-1|next|de173b4dff6c": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-1|decided|732f23ee8810": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-1|rule-1|413a2d4b99aa": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-1|rule-2|305d651a8dbd": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-40|next|e4126d84a948": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-40|decided|0ad2332795b2": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-40|rule-1|9f6ebedfaed2": [
+   "correct",
+   "correct"
+  ],
+  "thinking|claude-sonnet-5-5|1|plugin|target-40|rule-2|851d3ebf9713": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-1|next|bd6af63c8d79": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-1|decided|5240b9671694": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-1|rule-1|4b13146c95f0": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-1|rule-2|ac7819a7f298": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-40|next|277d7bdba314": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-40|decided|ed481d088b0a": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-40|rule-1|81c0cc35915e": [
+   "correct",
+   "correct"
+  ],
+  "writes|claude-sonnet-5-5|1|plugin|target-40|rule-2|949b1c425d65": [
+   "correct",
+   "correct"
+  ],
+  "control|results|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|results|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|results|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|results|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|results|decided|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|results|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|results|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|results|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|results|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|results|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|results|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|results|rule-2|right|told-2": [
+   "correct",
+   "incorrect"
+  ],
+  "control|results|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|decided|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|writes|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|decided|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|prose|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|short|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|short|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|short|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|short|decided|right|told-1": [
+   "incorrect",
+   "correct"
+  ],
+  "control|short|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|short|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|short|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|full|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|full|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|full|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|full|decided|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|full|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|full|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|full|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|decided|right": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|decided|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|thinking|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|next|right": [
+   "correct",
+   "correct"
+  ],
+  "control|large|next|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|large|next|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|large|next|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|next|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|next|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|decided|right": [
+   "incorrect",
+   "correct"
+  ],
+  "control|large|decided|right|told-1": [
+   "incorrect",
+   "correct"
+  ],
+  "control|large|decided|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|large|decided|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|decided|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|decided|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-1|right": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-1|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-1|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-1|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-1|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-1|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-2|right": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-2|right|told-1": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-2|right|told-2": [
+   "correct",
+   "correct"
+  ],
+  "control|large|rule-2|wrong": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-2|wrong|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|rule-2|wrong|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|results|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|results|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|results|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "control|writes|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|writes|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|writes|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|writes|gone-1|none|told-2": [
+   "incorrect",
+   "abstained"
+  ],
+  "control|prose|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|prose|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|prose|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|prose|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "control|short|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|short|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|short|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|short|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "control|full|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|full|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|full|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|full|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "control|thinking|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|thinking|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|thinking|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|thinking|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "control|large|gone-1|other-hedged": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|gone-1|other": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|gone-1|other|told-1": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|gone-1|other|told-2": [
+   "incorrect",
+   "incorrect"
+  ],
+  "control|large|gone-1|none": [
+   "abstained",
+   "abstained"
+  ],
+  "control|large|gone-1|none|told-1": [
+   "abstained",
+   "abstained"
+  ],
+  "control|large|gone-1|none|told-2": [
+   "abstained",
+   "abstained"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-1|next|a99c8976ce12": [
+   "correct",
+   "incorrect"
+  ],
+  "full|claude-sonnet-5-5|1|plugin|target-40|next|be8e76ade8af": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-1|next|38f3b333bbb0": [
+   "correct",
+   "correct"
+  ],
+  "prose|claude-sonnet-5-5|1|plugin|target-40|next|6c373d6bb608": [
+   "correct",
+   "correct"
+  ],
+  "results|claude-sonnet-5-5|1|plugin|target-1|next|8878609d9623": [
+   "incorrect",
+   "incorrect"
+  ]
+ },
+ "controls": {
+  "count": 217,
+  "graded": 217,
+  "asExpected": 213,
+  "toldPairs": 140,
+  "toldPairsGraded": 140,
+  "toldPairsSame": 137
+ },
+ "disagreements": 1,
+ "ungraded": []
+}

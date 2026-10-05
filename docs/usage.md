@@ -3,7 +3,7 @@
 Three things, in the order you will meet them.
 
 **A compaction.** A line starting `lossless-compaction:` says what each one
-did. From a real session of `Read` results:
+did. From a real session of `Read` results, with `targetPercent` at 40:
 
 ```text
 lossless-compaction: moved 6 of 21 tool results out (844544 -> 548237 chars, about 52357 of 167000 tokens in use) in 61 ms
@@ -18,7 +18,7 @@ Each result that left has a ticket in its place:
 Where moving results out is not enough, or there is nothing to move out and
 the conversation is too full to go on with, the oldest messages are kept
 whole instead and no summary runs. From a session of text pasted into
-messages:
+messages, at 40 as well:
 
 ```text
 lossless-compaction: no summary, messages 2-22 of 30 kept in 11 parts: moved 0 of 3 tool results out (609241 -> 224393 chars, about 75804 of 231000 tokens in use) in 237 ms

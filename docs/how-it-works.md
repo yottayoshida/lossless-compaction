@@ -15,7 +15,9 @@
   nothing is sent.** Where moving results out makes room, a compaction takes
   the time of writing a few files. Results leave in this
   order until the conversation is estimated to be under the target size
-  (`targetPercent`): those a later call replaced, then those sharing the
+  (`targetPercent`), which at 1, the default, is not reached in a window of
+  200,000 ([how far](limits.md#how-far-a-compaction-goes)): those a later
+  call replaced, then those sharing the
   least with what you are working on, then the oldest. The newest results
   stay, up to `keepTokens` tokens of them (20,000 by default), but at a
   `/compact` typed without instructions, which reaches into them too, up to

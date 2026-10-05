@@ -151,8 +151,12 @@ what the messages' characters count; the rebuilt conversation is counted at
 that rate. What a result saves by leaving is counted at it too.
 
 Where the plugin moved results out, the size it goes by came within 20 % of
-what was in use afterwards, and no more than 5 % under it, in every
+what was in use afterwards, and no more than 6 % under it, in every
 conversation it was measured on, compacted by the model that had built it.
+On Sonnet 5.5, the six conversations of the benchmark at `targetPercent` 40
+and at 1 ([at 40 and at 1](measurements.md#the-six-kinds-of-conversation-at-40-and-at-1)):
+from 6 % under to 17 % over, the most in `thinking`, where only its three
+results could leave.
 On Haiku 4.5, in the made-up conversations of
 [the benchmark](measurements.md#the-size-after-a-compaction-counted-again):
 mostly tool results, pasted English prose with logs, and Japanese with logs.
@@ -230,8 +234,8 @@ where they stood:
   of the size at which Claude Code compacts on its own, and never more than
   half of what was in use. The newest messages stay while they add up to
   `keepTokens`, counted here as the plugin counts a size (above) and not at
-  three characters a token. With `targetPercent` set low, that is all that
-  stays behind the first message. Fewer stay only where leaving that many
+  three characters a token. With `targetPercent` at 1, the default, that is
+  all that stays behind the first message. Fewer stay only where leaving that many
   would keep the conversation over `maxAfterPercent` and a cut further on
   brings it under: a summary would leave none of them as they were said.
 - No summary is written, by Claude Code or by the plugin. What the agent
@@ -242,9 +246,10 @@ where they stood:
   does not have it. Asked for what was cut, Sonnet 5.5 called `recall` and
   gave it each time; Haiku 4.5 mostly said that it did not have it.
 - More is sent with each request than after a summary, and the next
-  compaction comes sooner: with Sonnet 5.5, 75,188 tokens a request where a
-  summary left about 11,500, on a conversation that filled 85 % of the
-  window.
+  compaction comes sooner: with Sonnet 5.5 and `targetPercent` at 40, the
+  default then, 75,188 tokens a request where a summary left about 11,500, on
+  a conversation that filled 85 % of the window. At 1 the cut goes as far as
+  `keepTokens` allows: with Haiku 4.5, 39,187 where 40 left 54,705.
 - The files changed on disk are not named, as they are
   [after a summary](#what-a-summary-replaces): Claude Code shows no file
   again where no summary ran. One case apart: where a summary earlier in
@@ -456,6 +461,47 @@ leaves as at any compaction) (ADR 0023). The line then says
 place of a summary ([above](#when-the-conversation-is-too-full)): the least
 of the conversation left behind the first message, every message counted and
 not results alone, unless fewer have to stay for the conversation to fit.
+
+## How far a compaction goes
+
+`targetPercent` is how far a compaction goes: results leave until the
+conversation is estimated to be under that share of the size at which Claude
+Code compacts on its own, and only where that is not reached do long inputs,
+the middles of long messages and runs of old calls leave after them. At 1,
+the default (ADR 0025), the target is 1,670 tokens in a window of 200,000,
+less than what stands before the conversation, so it is not reached: each
+compaction, automatic or typed, moves out everything that may leave but the
+newest `keepTokens` of results, of long inputs and of long messages, and the
+calls among the newest `keepTokens` of the conversation (a `/compact` typed
+without instructions reaches into those too), and a cut in place of a summary goes as far. In a
+window of 1,000,000 the target is 9,670 tokens, reached only where what is
+left comes to less. (Where Claude Code gives no figures to count from, what
+a result saves is counted at three characters a token, and the target can be
+taken for reached sooner.)
+
+What each end costs, measured with Sonnet 5.5 in a window of 200,000
+([one session, several compactions](measurements.md#one-session-that-compacts-several-times-under-each-setting)):
+
+- **At 1** the conversation after a compaction is as small as the plugin
+  makes it, about 26,000 tokens in that session, so compactions come less
+  often. The price is in sight: more of what was read is behind tickets, and
+  a long message older than the newest `keepTokens` of them stands as its
+  first and last paragraphs after an automatic compaction as after one typed,
+  so the agent calls `recall` for more of what it needs.
+- **At 40** about 65,000 tokens stayed, chosen by how much a result shares
+  with what you are working on, wherever it stands, and left at the next
+  compaction in turn. A message's middle and old calls stayed while results
+  were enough.
+- **At either**, the request after a compaction read from the prompt cache
+  only what stands before the conversation, about 4,000 tokens, and wrote the
+  rest anew. What differs is how much and how often: 60,000 tokens five times
+  in the session at 40, 22,000 three or four times at 1, and a quarter more
+  to pay at 40.
+
+Between them a value is a share of the window: 20 left what 1 did in a
+window of 200,000, where the newest 20,000 tokens of results stay anyway, and
+leaves up to 193,000 tokens of results in a window of 1,000,000. A window of
+1,000,000 was not measured.
 
 ## Images
 
@@ -1032,7 +1078,8 @@ less often, in made-up conversations asked right after the compaction
 
 What an agent could answer after a compaction was measured with Haiku 4.5
 three times and Sonnet 5.5 once, in a window of 200,000 tokens. It is
-measured with Opus 5.5 as well, at the default settings, in one run: on
+measured with Opus 5.5 as well, at the settings that were the defaults then
+(`targetPercent` 40), in one run: on
 `results`, `prose` and `large`, a conversation built in a window of
 1,000,000, against Claude Code's own compaction on the same; and on `opaque`
 with `find` and without
@@ -1042,8 +1089,8 @@ session, which the summary names. Of 17 questions about an exact text, 13
 are counted right in the plugin's arm and 15 in the built-in arm; the other
 6 answers hold the right line with a station's id written with the prefix a
 rule of the conversation asks for, which was seen only once they were read.
-One run tells no rate, the conversations are made up, and a plugin set to
-move out more than by default leaves less than was measured.
+One run tells no rate, the conversations are made up, and the default now
+moves out more than was measured, and leaves less (ADR 0025).
 
 ## Sizes and older versions
 

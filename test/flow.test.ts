@@ -161,7 +161,9 @@ test("the settings' defaults are those plugin.json gives them, and a value out o
   const defaults = configFrom({});
   for (const [name, value] of Object.entries(defaults)) assert.equal(value, manifest.userConfig[name]?.default, name);
   assert.deepEqual(configFrom({ keepTokens: -1, minChars: 'many', targetPercent: 100, maxAfterPercent: 0 }), defaults);
-  assert.deepEqual(configFrom({ keepTokens: 1500.7, minChars: 0, targetPercent: 1, maxAfterPercent: 100 }), { keepTokens: 1500, minChars: 0, targetPercent: 1, maxAfterPercent: 100 });
+  assert.deepEqual(configFrom({ keepTokens: 1500.7, minChars: 0, targetPercent: 2, maxAfterPercent: 100 }), { keepTokens: 1500, minChars: 0, targetPercent: 2, maxAfterPercent: 100 });
+  // The ends of each range are taken as they are.
+  assert.deepEqual(configFrom({ targetPercent: 99, maxAfterPercent: 1 }), { ...defaults, targetPercent: 99, maxAfterPercent: 1 });
 });
 
 test('long inputs moved out are something moved out: handed back when enough, and never a /compact left undone (ADR 0020)', () => {

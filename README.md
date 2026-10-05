@@ -8,9 +8,9 @@ Claude Code's `/compact` asks a model for a summary: tens of seconds, a
 request the size of the conversation, and the summary in place of what was
 said. This plugin moves old tool results out instead, leaving a line in
 their place. That takes a fraction of a second and calls no model, and
-what you and the agent said is kept word for word. Where that is not enough,
-the oldest messages are stored too and listed in their place. The price is
-a larger conversation afterwards ([limits](docs/limits.md)).
+what you and the agent said is stored word for word. Where that is not enough,
+the oldest messages are stored too and listed in their place. What left is
+out of sight until recalled ([limits](docs/limits.md)).
 
 ## Demo
 
@@ -27,8 +27,7 @@ In Claude Code 2.1.287 or later, type this at the prompt:
 /plugin install lossless-compaction --marketplace yottayoshida/lossless-compaction
 ```
 
-Press `y` if asked, choose **Install for you**, and close the options with
-Esc. The plugin runs in that session (after `/reload-plugins --force` if
+Press `y` if asked, choose **Install for you**, then Esc. The plugin runs in that session (after `/reload-plugins --force` if
 Claude Code asks for it), with nothing to set, unless mods are turned off for
 you ([how to tell](docs/limits.md#function-hooks)). `/compact` and automatic
 compaction then go through it, each with a line marked `lossless-compaction:`
@@ -48,9 +47,9 @@ compaction then go through it, each with a line marked `lossless-compaction:`
 
 ## Against the built-in compaction
 
-The benchmark's six made-up conversations, each of another kind, measured
-twice with Sonnet 5.5: a `/compact` typed by hand, then nine questions asked
-one after another:
+The benchmark's six kinds of made-up conversation, measured
+twice with Sonnet 5.5 at `targetPercent` 40, the default then: a `/compact` by
+hand, then nine questions one after another:
 
 |                                  |        Plugin |      Built-in |
 | -------------------------------- | ------------: | ------------: |
@@ -61,17 +60,17 @@ one after another:
 | Right answers, of 108            |           106 |            96 |
 | The first run cost               |      2.82 USD |      2.17 USD |
 
-- **`/compact` is instant, calls no model, and leaves more:** the next
-  request was larger in five kinds of six, and smaller in the one of many
-  short calls.
+- **`/compact` is instant and calls no model.** At 40 the next request was
+  larger in five kinds of six; at 1, the default, smaller in four
+  ([both](docs/measurements.md#the-six-kinds-of-conversation-at-40-and-at-1)).
 - **What left comes back by its id.** With the plugin the agent called
   `recall`; after a summary it read files again and Claude Code's record of
-  the session. Either way, what it read went back into context.
-- **The cost moves.** No summary to pay for, and larger requests after it:
+  the session. Either way, it went back into context.
+- **The cost moves.** No summary to pay for, and at 40 larger requests after it:
   the plugin cost less in five kinds, and more in the one that fills the
   window, where Claude Code wrote it to the cache again at four questions
   ([every table](docs/measurements.md#every-kind-of-conversation-with-sonnet-55)).
-- **In a window of 1,000,000**, at 576,000 tokens: `/compact` 0.26–0.27 s
+- **In a window of 1,000,000**, at 40 and 576,000 tokens: `/compact` 0.26–0.27 s
   against 40–52 s; eleven questions in a row, 11 right against 6, 2.05 USD against 1.58.
 
 ## Before you install

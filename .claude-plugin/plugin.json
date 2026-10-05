@@ -39,13 +39,13 @@
     "targetPercent": {
       "type": "number",
       "title": "Target size",
-      "description": "Results are moved out until the context is estimated to be under this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off). Where that is not enough and the oldest messages are kept in place of a summary, they are cut down to the same size.",
-      "default": 40
+      "description": "Results are moved out until the context is estimated to be under this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off); only where it is not reached do long inputs, the middles of long messages and old calls leave after them. At 1, the default, it is not reached in a window of 200,000: everything that may leave does, at every compaction, but the newest keepTokens of results, of long inputs and of long messages, and the calls among the newest keepTokens of the conversation. Set it higher to leave more in place. Where the oldest messages are kept in place of a summary, they are cut down to the same size.",
+      "default": 1
     },
     "keepTokens": {
       "type": "number",
       "title": "Newest results to leave alone, in tokens",
-      "description": "The newest tool result that could leave always stays; the ones before it stay while they and the newest add up to this many tokens (three characters to a token). 0 keeps the newest one only. A /compact typed without instructions reaches into them too where that is not enough, up to the last thing you said. Where the oldest messages are kept in place of a summary, the newest messages stay while they add up to this many tokens, unless fewer have to stay for the conversation to fit.",
+      "description": "The newest tool result that could leave always stays; the ones before it stay while they and the newest add up to this many tokens (three characters to a token). 0 keeps the newest one only. Long inputs have an allowance of this size of their own, and so do long messages. A /compact typed without instructions reaches into them too where that is not enough, up to the last thing you said. Where the oldest messages are kept in place of a summary, the newest messages stay while they add up to this many tokens, unless fewer have to stay for the conversation to fit.",
       "default": 20000
     },
     "minChars": {

@@ -56,3 +56,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0024](0024-the-middle-of-a-long-message-leaves.md): why the middle of a
   long message leaves, its first and last paragraphs staying, and is never
   sent to Jev.
+- [0025](0025-everything-that-may-leave-does.md): why `targetPercent` is 1 by
+  default, so that everything that may leave does, and the rule that decided
+  it before it was measured.
