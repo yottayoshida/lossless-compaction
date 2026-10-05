@@ -116,7 +116,7 @@ export function configFrom(options: Record<string, unknown>): Omit<Config, 'stor
   return {
     keepTokens: Math.floor(numberIn(options['keepTokens'], 20_000, 0, 1_000_000)),
     minChars: Math.floor(numberIn(options['minChars'], 2000, 0, 10_000_000)),
-    targetPercent: numberIn(options['targetPercent'], 40, 1, 99),
+    targetPercent: numberIn(options['targetPercent'], 1, 1, 99),
     maxAfterPercent: numberIn(options['maxAfterPercent'], 75, 1, 100),
   };
 }

@@ -36,8 +36,8 @@ is far larger than that.
 3. Files are named by the SHA-256 of their content.
 4. Jev is asked one `score` question per tool result, with a digest of that
    result in the question. The answers are used as an order, not cut at a
-   threshold. How much is moved out is decided by a size target. (Amended by
-   ADR 0003: a compaction asks Jev nothing; rules alone order what leaves,
+   threshold. How much is moved out is decided by a size target, 1 % of the
+   window by default since ADR 0025. (Amended by ADR 0003: a compaction asks Jev nothing; rules alone order what leaves,
    and Jev chooses what comes back through the `find` tool.)
 5. What rules can decide is not asked: results that a later call replaced,
    short results, failed calls, the first and the newest messages. (Amended

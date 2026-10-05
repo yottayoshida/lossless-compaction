@@ -1,6 +1,6 @@
 # Against the built-in compaction
 
-Measured last, on 2026-10-04 with Sonnet 5.5, the plugin compacted each of
+Measured on 2026-10-04 with Sonnet 5.5, the plugin compacted each of
 the six kinds of conversation by itself and no summary ran: a `/compact`
 took 0.07 to 0.35 s against 15 to 27 s, and left the next request larger in
 five of them. Asked one after another, twice, the nine questions were
@@ -12,7 +12,12 @@ fresh copy, where no question reads what another wrote to the prompt cache,
 In a window of 1,000,000, at 576,000 tokens, a `/compact` took 0.26 to 0.27 s
 against 40 to 52 s; one after another the eleven questions were answered
 right 11 times against 6 and cost 2.05 USD against 1.58, and each of a fresh
-copy 12.28 against 1.67.
+copy 12.28 against 1.67. All of that was at `targetPercent` 40, the default
+then. At 1, the default since (ADR 0025), a `/compact` by hand left the next
+request at 7,373 to 17,641 tokens, smaller than after the summary in four
+kinds of six, with 52 answers right of 54 asked each of a fresh copy, against 53 at
+40 ([at 40 and at 1](measurements.md#the-six-kinds-of-conversation-at-40-and-at-1));
+in a window of 1,000,000 it was not measured.
 What follows is how it stood before.
 
 What follows was measured with Haiku 4.5, but for the one point on Opus 5.5.
@@ -61,8 +66,8 @@ figure is first and the built-in compaction's second:
   window, against the plugin as it was: `/compact` took 0.2 to 0.3 s where
   keeping and summarizing took 16 to 26 s, and no summary ran. All nine
   questions were answered in every run either way, the agent calling
-  `recall` for what was cut. Each request afterwards carried 75,188 tokens
-  against about 11,500: the nine questions cost 2.79 USD with the prompt
+  `recall` for what was cut. At `targetPercent` 40, the default then, each
+  request afterwards carried 75,188 tokens against about 11,500: the nine questions cost 2.79 USD with the prompt
   cache cold and 0.36 with it warm, against 0.88 and 0.41 to 0.43 for the
   summary and its questions. Haiku 4.5 did not fetch what was cut, and
   answered six of nine where it had answered eight

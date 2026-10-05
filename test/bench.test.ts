@@ -2138,7 +2138,7 @@ test('the units in the repository measured with Opus 5.5, three conversations an
   assert.ok(pair.every((unit) => unit.arm === 'plugin'));
   has(
     limits,
-    `It is measured with Opus 5.5 as well, at the default settings, in one run: on \`${THREE[0]}\`, \`${THREE[1]}\` and \`${THREE[2]}\`, a conversation built in a window of 1,000,000, ` +
+    `It is measured with Opus 5.5 as well, at the settings that were the defaults then (\`targetPercent\` 40), in one run: on \`${THREE[0]}\`, \`${THREE[1]}\` and \`${THREE[2]}\`, a conversation built in a window of 1,000,000, ` +
       "against Claude Code's own compaction on the same; and on `opaque` with `find` and without",
     'limits',
   );
@@ -2772,7 +2772,7 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
   for (const run of [1, 2] as const) {
     assert.deepEqual(TRACES.filter((trace) => next(of(trace.name, 'plugin', 'chain', run)) < next(of(trace.name, 'builtin', 'chain', run))).map((trace) => trace.name), ['short'], `run ${run}`);
   }
-  has(readme, 'the next request was larger in five kinds of six, and smaller in the one of many short calls.', 'README');
+  has(readme, 'At 40 the next request was larger in five kinds of six;', 'README');
   assert.deepEqual(TRACES.filter((trace) => cost(of(trace.name, 'plugin', 'chain')) > cost(of(trace.name, 'builtin', 'chain'))).map((trace) => trace.name), ['full']);
   has(readme, 'the plugin cost less in five kinds, and more in the one that fills the window, where Claude Code wrote it to the cache again at four questions', 'README');
   // Those four: the questions after the first, in the first run's `full` and the second's `prose`, each wrote what the plugin left to the cache again.
@@ -2912,7 +2912,7 @@ test('large in a window of 1,000,000 with Sonnet 5.5, on the code of every kind:
   };
   const tokens = n(Math.round(freshMine.compaction.preTokens / 1000) * 1000);
   const [ourTook, theirTook] = [took([freshMine, chainMine], (ms) => (ms / 1000).toFixed(2), '–'), took([freshBuilt, chainBuilt], (ms) => String(Math.round(ms / 1000)), '–')];
-  has(readme, `In a window of 1,000,000**, at ${tokens} tokens: \`/compact\` ${ourTook} s against ${theirTook} s; eleven questions in a row, ${right(chainMine)} right against ${right(chainBuilt)}, ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}.`, 'README');
+  has(readme, `In a window of 1,000,000**, at 40 and ${tokens} tokens: \`/compact\` ${ourTook} s against ${theirTook} s; eleven questions in a row, ${right(chainMine)} right against ${right(chainBuilt)}, ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}.`, 'README');
   const spoken = (text: string) => text.replace('–', ' to ');
   has(comparison, `In a window of 1,000,000, at ${tokens} tokens, a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; one after another the eleven questions were answered right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}, and each of a fresh copy ${cost(freshMine).toFixed(2)} against ${cost(freshBuilt).toFixed(2)}.`, 'comparison');
   has(
@@ -2997,4 +2997,51 @@ test('the run that tells fetching from answering: the tables made from its units
   has(
     `made ${Math.min(...opaque.map(calls))} to ${Math.max(...opaque.map(calls))} calls to \`recall\` and cost ${Math.min(...opaque.map(cost)).toFixed(2)} to ${Math.max(...opaque.map(cost)).toFixed(2)} USD, where a run of nine elsewhere made ${Math.min(...others.map(calls))} to ${Math.max(...others.map(calls))} and cost ${Math.min(...others.map(cost)).toFixed(2)} to ${Math.max(...others.map(cost)).toFixed(2)}`,
   );
+});
+
+const TARGETS_AT = fileURLToPath(new URL('../bench/results/2026-10-05-targets', import.meta.url));
+
+test('the six conversations at 40 and at 1: the tables made from them, and every figure the documents give of them', () => {
+  const read = (path: string) => readFileSync(path, 'utf8');
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const measurements = read(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)));
+  const section = flat(measurements.slice(measurements.indexOf('## The six kinds of conversation, at 40 and at 1')));
+  const readme = flat(read(fileURLToPath(new URL('../README.md', import.meta.url))));
+  const has = (text: string, phrase: string) => assert.ok(text.includes(phrase), phrase);
+  const units = unitsUnder(TARGETS_AT);
+  const grades = JSON.parse(read(`${TARGETS_AT}/grades.json`)) as Grades;
+  assert.equal(whole(units, grades, 0, null), read(`${TARGETS_AT}/report.md`));
+  assert.deepEqual(units.map((unit) => `${unit.trace} ${unit.variant}`).sort(), TRACES.flatMap((trace) => [`${trace.name} target-1`, `${trace.name} target-40`]).sort());
+  assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.run === 1 && unit.mode === 'ask' && unit.plugin === '8b7ba0e05d26' && unit.claudeCode === '2.1.289' && unit.compaction.line?.outcome === 'moved'));
+  assert.ok(!/\/Users\/|\/home\/|\.cctmp/.test(JSON.stringify(units)));
+  // Of the same conversations as the run of every kind, whose built-in arm is set beside them.
+  const builtin = unitsUnder(EVERY_KIND).filter((unit) => unit.arm === 'builtin' && unit.mode === 'ask');
+  const next = (unit: Unit | undefined) => unit?.questions[0]?.requests[0] as number;
+  const n = (value: number) => value.toLocaleString('en-US');
+  const at = (trace: string, variant: string) => units.find((unit) => unit.trace === trace && unit.variant === variant) as Unit;
+  const right = (unit: Unit) => unit.questions.filter((one) => verdictOf(unit, one, grades) === 'correct').length;
+  for (const trace of TRACES) {
+    const built = builtin.find((unit) => unit.trace === trace.name) as Unit;
+    assert.equal(built.base, at(trace.name, 'target-1').base, trace.name);
+    const [forty, one] = [at(trace.name, 'target-40'), at(trace.name, 'target-1')];
+    has(section, `| \`${trace.name}\` | ${n(next(built))} | ${n(next(forty))} | ${n(next(one))} |`);
+    assert.ok(section.includes(`| ${right(forty)} | ${right(one)} |`), trace.name);
+  }
+  const sizes = (variant: string) => TRACES.map((trace) => next(at(trace.name, variant)));
+  has(section, `It carried ${n(Math.min(...sizes('target-1')))} to ${n(Math.max(...sizes('target-1')))} tokens, against ${n(Math.min(...sizes('target-40')))} to ${n(Math.max(...sizes('target-40')))} at 40`);
+  const smaller = TRACES.filter((trace) => next(at(trace.name, 'target-1')) < next(builtin.find((unit) => unit.trace === trace.name)));
+  assert.equal(smaller.length, 4);
+  has(section, 'less than after the summary in four kinds of six');
+  has(readme, 'at 1, the default, smaller in four');
+  const total = (variant: string) => TRACES.reduce((sum, trace) => sum + right(at(trace.name, variant)), 0);
+  has(section, `${total('target-1')} of 54 at 1, ${total('target-40')} of 54 at 40`);
+  // What a program grades was right everywhere; at 1 `recall` brought it back, where at 40 two kinds still had it in the conversation.
+  const exact = units.flatMap((unit) => unit.questions.filter((one) => one.kind.startsWith('exact')));
+  assert.deepEqual([exact.length, exact.filter((one) => one.verdict === 'correct').length], [60, 60]);
+  assert.ok(['prose', 'full'].every((trace) => at(trace, 'target-40').questions.every((one) => one.retrieval.recalls === 0)));
+  // What docs/limits.md says of the size the plugin goes by, of these: within 20 % over and 6 % under what the next request sent.
+  const off = units.map((unit) => ((unit.compaction.line?.estimate as number) - next(unit)) / next(unit));
+  assert.ok(Math.max(...off) <= 0.2 && Math.min(...off) >= -0.06 && Math.min(...off) < -0.05, off.map((e) => (e * 100).toFixed(1)).join(' '));
+  has(flat(read(fileURLToPath(new URL('../docs/limits.md', import.meta.url)))), `from ${Math.round(-Math.min(...off) * 100)} % under to ${Math.round(Math.max(...off) * 100)} % over`);
+  assert.deepEqual(TRACES.map((trace) => at(trace.name, 'target-1').compaction.line?.bodies ?? 0), TRACES.map((trace) => ({ writes: 8, prose: 6, full: 8 })[trace.name] ?? 0));
 });

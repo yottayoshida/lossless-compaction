@@ -507,7 +507,7 @@ questions more than the nine, each about a log deleted before the
 compaction: one read early, which the plugin moved out, and the last one
 read, which it kept. `large` was built with Sonnet 5.5; the others are the
 conversations Haiku built. The plugin is `b6736911384a` at its default
-settings, on Claude Code 2.1.287 for `results` and `prose` and 2.1.288 for
+settings then (`targetPercent` 40), on Claude Code 2.1.287 for `results` and `prose` and 2.1.288 for
 `opaque` and `large`, the versions they were built with. The units, their
 grades and every table are in `bench/results/2026-10-03-opus/`, and a test
 holds every figure here to them.
@@ -592,7 +592,8 @@ happened in no session.
 
 **Not shown by this.** One run, so no rate, and the differences of one or
 two answers between the arms above are within it. The plugin at its default
-settings: one set to move out more (`targetPercent`) leaves less to send.
+settings then (`targetPercent` 40); the default now moves out more, and leaves
+less to send (ADR 0025).
 `large` is one shape, logs read and nothing written, built with another
 model than the one asked. A conversation that compacts several times, and
 automatic compaction, are not here either.
@@ -1655,7 +1656,7 @@ place put after its summary. (In the 42 conversations where that applies,
 the first request plus the characters over three comes to a median 79 % of
 the tokens Claude Code recorded with them and 78 % without; left out, two
 more of the 102 have nothing to move out.) It was then given to `compact()`
-as it is at the default settings, with the tokens Claude Code recorded
+as it is at the default settings then (`targetPercent` 40), with the tokens Claude Code recorded
 before the compaction. The window is the one the plugin stated where it ran
 (29 conversations), 967,000 where the session went over 200,000 tokens, and
 167,000 otherwise. For 7 automatic ones (and 12 run by hand) the window is
@@ -2071,9 +2072,9 @@ The two of 2026-09-04, replayed with the change, in a window of 967,000 with
 
 | After results are moved out | `targetPercent` | Messages kept in parts | Parts | Handed back |
 | --------------------------: | --------------- | ---------------------: | ----: | ----------: |
-|            727,893 (75.3 %) | 40, the default |           812 of 1,465 |    26 |     381,650 |
+|            727,893 (75.3 %) | 40, the default then |           812 of 1,465 |    26 |     381,650 |
 |                             | 1               |                  1,400 |    42 |     119,807 |
-|            777,069 (80.4 %) | 40, the default |           733 of 1,306 |    27 |     381,391 |
+|            777,069 (80.4 %) | 40, the default then |           733 of 1,306 |    27 |     381,391 |
 |                             | 1               |                  1,261 |    44 |     123,758 |
 
 With `targetPercent` at 1 the cut cannot reach the target, and stops where
@@ -2183,7 +2184,7 @@ The same conversation in the same box, the code as decided and before its
 reviews, which changed the first line of the list and two cases this
 conversation does not reach; the built-in arm is the column above.
 
-|                                          | `targetPercent` 40, the default |    `targetPercent` 1 |
+|                                          | `targetPercent` 40, the default then |    `targetPercent` 1 |
 | ---------------------------------------- | ------------------------------: | -------------------: |
 | `/compact` took                          |                260, 235, 248 ms |     265, 339, 268 ms |
 | Kept in parts, of 30 messages            |             2 to 22, in 11 parts | 2 to 24, in 13 parts |
@@ -2223,7 +2224,8 @@ joined to what the person said next, and it stands in the first new part as
 it was written. Right after a compaction Claude Code gives no breakdown to
 count from, and the line names no size.
 
-Compactions Claude Code started by itself, with the default settings: ten
+Compactions Claude Code started by itself, with the default settings then
+(`targetPercent` 40): ten
 more documents pasted one after another into `full`.
 
 | Document |              Sent | Compaction                                                                          |
@@ -2405,3 +2407,57 @@ compacted three times where the second compacted four: how often a session
 compacts turns on what it fetches, which is why the cost by the
 twenty-fourth and the thirtieth log is given beside the total.
 The times are of five sessions run side by side, and are not compared.
+
+## The six kinds of conversation, at 40 and at 1
+
+The session above reads logs and little else: at 1 as at 40, moving results
+out was all a compaction did. In other conversations 1 does more. The target
+is then not reached in this window, so after the results every other kind leaves as well,
+each time: long inputs, the middles of long messages, runs of old small
+calls, each but the newest `keepTokens` of its kind (of calls, those among the
+newest `keepTokens` of the conversation). A `/compact` typed
+without instructions reaches into those too (ADR 0023). So before the default
+was changed, the six conversations the benchmark asks its questions of were
+compacted once by hand at 40 and at 1 on the same code and asked the nine
+questions, each of a fresh copy: Sonnet 5.5, one run, on `main` as it stood
+at `c25855a` (code `8b7ba0e05d26`), Claude Code 2.1.289, graded by Sonnet 5.5
+(`bench/results/2026-10-05-targets/`). The conversations are those of
+`bench/results/2026-10-04-every-kind/`, whose built-in arm gives the first
+column.
+
+| Conversation | Next request after the built-in summary | At 40 | At 1 | What left at 40 | What left at 1 | Right of 9, at 40 | At 1 |
+| --- | ---: | ---: | ---: | --- | --- | ---: | ---: |
+| `results` | 6,955 | 43,586 | 7,989 | 10 of 15 results | 15 of 15 results | 8 | 8 |
+| `writes` | 28,060 | 35,215 | 10,501 | 3 results, 7 inputs, 2 middles | 3 results, 8 inputs, 8 middles | 9 | 9 |
+| `prose` | 11,647 | 34,497 | 7,373 | 4 middles | 3 results, 6 middles | 9 | 9 |
+| `short` | 12,774 | 10,766 | 9,098 | 3 results, 26 calls folded | 3 results, 35 calls folded | 9 | 8 |
+| `thinking` | 12,413 | 17,641 | 17,641 | 3 of 3 results | 3 of 3 results | 9 | 9 |
+| `full` | 11,935 | 83,460 | 7,853 | 5 middles | 3 results, 8 middles | 9 | 9 |
+
+- **At 1 the next request is smaller than at 40 in five kinds of six, and
+  than after a summary in four.** It
+  carried 7,373 to 17,641 tokens, against 10,766 to 83,460 at 40 and 6,955 to
+  28,060 after the built-in summary: less than at 40 in five kinds, the same
+  in `thinking`, where there is nothing more to move, and less than after the
+  summary in four kinds of six. The compaction took 144 to 448 ms and called
+  no model, as at 40 (104 to 419 ms).
+- **The answers held: 52 of 54 at 1, 53 of 54 at 40.** The five questions a
+  run that a program grades, the exact text of what a removed script printed
+  or a file said, were right in every kind at both, 30 of 30: at 1 the agent
+  called `recall` for them, 3 or 4 times a run, where at 40 `prose` and `full`
+  still had the text in the conversation. The one answer apart is in `short`:
+  asked what was decided and what was still open, the agent at 1 gave the
+  decision right, recalled a result, and said the open question was settled
+  by what it read. Both missed the same question in `results`.
+- **What it costs in sight.** At 1 a long message of yours stands as its
+  first and last paragraphs after a `/compact` by hand, whatever else there
+  was to move: in `prose` and `full` six and eight messages did. The rules
+  the benchmark states are in the first message, which stays, and were
+  answered right at both; a rule in the middle of a later long message would
+  be out of sight until the agent recalls it, which was not measured here.
+
+The costs of these questions are not compared: each is asked of a fresh copy,
+and what it costs turns on whether another unit wrote the same conversation
+to the prompt cache first. One run of each, graded by a model for four
+questions of nine: of 217 answers whose grade was known the grader gave 213
+as expected.

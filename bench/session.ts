@@ -431,3 +431,26 @@ export function sessionsUnder(dir: string): SessionRun[] {
     .sort()
     .map((name) => JSON.parse(readFileSync(join(root, name), 'utf8')) as SessionRun);
 }
+
+/** What the rule below says of the sessions it was given: the default they call for, and how each of its conditions came out. */
+export type Ruling = { targetPercent: 1 | 40; cheaperInBoth: boolean; byFivePercent: boolean; asManyRight: boolean; cheaperOnTheWay: boolean };
+
+/**
+ * The default of `targetPercent` that the sessions measured call for, by the rule of ADR 0025: its first three
+ * conditions fixed before the sessions were driven, the fourth written in after, which can only keep 40. It is 1 where, against 40: each run at 1 cost less than every run at 40; the runs at 1 cost on average
+ * no more than 95 % of those at 40; they answered on average no more than one question fewer; and by each log at
+ * which the cost so far is given, short of the last, each run at 1 had cost less than every run at 40. Otherwise it
+ * stays 40. Two runs of each at least: fewer decide nothing.
+ */
+export function defaultFrom(runs: readonly SessionRun[]): Ruling {
+  const of = (setting: string) => runs.filter((run) => run.setting === setting).map(figuresOf);
+  const [low, high] = [of('target-1'), of('target-40')];
+  const mean = (values: readonly number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+  const enough = low.length >= 2 && high.length >= 2;
+  const cheaperInBoth = enough && Math.max(...low.map((one) => one.costUSD)) < Math.min(...high.map((one) => one.costUSD));
+  const byFivePercent = enough && mean(low.map((one) => one.costUSD)) <= 0.95 * mean(high.map((one) => one.costUSD));
+  const asManyRight = enough && mean(low.map((one) => one.right)) >= mean(high.map((one) => one.right)) - 1;
+  const cheaperOnTheWay =
+    enough && MARKS.slice(0, -1).every((_, at) => Math.max(...low.map((one) => one.costAt[at] as number)) < Math.min(...high.map((one) => one.costAt[at] as number)));
+  return { targetPercent: cheaperInBoth && byFivePercent && asManyRight && cheaperOnTheWay ? 1 : 40, cheaperInBoth, byFivePercent, asManyRight, cheaperOnTheWay };
+}
