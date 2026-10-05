@@ -69,10 +69,18 @@ test holds the manifest's default to what it gives of the published sessions.
   turns least on the window: at 20 a window of 1,000,000 leaves up to 193,000
   tokens of results in place, to be written to the cache again at each
   compaction, which is what made 40 cost more here; at 1, 9,670.
-- **A window of 1,000,000 was not measured.** There 40 leaves up to 387,000
-  tokens. That 1 costs less there follows from the cache being read no
-  further than the start of the conversation after a compaction, which was
-  measured in a window of 200,000 only.
+- **A window of 1,000,000 was not driven through a session.** There 40
+  leaves up to 387,000 tokens. Replayed afterwards
+  ([working sessions](../measurements.md#working-sessions-in-a-window-of-1000000)),
+  the first compaction of eight working sessions in that window came out the
+  same at 1, 20 and 40 in seven: a target is never more than half of what the
+  plugin counts in use, and what could not leave was over it at 40 as well,
+  so everything that may leave did at each. In the eighth, a `/compact` typed
+  without instructions, 40 reached its target and left 3 % more. What the
+  default does at later compactions there was not measured. That the request
+  after a compaction reads from the cache little more than the system prompt
+  and the tools held in the working sessions too, at 40 and at 1, but for one
+  compaction at 40 whose next request read 241,552 tokens.
 - **The other stages running every time** was measured once, by hand, on the
   six conversations of the benchmark
   ([at 40 and at 1](../measurements.md#the-six-kinds-of-conversation-at-40-and-at-1)):

@@ -35,6 +35,7 @@ import { MISSED, VERSIONS, batchName, currentOf, itemsOf, keyOf, promptOf, publi
 import { MIN_CHARS, pick, pickTable, readAnswer, resultsOf, staged, wentOf, type Pick } from '../bench/pick.ts';
 import { chains, estimates, fetches, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
 import { FETCHED, QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
+import { replay, triggerAt, windowOf } from '../bench/replay.ts';
 import { BUILT, FOUND, LARGE, PROBED, TRACES, described, unnamed, type Question } from '../bench/traces.ts';
 import { unnumbered } from '../src/changed.ts';
 import { find, lineHolds, valuesOf } from '../src/find.ts';
@@ -3044,4 +3045,63 @@ test('the six conversations at 40 and at 1: the tables made from them, and every
   assert.ok(Math.max(...off) <= 0.2 && Math.min(...off) >= -0.06 && Math.min(...off) < -0.05, off.map((e) => (e * 100).toFixed(1)).join(' '));
   has(flat(read(fileURLToPath(new URL('../docs/limits.md', import.meta.url)))), `from ${Math.round(-Math.min(...off) * 100)} % under to ${Math.round(Math.max(...off) * 100)} % over`);
   assert.deepEqual(TRACES.map((trace) => at(trace.name, 'target-1').compaction.line?.bodies ?? 0), TRACES.map((trace) => ({ writes: 8, prose: 6, full: 8 })[trace.name] ?? 0));
+});
+
+test('a record is replayed in the window its session had: 1,000,000 where any request sent more than 200,000 tokens, whatever line is replayed', async () => {
+  const row = (tokens: number, sidechain = false) => JSON.stringify({ type: 'assistant', isSidechain: sidechain, message: { role: 'assistant', usage: { input_tokens: 5, cache_read_input_tokens: tokens - 5, cache_creation_input_tokens: 0 } } });
+  assert.equal(windowOf([row(30_000), row(150_000)].join('\n')), 167_000);
+  // A /compact typed at 150,000 early in a session that later went over 200,000 is of a window of 1,000,000.
+  assert.equal(windowOf([row(30_000), row(150_000), JSON.stringify({ type: 'system', subtype: 'compact_boundary' }), row(40_000), row(200_001)].join('\n')), 967_000);
+  // At exactly 200,000 it could have been either: the benchmark's is taken. Lines that are not JSON are passed over, and a subagent's requests are not the session's.
+  assert.equal(windowOf([row(200_000), 'not json', '', row(400_000, true)].join('\n')), 167_000);
+});
+
+test('a compaction the record says was asked for is replayed as a /compact typed, and replay takes the window and that from the record unless given', async () => {
+  const boundary = (trigger: string) => JSON.stringify({ type: 'system', subtype: 'compact_boundary', compactMetadata: { trigger, preTokens: 250_000 } });
+  const said = JSON.stringify({ type: 'user', message: { role: 'user', content: 'go on' } });
+  const answered = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }], usage: { input_tokens: 5, cache_read_input_tokens: 249_995, cache_creation_input_tokens: 0 } } });
+  const record = [said, answered, boundary('manual'), said, answered, boundary('auto')].join('\n');
+  assert.deepEqual([triggerAt(record, 3), triggerAt(record, 6), triggerAt(record, 1), triggerAt(record, 99)], ['manual', 'auto', undefined, undefined]);
+  // The plugin's line stands right before the boundary: given it, the compaction is the one after, typed as it was.
+  const pluginLine = JSON.stringify({ type: 'system', subtype: 'informational', content: 'lossless-compaction: moved 1 of 1 tool results out' });
+  const withLine = [said, answered, pluginLine, boundary('manual')].join('\n');
+  assert.equal(triggerAt(withLine, 3), 'manual');
+  assert.equal((await replay(withLine, 3, 1, 75)).byHand, true);
+  // A message between the line and a boundary: that line reports no compaction. A blank line is not counted, as replay does not count it.
+  assert.equal(triggerAt([said, answered, boundary('manual')].join('\n'), 2), undefined);
+  assert.equal(triggerAt([said, '', answered, boundary('manual')].join('\n'), 3), 'manual');
+  const [typed, started] = [await replay(record, 3, 1, 75), await replay(record, 6, 1, 75)];
+  assert.deepEqual([typed.window, typed.byHand, started.window, started.byHand], [967_000, true, 967_000, false]);
+  const given = await replay(record, 3, 1, 75, 167_000, false);
+  assert.deepEqual([given.window, given.byHand], [167_000, false]);
+});
+
+test('what the eight working sessions replayed in a window of 1,000,000 come to, as docs/measurements.md gives them', () => {
+  const measurements = readFileSync(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)), 'utf8');
+  const section = measurements.slice(measurements.indexOf('### Replayed at 1, 20 and 40'), measurements.indexOf('### Before and after the setting was changed'));
+  const flat = section.replace(/\s+/g, ' ');
+  const rows = section.split('\n').filter((line) => /^\| [A-H] \|/.test(line)).map((line) => line.split('|').map((cell) => cell.trim()).slice(1, -1));
+  assert.equal(rows.length, 8);
+  const n = (cell: string | undefined) => Number((cell as string).replace(/,/g, ''));
+  const window = 967_000;
+  // The records are not published; the arithmetic between the columns is held, and the sentences to it.
+  const rowsOf = rows.map(([name, started, counted, , target, , , , , atOne, atForty]) => ({ name: String(name), typed: started === 'by hand', counted: n(counted), target: n(target), atOne: n(atOne), atForty: n(atForty) }));
+  for (const row of rowsOf) {
+    // The target at 40 is the window's share, or half of what the plugin counted where that is less (both rounded in the table).
+    assert.ok(Math.abs(row.target - Math.min((window * 40) / 100, row.counted / 2)) <= 1, row.name);
+    // Where 40 left what 1 did, what could not leave was over its target; where it left more, it had reached it.
+    if (row.atForty === row.atOne) assert.ok(row.atOne > row.target, row.name);
+    else assert.ok(row.atForty > row.atOne && row.atForty <= row.target && row.typed, row.name);
+  }
+  const same = rowsOf.filter((row) => row.atForty === row.atOne);
+  assert.deepEqual([same.length, rowsOf.filter((row) => row.typed).map((row) => row.name).join('')], [7, 'BCD']);
+  assert.ok(rowsOf.filter((row) => !row.typed).every((row) => row.atForty === row.atOne));
+  const thousands = (value: number) => `${Math.round(value / 1000)},000`;
+  const targets = rowsOf.map((row) => row.target);
+  const left = rowsOf.map((row) => row.atOne);
+  assert.ok(flat.includes(`so it was ${thousands(Math.min(...targets))} to ${thousands(Math.max(...targets))}`));
+  assert.ok(flat.includes(`came to ${thousands(Math.min(...left))} to ${thousands(Math.max(...left))} (left at 1), over the target at 40 in seven`));
+  assert.ok(flat.includes(`The target at 1 is ${(window / 100).toLocaleString('en-US')} tokens and at 20 ${((window * 20) / 100).toLocaleString('en-US')}`));
+  const differs = rowsOf.find((row) => row.atForty !== row.atOne) as (typeof rowsOf)[number];
+  assert.ok(flat.includes(`left ${differs.atForty.toLocaleString('en-US')} tokens where they left ${differs.atOne.toLocaleString('en-US')}, ${Math.round(((differs.atForty - differs.atOne) / differs.atOne) * 100)} % more`));
 });

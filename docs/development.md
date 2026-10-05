@@ -67,12 +67,17 @@ runs the checks of the running plugin on another copy (the copy that is not
 running is always made from the working tree); given the copy
 `test/fixtures/validate/` breaks, they fail.
 
-`node bench/replay.ts <record.jsonl> <line>` gives one compaction of a
+`node bench/replay.ts <record.jsonl> <line> [targetPercent] [maxAfterPercent] [window] [--with-instructions]` gives one compaction of a
 recorded session to the code as it is in the working tree, offline: the
 conversation as it stood before the compaction reported at that line of
 Claude Code's record, what `compact()` makes of it and, where that is still
-too full, where the cut in place of a summary falls. It prints sizes and
-counts, nothing the conversation said; the store is held in memory, no model
+too full, where the cut in place of a summary falls. The window is the one
+given, else 967,000 where a request of the session sent more than 200,000
+tokens, else 167,000. A compaction the record says was asked for is
+replayed as a `/compact` typed without instructions unless
+`--with-instructions` is given: the record does not tie the instructions to
+the compaction. It prints sizes and counts, how many results, inputs,
+middles and calls left and the target, nothing the conversation said; the store is held in memory, no model
 is called and nothing is sent. What is not the conversation is taken as the
 session's first request, so a size it prints is the plugin's count with that
 for a breakdown, not Claude Code's own.
