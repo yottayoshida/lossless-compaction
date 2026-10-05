@@ -84,7 +84,7 @@ test('a call printed again is the call it was: counted once by its id, whatever 
 test('a compaction is read from each arm: the plugin\'s line and no request, the summary\'s seconds and its own usage', () => {
   assert.deepEqual(compactPlugin.plugins, [{ source: 'lossless-compaction@inline', path: '/home/u/lossless-compaction' }]);
   assert.deepEqual(compactPlugin.mcp, ['lossless-compaction']);
-  assert.deepEqual(compactPlugin.compaction, { trigger: 'manual', preTokens: 60882, postTokens: 13704, durationMs: 101, preserved: false });
+  assert.deepEqual(compactPlugin.compaction, { trigger: 'manual', preTokens: 60882, postTokens: 13704, durationMs: 101, preserved: false, at: 0 });
   assert.equal(compactPlugin.uiLog.length, 1);
   assert.deepEqual(readLine(compactPlugin.uiLog[0] ?? ''), {
     outcome: 'moved',

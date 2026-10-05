@@ -10,7 +10,8 @@ export type Usage = { inputTokens: number; outputTokens: number; cacheReadInputT
 /** A call the session made: its id, and what came back to it, where the session printed that (a question's calls, not a built trace's). */
 export type ToolCall = { name: string; input: Record<string, unknown>; id?: string; result?: string };
 
-export type Compaction = { trigger: string; preTokens: number; postTokens: number; durationMs: number; preserved: boolean };
+/** A compaction a session printed. `at` is the number of requests the session had sent before it: the first request after it is the one at that place, where the session sent one. */
+export type Compaction = { trigger: string; preTokens: number; postTokens: number; durationMs: number; preserved: boolean; at: number };
 
 /** One headless session, as its stream of events says it went. */
 export type Session = {
@@ -26,6 +27,8 @@ export type Session = {
   memory: unknown;
   /** Input tokens of each request, in order: fresh, read from cache and written to cache together. */
   requests: number[];
+  /** The same requests, their input taken apart: sent fresh, read from the prompt cache, written to it. */
+  cached: { fresh: number; read: number; written: number }[];
   toolCalls: ToolCall[];
   answer: string;
   isError: boolean;
@@ -74,6 +77,7 @@ export function readSession(text: string): Session {
     tools: [],
     memory: null,
     requests: [],
+    cached: [],
     toolCalls: [],
     answer: '',
     isError: true,
@@ -122,6 +126,7 @@ export function readSession(text: string): Session {
             postTokens: Number(meta['post_tokens']),
             durationMs: Number(meta['duration_ms']),
             preserved: meta['preserved_segment'] !== undefined,
+            at: session.requests.length,
           };
           break;
         }
@@ -145,6 +150,7 @@ export function readSession(text: string): Session {
         seen.add(id);
         const usage = message['usage'] ?? {};
         session.requests.push(number(usage['input_tokens']) + number(usage['cache_read_input_tokens']) + number(usage['cache_creation_input_tokens']));
+        session.cached.push({ fresh: number(usage['input_tokens']), read: number(usage['cache_read_input_tokens']), written: number(usage['cache_creation_input_tokens']) });
       }
       for (const block of message['content'] ?? []) {
         if (block?.type !== 'tool_use') continue;
