@@ -2461,3 +2461,80 @@ and what it costs turns on whether another unit wrote the same conversation
 to the prompt cache first. One run of each, graded by a model for four
 questions of nine: of 217 answers whose grade was known the grader gave 213
 as expected.
+
+## Working sessions in a window of 1,000,000
+
+The session above was driven in a window of 200,000. Where the default
+matters most is a window of 1,000,000, where 40 % is 386,800 tokens. Before
+the default was changed it was to be looked at in the sessions of the
+machine this was written on, with Opus 5.5 and Fable 5.1, offline and as
+numbers only: nothing they said is here.
+
+### Replayed at 1, 20 and 40
+
+The first compaction of each of eight working sessions of 2026-10-01 to
+2026-10-04, given to `compact()` at `targetPercent` 1, 20 and 40 on `main` at
+`3c52a01` with `bench/replay.ts`, in a window of 1,000,000: each had sent more
+than 200,000 tokens by then. Only the first of each: a later one starts from
+the conversation as the setting in use then rebuilt it. Three of them, B, C
+and D, were a `/compact` typed without instructions (every `/compact` those
+sessions recorded has none), replayed as one; Claude Code started the others
+on its own. The plugin's count is what a target is a share of: what was in
+use without thinking and what Claude Code adds. The first request is the
+system prompt, the tools and the first message with what Claude Code puts in
+it, which stays. Tokens as the plugin counts them.
+
+| Session | Started | Plugin's count | First request | Target at 40 | Results moved | Inputs moved | Middles moved | Calls folded | Left at 1 and 20 | Left at 40 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | on its own | 765,947 | 85,681 | 382,974 | 33 of 469 | 43 | 0 | 267 | 454,771 | 454,771 |
+| B | by hand | 457,970 | 99,611 | 228,985 | 37 of 186 | 12 | 0 | 104 (89 at 40) | 219,213 | 226,166 |
+| C | by hand | 727,982 | 94,525 | 363,991 | 47 of 383 | 63 | 0 | 183 | 381,119 | 381,119 |
+| D | by hand | 567,687 | 92,482 | 283,843 | 60 of 249 | 21 | 1 | 93 | 301,524 | 301,524 |
+| E | on its own | 706,085 | 92,057 | 353,042 | 60 of 431 | 23 | 0 | 236 | 357,763 | 357,763 |
+| F | on its own | 546,043 | 100,268 | 273,021 | 50 of 499 | 28 | 0 | 303 | 309,690 | 309,690 |
+| G | on its own | 532,648 | 93,109 | 266,324 | 56 of 398 | 22 | 0 | 183 | 277,056 | 277,056 |
+| H | on its own | 447,909 | 94,296 | 223,955 | 91 of 544 | 34 | 0 | 284 | 238,453 | 238,453 |
+
+- **At 1 and at 20 every one moved out everything that may leave, and at 40
+  seven of the eight did the same.** The target at 1 is 9,670 tokens and at
+  20 193,400; at 40 it is never more than half of the plugin's count, so it
+  was 224,000 to 383,000. What could not leave — the first request, what was
+  said, short results, the newest `keepTokens` of each kind — came to 219,000
+  to 455,000 (left at 1), over the target at 40 in seven.
+- **In B, a `/compact` typed, 40 stopped short:** it reached its target after
+  folding 89 old calls of the 104 that 1 and 20 folded, and left 226,166
+  tokens where they left 219,213, 3 % more.
+- In these sessions the default changes little at a first compaction: nothing
+  where Claude Code compacted on its own, 3 % in one of the three typed.
+- One message's middle left, in D, at each setting: a long answer of Claude's,
+  which a `/compact` typed without instructions reaches into among the
+  newest. Their long messages on the person's side, of 2,000 characters or
+  more, 8 to 30 a session, were all a turn that carries tool results or what
+  Claude Code writes in a person's place (another session's message, a
+  notification), which stays.
+- Not shown: the compactions after the first, where 40 left more than 1 in
+  the window of 200,000 above; and what an agent fetches back afterwards.
+
+### Before and after the setting was changed
+
+The same machine ran `targetPercent` 40, the default, until 2026-10-02 00:30
+UTC and 1 after. Every compaction the plugin made itself, in less than five
+seconds, in a working session of Opus 5.5 or Fable 5.1 (not one the benchmark
+or a test ran in a box of its own) from 2026-10-01 04:28 UTC to 2026-10-04,
+with the first request after it where the session made one, from the
+records:
+
+| | Compactions | Typed | With a request after | Written to the cache by it | Read from it |
+| --- | ---: | ---: | ---: | --- | --- |
+| At 40 | 6 | 6 | 5 | 47,138 to 442,072 | 25,826 to 29,603, one 241,552 |
+| At 1 | 10 | 5 | 9 | 256,299 to 748,835 | 25,378 to 30,337, two 0 |
+
+These cannot be set against each other: the plugin was updated more than
+once over those days, and every one the plugin made at 40 was typed, where
+half of those at 1 Claude Code started on its own, at the end of the window.
+One thing holds at both: the request after a compaction read from the prompt
+cache 25,000 to 31,000 tokens, about what the system prompt and the tools
+come to, and wrote the rest anew: in four of the five at 40 with a request
+after, the other reading 241,552, and in seven of the nine at 1, the other
+two reading nothing, their cache gone. That is what the
+session above measured in a window of 200,000.

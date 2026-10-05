@@ -5,23 +5,28 @@
 // Nothing is sent, and the store is held in memory. What it prints is sizes and
 // counts, not what the conversation said.
 //
-//   node bench/replay.ts <record.jsonl> <line> [targetPercent] [maxAfterPercent]
+//   node bench/replay.ts <record.jsonl> <line> [targetPercent] [maxAfterPercent] [window] [--with-instructions]
 //
 // <line> is the 1-based line of the record where the compaction to replay is reported
 // (the plugin's line, or the compaction's boundary). The conversation is every message
 // after the compaction before it, up to that line. What is not the conversation is taken
 // as the session's first request, and the tokens in use as the last response's usage
-// before the line: as in docs/measurements.md, "Moving out tool inputs".
+// before the line: as in docs/measurements.md, "Moving out tool inputs". The window is
+// the one given, else that of a window of 1,000,000 where any request of the session sent
+// more than 200,000 tokens (the plugin sees 967,000), else 167,000. A compaction the record
+// says was asked for (`manual`) is replayed as a `/compact` typed without instructions, which
+// reaches into the newest calls (ADR 0023), unless `--with-instructions` is given: the record
+// does not tie the instructions to the compaction.
 
 import { readFileSync } from 'node:fs';
-import { CHARS_PER_TOKEN, charsOf, compact, countFrom, weightOf, type Config } from '../src/compact.ts';
+import { CHARS_PER_TOKEN, charsOf, compact, countFrom, tokensOf, weightOf, type Config } from '../src/compact.ts';
 import { decide, keepOldest } from '../src/cut.ts';
 import { messagesFromApi } from '../src/keep.ts';
 import { mediaIn } from '../src/media.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
 import type { FileStat, Files, Message } from '../src/types.ts';
 
-type Row = { type?: string; subtype?: string; isSidechain?: boolean; isMeta?: boolean; message?: { role?: string; content?: unknown; usage?: Record<string, number> } };
+type Row = { type?: string; subtype?: string; isSidechain?: boolean; isMeta?: boolean; compactMetadata?: { trigger?: string }; message?: { role?: string; content?: unknown; usage?: Record<string, number> } };
 
 /** A store in memory: enough for `compact()` to write, read back and compare. */
 class Memory implements Files {
@@ -48,6 +53,51 @@ const usageOf = (row: Row): number | null => {
   return (u['input_tokens'] ?? 0) + (u['cache_read_input_tokens'] ?? 0) + (u['cache_creation_input_tokens'] ?? 0);
 };
 
+/**
+ * The size at which the session's Claude Code compacted on its own, as the plugin sees it: a session that sent more
+ * than 200,000 tokens in any request had a window of 1,000,000, whatever line is replayed; any other is taken to
+ * have had the benchmark's. A record says nothing of the window but that, so a session switched between models of
+ * either window is replayed in one. A subagent's requests are not the session's.
+ */
+export function windowOf(record: string): number {
+  for (const line of record.split('\n')) {
+    if (line.trim() === '') continue;
+    let row: Row;
+    try {
+      row = JSON.parse(line) as Row;
+    } catch {
+      continue;
+    }
+    if (row.isSidechain !== true && (usageOf(row) ?? 0) > 200_000) return 967_000;
+  }
+  return 167_000;
+}
+
+/** The record's rows, numbered as `<line>` counts them: blank lines left out, a line that is not JSON an empty row. */
+function rowsOf(record: string): Row[] {
+  return record.split('\n').filter((text) => text.trim() !== '').map((text) => {
+    try {
+      return JSON.parse(text) as Row;
+    } catch {
+      return {};
+    }
+  });
+}
+
+/**
+ * How the compaction reported at `line` was started, as Claude Code recorded it: `manual` for a `/compact`, else
+ * `auto`. `line` is its boundary or a line before it with no message between, as the plugin's line is.
+ */
+export function triggerAt(record: string, line: number): string | undefined {
+  const rows = rowsOf(record);
+  for (let at = line - 1; at >= 0 && at < rows.length; at += 1) {
+    const row = rows[at] as Row;
+    if (row.subtype === 'compact_boundary') return row.compactMetadata?.trigger;
+    if (row.type === 'user' || row.type === 'assistant') return undefined;
+  }
+  return undefined;
+}
+
 /** The conversation before the compaction reported at `line`, in the form the API is sent. */
 export function apiBefore(rows: readonly Row[], line: number): unknown[] {
   let start = 0;
@@ -71,14 +121,8 @@ export function apiBefore(rows: readonly Row[], line: number): unknown[] {
   return api;
 }
 
-export async function replay(record: string, line: number, targetPercent: number, maxAfterPercent: number) {
-  const rows: Row[] = record.split('\n').filter((text) => text.trim() !== '').map((text) => {
-    try {
-      return JSON.parse(text) as Row;
-    } catch {
-      return {};
-    }
-  });
+export async function replay(record: string, line: number, targetPercent: number, maxAfterPercent: number, window = windowOf(record), byHand = triggerAt(record, line) === 'manual') {
+  const rows = rowsOf(record);
   const api = apiBefore(rows, line);
   const read = messagesFromApi(api);
   if (read === null) throw new Error('the conversation could not be read');
@@ -89,13 +133,12 @@ export async function replay(record: string, line: number, targetPercent: number
   const tokens = rows.slice(0, line - 1).map(usageOf).filter((n): n is number => n !== null && n > 0).pop() ?? 0;
   const breakdown = { apiUsage: {}, categories: [{ kind: 'used', name: 'System', tokens: fixedTokens }, { kind: 'used', name: 'Messages', tokens: tokens - fixedTokens }] };
   const count = countFrom(breakdown, tokens, api, messages);
-  const window = tokens > 200_000 ? 967_000 : 167_000;
   const keepTokens = 20_000;
   const config: Config = { store: { write: '/memory/store', read: ['/memory/store'] }, keepTokens, minChars: 2000, targetPercent, maxAfterPercent };
   const media = mediaIn(api);
   const files = new Memory();
   const outcome = await compact(
-    { messages, tokens, count, window, goal: goalOf(messages, undefined), media: media.results },
+    { messages, tokens, count, window, goal: goalOf(messages, undefined), media: media.results, byHand },
     config,
     { files, now: () => Date.now() },
   );
@@ -137,10 +180,19 @@ export async function replay(record: string, line: number, targetPercent: number
     tokens,
     fixedTokens,
     window,
+    byHand,
+    /** The size the target is a share of, as `compact()` counts it: thinking and what Claude Code adds are not in it. */
+    before: Math.round(count === undefined ? tokens : count.fixedTokens + tokensOf(messages, count)),
     counted: count !== undefined,
     density: count?.density,
     results: outcome.report.results,
     moved: outcome.report.moved,
+    candidates: outcome.report.candidates,
+    inputs: outcome.report.inputs,
+    bodies: outcome.report.bodies,
+    folded: outcome.report.folded,
+    notMoved: outcome.report.notMoved,
+    target: Math.round(outcome.target),
     charsBefore: charsOf(messages),
     charsAfter: outcome.report.charsAfter,
     tokensAfter: outcome.report.tokensAfter,
@@ -153,11 +205,14 @@ export async function replay(record: string, line: number, targetPercent: number
 }
 
 if (import.meta.main) {
-  const [file, line, target, maxAfter] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const [file, line, target, maxAfter, window] = args.filter((arg) => !arg.startsWith('--'));
   if (file === undefined || line === undefined) {
-    console.error('usage: node bench/replay.ts <record.jsonl> <line> [targetPercent] [maxAfterPercent]');
+    console.error('usage: node bench/replay.ts <record.jsonl> <line> [targetPercent] [maxAfterPercent] [window] [--with-instructions]');
     process.exit(2);
   }
-  const out = await replay(readFileSync(file, 'utf8'), Number(line), Number(target ?? 40), Number(maxAfter ?? 75));
+  const record = readFileSync(file, 'utf8');
+  const hand = args.includes('--with-instructions') ? false : triggerAt(record, Number(line)) === 'manual';
+  const out = await replay(record, Number(line), Number(target ?? 1), Number(maxAfter ?? 75), window === undefined ? windowOf(record) : Number(window), hand);
   console.log(JSON.stringify(out, null, 2));
 }

@@ -475,7 +475,11 @@ newest `keepTokens` of results, of long inputs and of long messages, and the
 calls among the newest `keepTokens` of the conversation (a `/compact` typed
 without instructions reaches into those too), and a cut in place of a summary goes as far. In a
 window of 1,000,000 the target is 9,670 tokens, reached only where what is
-left comes to less. (Where Claude Code gives no figures to count from, what
+left comes to less. A target is never more than half of what the plugin
+counts in use: in eight working sessions replayed in that window, what could
+not leave was over it even at 40 in seven, and there 1, 20 and 40 moved out
+the same at the first compaction
+([replayed](measurements.md#working-sessions-in-a-window-of-1000000)). (Where Claude Code gives no figures to count from, what
 a result saves is counted at three characters a token, and the target can be
 taken for reached sooner.)
 
