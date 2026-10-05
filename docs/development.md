@@ -97,6 +97,38 @@ the plugin once, from the copy checked, not an installed one. What it reads is a
 interactive session (`claude --plugin-dir .`): that the line is shown on the
 screen, and is not in what the model is sent.
 
+## Layers
+
+The code is in three layers, and a file reads only its own and those under
+it:
+
+- **What is kept and given back**: `src/layout.ts` (where a store's files
+  are), `src/files.ts` (a host's file system and command runner, as types),
+  `src/blobs.ts` (a text stored under the SHA-256 of itself, written, read
+  back and compared, and checked against its name before it is handed over)
+  and `src/encoded.ts` (a result with images, held as text). Nothing in
+  these is of Claude Code: no name a tool is called by, no directory or
+  variable of its configuration, no shape of a conversation, nothing of the
+  object a hook is handed. `test/layers.test.ts` holds that, by the marks it
+  lists, and that they read no file outside themselves. What they still take
+  from the layers above is a number, a shape and a few words: the size over
+  which a text is not stored, the form of the name a stored text is filed
+  under (that of a tool's name, as a ticket spells it), and what `recall`
+  says when it cannot answer.
+- **What leaves a conversation, and what stands in its place**: the rest of
+  `src/`. `src/store.ts` words the tickets, which name the tool the model
+  calls, and says where a store is under Claude Code's directory; the files
+  that decide what leaves read a conversation as Claude Code hands it to a
+  hook.
+- **The host**: `hooks/move-out.ts`, the one file that is handed `$`.
+
+Another host would bring its own second and third layer; the first is
+written to be kept. Only the first is held by a test: the line between the
+other two is where `$` is, which Claude Code itself requires (below). What
+decides what leaves a conversation (`src/select.ts`, `src/compact.ts`) reads
+a conversation as Claude Code hands it over, and is of the second layer:
+storing is apart from the host, deciding is not yet.
+
 ## What Claude Code requires of the hook file
 
 - `$` may be handed only to a function declared at the top of the file, and

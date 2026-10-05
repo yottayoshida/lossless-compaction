@@ -25,7 +25,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I3',
     breaks: 'a part under tmp/ is moved into place without being read back',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: '    if ((await files.read(part)) !== text) {',
     replace: '    if (false) {',
     killedBy: 'a part a broken disk stored other text for is not moved over what an earlier write had stored',
@@ -33,7 +33,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I1',
     breaks: 'a result just written is not compared with what was written',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: "  if (back === text) return null;\n  if (found === 'missing' || !repair(back)) return { reason: 'differs' };",
     replace: "  if (back === text || found === 'missing') return null;\n  if (!repair(back)) return { reason: 'differs' };",
     killedBy: 'a result that does not read back as it was written stays in the conversation',
@@ -41,7 +41,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I1',
     breaks: 'a ticket is given though the result could not be written',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: '  if (blob) return blob;\n',
     replace: '',
     killedBy: 'a result that cannot be stored stays in the conversation and is counted',
@@ -49,7 +49,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I2',
     breaks: 'recall returns text that no longer has the hash it is named by',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: "    if ((await idOf(text)) !== id) return { error: 'The stored result has changed on disk and is not returned.' };\n",
     replace: '',
     killedBy: 'recall answers only to an id it stored, and only with text that still has that hash',
@@ -57,7 +57,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I3',
     breaks: 'a write of the same text is made in place, over what an earlier write stored',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: '  const mover = files.move !== undefined && (await files.move.available()) ? files.move : null;',
     replace: "  const mover = null as unknown as NonNullable<Files['move']> | null;",
     killedBy: 'with a move into place, a refused write of the same text leaves what an earlier write had stored whole',
@@ -65,7 +65,7 @@ export const MUTATIONS: readonly Mutation[] = [
   {
     promise: 'I3',
     breaks: 'a link where a result would go is written through',
-    file: 'src/store.ts',
+    file: 'src/blobs.ts',
     find: "  if (found === 'symlink') return { reason: 'symlink' };\n  if (found === 'not-a-file')",
     replace: "  if (found === 'not-a-file')",
     killedBy: 'a link to nothing is refused too',
