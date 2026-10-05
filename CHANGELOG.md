@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `PRIVACY.md` says what the plugin reads, keeps and where, sends and to whom, which programs it runs, how long it keeps what it kept and how to remove it (#89). The plugin itself sends nothing without a key for Jev, and nothing ever to the maintainer; with a key, `find` sends the provider what `docs/usage.md` lists. `test/privacy.test.ts` reads the code for the addresses, the programs and the places written in it, and fails when the page does not name one, or when the code sends another way than the one call `find` uses; it does not see one that the code puts together some other way. The README links to it.
+
 ## [0.7.0] - 2026-10-04
 
 ### Added
