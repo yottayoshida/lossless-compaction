@@ -54,7 +54,8 @@ export type FindInput = {
  * summary, with what it stands for in words: the call that made the result, or
  * which messages the part holds.
  */
-export type Stored = Ticket & { line: string; about: string; follow?: false };
+/** `attached`: a part of what Claude Code attached to the messages as it sent them, looked through here and never sent to Jev (#105). */
+export type Stored = Ticket & { line: string; about: string; follow?: false; attached?: true };
 
 /**
  * The phrases the question puts in double quotes, long enough to narrow by.
@@ -166,7 +167,11 @@ function partsIn(text: string, seen: Set<string>): Stored[] {
     const part = readPartTicket(line);
     if (!part || seen.has(part.id)) continue;
     seen.add(part.id);
-    out.push({ ...part, line, about: `part ${part.part} of ${part.parts} of the kept conversation, messages ${part.first}-${part.last}` });
+    out.push(
+      part.kind === 'attached'
+        ? { ...part, line, about: `part ${part.part} of ${part.parts} of what Claude Code attached as it sent the messages`, attached: true }
+        : { ...part, line, about: `part ${part.part} of ${part.parts} of the kept conversation, messages ${part.first}-${part.last}` },
+    );
   }
   return out;
 }
@@ -201,10 +206,14 @@ function ticketsInPart(text: string, seen: Set<string>): Stored[] {
  * into a part kept its line there (ADR 0024).
  */
 async function everyTicket(files: Files, dirs: readonly string[], messages: readonly Message[]): Promise<{ tickets: Stored[]; middles: Stored[] }> {
-  const tickets = ticketsIn(messages);
-  const seen = new Set(tickets.map((ticket) => ticket.id));
   const seenMiddles = new Set<string>();
   const middles = middlesOf(messages.flatMap((message) => message.text.split('\n').map((line) => ({ line, role: message.role }))), seenMiddles);
+  // What Claude Code attached is looked through as a middle is, wherever its ticket stands, and not followed (#105): it
+  // holds what Claude Code wrote about the machine, which is not sent to Jev.
+  const aside = (found: readonly Stored[]): Stored[] => found.filter((ticket) => (ticket.attached === true ? (middles.push(ticket), false) : true));
+  const all = ticketsIn(messages);
+  const seen = new Set(all.map((ticket) => ticket.id));
+  const tickets = aside(all);
   let read = 0;
   for (let index = 0; index < tickets.length && read < MAX_PARTS; index += 1) {
     const ticket = tickets[index] as Stored;
@@ -217,7 +226,7 @@ async function everyTicket(files: Files, dirs: readonly string[], messages: read
     middles.push(...middlesOf(linesOfPart(got.text), seenMiddles));
     // Parts are always followed: the limit is on the results offered, not on where they are read from.
     const inside = ticketsInPart(got.text, seen);
-    tickets.push(...inside.filter((t) => t.tool === PART));
+    tickets.push(...aside(inside.filter((t) => t.tool === PART)));
     tickets.push(...inside.filter((t) => t.tool !== PART).slice(0, Math.max(0, MAX_OFFERED - tickets.length)));
   }
   return { tickets, middles };
@@ -347,7 +356,8 @@ export async function find(input: FindInput): Promise<string> {
     const valued = values.length > 0 && ticket.tool !== PART && lineHolds(ticket.tool === 'Read' ? (unnumbered(got.text) ?? got.text) : got.text, values);
     entries.push({ ticket, option: `${describe(ticket)}. It reads: ${digest(shown(got.text), DIGEST_CHARS)}`, holds, valued });
   }
-  // The middles of long messages are looked through here and never sent to Jev (ADR 0024): one that holds the
+  // The middles of long messages, and what Claude Code attached (#105), are looked through here and never sent to Jev
+  // (ADR 0024): one that holds the
   // quoted phrase, or a line holding the values, is named beside what Jev chose among the results.
   const middles: Entry[] = [];
   const lookedAt: Stored[] = [];
@@ -366,7 +376,7 @@ export async function find(input: FindInput): Promise<string> {
     phrases.length > 0 || values.length > 0 || lookedAt.length === 0
       ? ''
       : [
-          `[${PLUGIN}] The middles of long messages that left are looked through only for a quoted phrase (twelve characters or more, as written) or the values a question names, and none was given; to read one, recall it:`,
+          `[${PLUGIN}] The middles of long messages that left, and what Claude Code attached as it sent the messages, are looked through only for a quoted phrase (twelve characters or more, as written) or the values a question names, and none was given; to read one, recall it:`,
           ...lookedAt.slice(0, VALUED_LISTED).map((ticket) => `- ${describe(ticket)}; recall with ${RECALL_TOOL} id ${ticket.id}`),
           ...(lookedAt.length > VALUED_LISTED ? [`- and ${lookedAt.length - VALUED_LISTED} more`] : []),
         ].join('\n');
@@ -391,7 +401,10 @@ export async function find(input: FindInput): Promise<string> {
     if (unsought !== '') return `No moved-out result is in this conversation to choose from.\n${unsought}`;
     if (lookedAt.length > 0) {
       const what = phrases.length > 0 ? 'the quoted phrase as written' : `a line holding ${quoted(values)}`;
-      const which = lookedAt.length === 1 ? 'the middle of a long message looked through here does not hold' : `none of the ${lookedAt.length} middles of long messages looked through here holds`;
+      const which =
+        lookedAt.length === 1
+          ? `${lookedAt[0]?.attached === true ? 'what Claude Code attached' : 'the middle of a long message'} looked through here does not hold`
+          : `none of the ${lookedAt.length} middles of long messages and parts of what Claude Code attached looked through here holds`;
       return `[not found] No moved-out result is in this conversation to choose from, and ${which} ${what}. It may still be in the conversation.`;
     }
     return (

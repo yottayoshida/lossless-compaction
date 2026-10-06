@@ -44,6 +44,8 @@ export type Start = {
   kept?: boolean;
   /** The window to compact against, in tokens, where the trace names one. */
   window?: number;
+  /** Claude Code's classic hooks for this session alone, as a settings file holds them: what a check needs added to a message (bench/host.ts). */
+  hooks?: Record<string, unknown>;
 };
 
 export type Ran = { session: Session; text: string; wallMs: number };
@@ -55,7 +57,7 @@ const LIMIT_MS = 30 * 60 * 1000;
 export const toolsOf = (start: Pick<Start, 'arm' | 'allowedTools'>): string[] => start.allowedTools.filter((tool) => start.arm === 'plugin' || !tool.startsWith('mcp__'));
 
 export function argsOf(start: Start): string[] {
-  const settings = { pluginConfigs: { [PLUGIN_ID]: { options: { storeDir: start.storeDir, ...start.pluginOptions } } } };
+  const settings = { pluginConfigs: { [PLUGIN_ID]: { options: { storeDir: start.storeDir, ...start.pluginOptions } } }, ...(start.hooks === undefined ? {} : { hooks: start.hooks }) };
   return [
     '-p',
     start.prompt,

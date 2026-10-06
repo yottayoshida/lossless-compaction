@@ -8,7 +8,8 @@
 
 import { inputLine } from './ask.ts';
 import { changedLines } from './changed.ts';
-import { PART, PLUGIN, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, recall, type NotMoved } from './store.ts';
+import type { Attached } from './attached.ts';
+import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, recall, type NotMoved } from './store.ts';
 import type { Stop } from './lifetime.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
@@ -294,13 +295,17 @@ async function withTickets(files: Files, dir: string, message: Message, tools: R
  * since, are not among these. `after` is how many messages of the conversation
  * stand in front of them, so that a part names its messages by their place in
  * the whole.
+ *
+ * With `attached` the messages are what Claude Code attached to a conversation's
+ * messages as it sent them (`keepAttached`): the message says so, its tickets
+ * name no messages, and no file is named.
  */
 export async function keepConversation(
   files: Files,
   dir: string,
   messages: readonly Message[],
   read: readonly string[] = [dir],
-  { summarized = true, after = 0 }: { summarized?: boolean; after?: number } = {},
+  { summarized = true, after = 0, attached = false }: { summarized?: boolean; after?: number; attached?: boolean } = {},
 ): Promise<Kept> {
   const tools = new Map(messages.flatMap((message) => message.toolUses).map((use) => [use.tool_use_id, use.tool]));
   // Pieces of text, each with the number of the message it comes from, one based.
@@ -327,15 +332,37 @@ export async function keepConversation(
   }
   if (parts.length === 0) return { nothing: true };
 
-  const lines = [`${summarized ? KEPT : KEPT_UNSUMMARIZED}, in ${parts.length} part${parts.length === 1 ? '' : 's'}; recall a part by its id.`];
+  const lines = [`${attached ? ATTACHED_KEPT : summarized ? KEPT : KEPT_UNSUMMARIZED}, in ${parts.length} part${parts.length === 1 ? '' : 's'}; recall a part by its id.`];
   for (const [index, part] of parts.entries()) {
     const moved = await moveOut(files, dir, PART, part.text);
     if ('reason' in moved) return { failed: moved.reason, ...(moved.code === undefined ? {} : { code: moved.code }) };
-    lines.push(partTicketText({ part: index + 1, parts: parts.length, first: part.first, last: part.last, bytes: moved.bytes, id: moved.id }, summarized));
+    const ticket = { part: index + 1, parts: parts.length, bytes: moved.bytes, id: moved.id };
+    lines.push(attached ? attachedTicketText(ticket) : partTicketText({ ...ticket, first: part.first, last: part.last }, summarized));
   }
   // It throws nothing: the parts stand whatever it meets.
-  if (summarized) lines.push(...(await changedLines(files, dir, read, messages)));
+  if (summarized && !attached) lines.push(...(await changedLines(files, dir, read, messages)));
   return { text: lines.join('\n'), parts: parts.length };
+}
+
+/**
+ * Keeps what Claude Code attached to the messages as it sent them (src/attached.ts finds it, #105), in parts as a
+ * conversation is kept, and returns the message that names them, or why nothing was kept. Each block stands under the
+ * message it came with; one sent again, as a reminder is, is written once and named after that.
+ */
+export async function keepAttached(files: Files, dir: string, attached: readonly Attached[]): Promise<Kept> {
+  const first = new Map<string, string>();
+  const messages: Message[] = [];
+  for (const { label, text } of attached) {
+    const earlier = first.get(text);
+    if (earlier === undefined) first.set(text, label);
+    const line = earlier === undefined ? text : `(the same as attached ${earlier})`;
+    // Headed as Claude Code's, so that what it attached is not read as what the person said.
+    const heading = `What Claude Code attached ${label}:`;
+    const last = messages.at(-1);
+    if (last !== undefined && last.text.startsWith(`${heading}\n`)) last.text += `\n${line}`;
+    else messages.push({ role: 'user', text: `${heading}\n${line}`, toolUses: [] });
+  }
+  return keepConversation(files, dir, messages, [dir], { attached: true });
 }
 
 /**

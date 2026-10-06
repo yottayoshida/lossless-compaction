@@ -62,13 +62,15 @@ whose compaction hook throws, answers what Claude Code refuses, throws
 after the summary ran, or waits past its time (the patches under
 `test/fixtures/failing/`) says so, says nothing more of the hook, is kept in
 that copy's store, is compacted once, and holds the tickets afterwards
-(#102), that with the
+(#102), that what Claude Code attached as it sent the messages (a file
+handed over with `@`, words two hooks added) is kept at a `/compact` and
+comes back to an agent that has no tool to read a file (#105), that with the
 plugin enabled and not running the
 first message is told and a `/compact` is held, and that nothing is set for
 the plugin to run: every session is started without
 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`, and one more, with it at `0`, runs the
 plugin too. It prints the version it ran on. Run it with every new Claude Code and before a release. It signs in as you
-do and spends about 1.50 USD of Sonnet 5.5, about 0.90 of it on the
+do and spends about 1.70 USD of Sonnet 5.5, about 0.90 of it on the
 summaries the four broken copies run (measured on 2026-10-06). `node bench/host.ts --plugin-dir <copy>`
 runs the checks of the running plugin on another copy (the copy that is not
 running, and the copies broken as `test/fixtures/failing/` says, are always

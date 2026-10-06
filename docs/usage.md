@@ -103,6 +103,12 @@ With a key set, each call to `find` sends the provider:
   result holds the phrase and one middle does, it gives that message back,
   and it names the other middles that hold what was asked beside its answer
   (ADR 0024);
+- nothing of the parts that keep what Claude Code attached to the messages
+  as it sent them (a file handed over with `@`, what a hook added,
+  reminders, what it says of the machine): `find` looks through those here,
+  as it does a middle (#105, ADR 0030). Where a conversation could not be
+  rebuilt and was kept as it was sent, what was attached is in that
+  conversation's own parts, and their digest, below, can hold it;
 - for every part of the conversation that was kept, before a summary, in
   place of one or as old tool calls folded into a list, a 400-character
   digest of what was said or returned in it, made as a

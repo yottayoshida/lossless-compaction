@@ -71,3 +71,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0029](0029-a-line-that-reads-as-a-fixed-line-is-marked.md): why a line of
   what was said, handed or returned that reads as one of a part's fixed lines
   is written with a backslash in front, and the readers stay as they were.
+- [0030](0030-what-claude-code-attached-is-kept-at-the-end.md): why what
+  Claude Code attached to the messages as it sent them is kept at each
+  compaction that rebuilds, and named by one message at the end.

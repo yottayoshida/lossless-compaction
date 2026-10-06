@@ -16,7 +16,8 @@ import { beforeTrying, configFrom, failedLine, nextStep, settingNotes, type Step
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
 import { guarded, longestIn, middleDropped, middleRefusal, placedTicketIds, refused } from '../src/guard.ts';
-import { keepThenSummarize, messagesFromApi, namedThroughParts, type ToKeep } from '../src/keep.ts';
+import { attachedOf } from '../src/attached.ts';
+import { keepAttached, keepThenSummarize, messagesFromApi, namedThroughParts, type ToKeep } from '../src/keep.ts';
 import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
@@ -434,6 +435,11 @@ type Tried = {
   maxAfterPercent: number;
   count: Count | undefined;
   keepTokens: number;
+  /** The conversation as Claude Code sent it, with its blocks and as it is kept when it is not rebuilt. */
+  api: unknown;
+  asSent: readonly Message[];
+  /** The message naming what Claude Code attached as it sent the messages, at the end of what is handed back (#105). */
+  attached?: Message;
 };
 
 /**
@@ -531,10 +537,33 @@ async function attempt(
       maxAfterPercent: config.maxAfterPercent,
       count,
       keepTokens: config.keepTokens,
+      api,
+      asSent,
     };
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
     return { why, keep: store === null ? { unkept: 'the place to keep it in could not be read' } : { store, messages: asSent } };
+  }
+}
+
+/**
+ * What Claude Code attached to the messages as it sent them, which a rebuilt conversation would not carry, kept, and
+ * a message naming it put at the end of what is handed back (#105): after the conversation, so that what an earlier
+ * compaction left stays as it was (ADR 0001, decision 10). Where it cannot be written the conversation is not rebuilt:
+ * it is kept as it was sent, attachments and all, before the built-in summary, as one that cannot be rebuilt is.
+ */
+async function withAttached($: WithFiles & WithProcess, e: SessionCompactInput, tried: Tried): Promise<Tried | HandedOver> {
+  const unkept = (why: string): HandedOver => ({ why: `what Claude Code attached to the messages could not be kept (${why})`, keep: { store: tried.store, messages: tried.asSent } });
+  try {
+    const attached = attachedOf(e.messages as readonly Message[], tried.api);
+    if (attached.length === 0) return tried;
+    const kept = await keepAttached(storingFilesOf($), tried.store.write, attached);
+    if ('failed' in kept) return unkept(kept.code === undefined ? kept.failed : `could not write: ${kept.code}`);
+    if ('nothing' in kept) return tried;
+    const message: Message = { role: 'user', text: kept.text, toolUses: [] };
+    return { ...tried, outcome: { ...tried.outcome, messages: [...tried.outcome.messages, message] }, attached: message };
+  } catch (error) {
+    return unkept(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -637,9 +666,10 @@ async function carryOut(
     }
     case 'summarize':
       say($, step.line);
-      // Handed over as it was, the conversation is kept as it was handed in; else what is left, and that is what is kept.
+      // Handed over as it was, the conversation is kept as it was handed in, with the message naming what Claude Code
+      // attached (#105); else what is left, which holds that message, and that is what is kept.
       return step.of === 'given'
-        ? summarizeKeeping($, e, next, { store, messages: e.messages as readonly Message[] })
+        ? summarizeKeeping($, e, next, { store, messages: [...(e.messages as readonly Message[]), ...(tried.attached === undefined ? [] : [tried.attached])] })
         : summarizeKeeping($, { ...e, messages: outcome.messages }, next, { store, messages: outcome.messages });
   }
 }
@@ -970,7 +1000,17 @@ export const register: Register = (on, options) => {
         count: tried.count,
         keepTokens: tried.keepTokens,
       });
-      result = await carryOut($, e, next, tried, step);
+      // What Claude Code attached as it sent the messages is kept wherever the conversation is rebuilt or summarized
+      // (#105); a compaction left undone leaves the conversation, and what came with it, as it was.
+      const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);
+      // As after the attempt: keeping what was attached is written, and Claude Code may have gone on meanwhile.
+      if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
+      if ('why' in ready) {
+        say($, `built-in compaction: ${ready.why}`);
+        result = await summarizeKeeping($, e, next, ready.keep);
+      } else {
+        result = await carryOut($, e, next, ready, step);
+      }
     }
     // The newest ticket of the conversation handed back, this compaction's among them, else of the one handed in:
     // what a clean-up looks for in its transcript before it moves anything (ADR 0027).
