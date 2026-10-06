@@ -220,7 +220,7 @@ test('a stop by what the clean-up follows is recorded with each id and why, read
   const unread = [
     { id: hex('1'), why: 'text-missing' as const },
     { id: hex('2'), why: 'text-changed' as const },
-    { id: hex('3'), why: 'entry' as const },
+    { id: hex('3'), why: 'text-unreadable' as const },
     { id: hex('4'), why: 'in-trash' as const },
   ];
   await noteStopped(files, DIR, record, 'part', NOW, unread);
@@ -229,7 +229,7 @@ test('a stop by what the clean-up follows is recorded with each id and why, read
   const text = storeReport([await countStore(files, list(files), DIR, NOW)], gc, NOW, false);
   assert.ok(text.includes(`    ${hex('1')}: its text, blobs/<id>.txt, is not there; where you removed it yourself, remove index/<id>.json too`));
   assert.ok(text.includes(`    ${hex('2')}: its text, blobs/<id>.txt, is not what was stored`));
-  assert.ok(text.includes(`    ${hex('3')}: its entry, index/<id>.json, could not be read, while recall may still read its text; write the entry back`));
+  assert.ok(text.includes(`    ${hex('3')}: its text, blobs/<id>.txt, could not be read; make it readable to you, or move both its files out of the store, after which what only it named is no longer kept`));
   assert.ok(!text.includes('more, named once'), 'none beyond the four');
   assert.ok(text.includes(`    ${hex('4')}: it is named and in the trash, and could not be put back; move its files from trash/<day>/`));
   // What the record holds is read as ids and causes of the list, at most twenty: nothing else it holds is kept.

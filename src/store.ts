@@ -4,8 +4,8 @@
 // the same name and the same ticket, so compacting twice writes nothing new and
 // changes nothing that an earlier compaction left in the conversation.
 
-import { dirsOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
-import { entryPath } from './layout.ts';
+import { dirsOf, idOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
+import { blobPath, entryPath } from './layout.ts';
 import type { Files, Message } from './types.ts';
 
 export { MAX_BYTES, NOT_AN_ID, NOT_STORED, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
@@ -261,6 +261,27 @@ export async function moveInputOut(files: Files, dir: string, tool: string, fiel
   if ('reason' in moved) return moved;
   const ticket = { tool, field: name, bytes: moved.bytes, id: moved.id };
   return { ...ticket, text: inputTicketText(ticket) };
+}
+
+/** Why a stored text is not read: none there, one that does not read, one whose hash is no longer its name. */
+export type TextWhy = 'text-missing' | 'text-unreadable' | 'text-changed';
+
+/**
+ * The text stored under `id` in the first of `dirs` that holds an entry for it, readable or not, and its text, as
+ * `recall` finds it; or why not. Its hash is checked: a text that is not what was stored is never read as it.
+ */
+export async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string } | { ok: false; why: TextWhy }> {
+  for (const dir of dirs) {
+    if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
+    let text: string;
+    try {
+      text = await files.read(blobPath(dir, id));
+    } catch {
+      return { ok: false, why: 'text-unreadable' };
+    }
+    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };
+  }
+  return { ok: false, why: 'text-missing' };
 }
 
 /**

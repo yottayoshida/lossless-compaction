@@ -916,8 +916,10 @@ clean-up:
   are read from, counts, times and the kind of the last stop. Where kept
   parts, or things named in the trash, stopped it, it names each by its id
   with why and how the clean-up goes on: a text not there, removed by hand
-  or not yet written by a sync; a text changed; an entry that does not read;
-  one in the trash that could not be put back. It is not a tool: the agent
+  or not yet written by a sync; a text changed or that does not read; one
+  in the trash that could not be put back. An entry that does not read, over
+  a text that is the one stored, stops nothing: the text is read as a kept
+  part's ([ADR 0033](adr/0033-an-entry-that-does-not-read-is-read-through-its-text.md)). It is not a tool: the agent
   is not offered it.
 - A clean-up that stops records the kind of stop in `gc.json`, and the ids
   and causes of the stored things that stopped it, every one it reaches in

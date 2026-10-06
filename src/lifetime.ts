@@ -16,7 +16,7 @@ import { readFoldedReadLine } from './changed.ts';
 import { ticketIdsIn } from './guard.ts';
 import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { exitOf } from './commands.ts';
-import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall } from './store.ts';
+import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall, storedText } from './store.ts';
 import type { DirEntry, Exec, Files, Message } from './types.ts';
 
 export { dayOf };
@@ -43,7 +43,7 @@ export type List = (path: string) => Promise<DirEntry[]>;
 export const STOP_KINDS = ['unread', 'too-many', 'place', 'part', 'trash', 'move', 'unexpected'] as const;
 export type StopKind = (typeof STOP_KINDS)[number];
 /** Why one stored thing a clean-up follows stopped it (#114): kept with its id, so that it can be named and gone past. */
-export const UNREAD_WHYS = ['entry', 'text-missing', 'text-changed', 'text-unreadable', 'in-trash'] as const;
+export const UNREAD_WHYS = ['text-missing', 'text-changed', 'text-unreadable', 'in-trash'] as const;
 export type Unread = { id: string; why: (typeof UNREAD_WHYS)[number] };
 /** How many of them a stop keeps: enough to show, not the store's contents. */
 export const UNREAD_MAX = 20;
@@ -449,9 +449,10 @@ export async function restoreThroughParts(
     const next: string[] = [];
     for (const id of reading) {
       try {
-        if ((await isPart(files, dirs, id)) !== true) continue;
-        const got = await recall(files, dirs, id);
-        if ('error' in got) continue;
+        // As the collection reads it: a part, or a text whose entry does not read (ADR 0033).
+        if ((await isPart(files, dirs, id)) === false) continue;
+        const got = await storedText(files, dirs, id);
+        if (!got.ok) continue;
         for (const inner of got.text.match(IN_TEXT) ?? []) {
           if (named.has(inner)) continue;
           named.add(inner);
