@@ -59,3 +59,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0025](0025-everything-that-may-leave-does.md): why `targetPercent` is 1 by
   default, so that everything that may leave does, and the rule that decided
   it before it was measured.
+- [0028](0028-a-key-in-the-environment-waits-for-a-choice.md): why a key in
+  the environment is used only where the plugin's settings choose the
+  provider, so that one kept for another tool sends nothing.

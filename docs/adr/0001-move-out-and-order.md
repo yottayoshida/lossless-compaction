@@ -90,7 +90,8 @@ Settled by running on a real Claude Code (2.1.284 and 2.1.285, 2026-09-29 and
     measured not to be reachable from a repository's `.claude/settings.json`
     (2.1.285), so a key set there stays the key; and with the key from the
     settings, the Cloudflare account id is not read from the environment
-    either.
+    either. (Amended by ADR 0028: a key in the environment is used only
+    where the plugin's settings choose the provider.)
 13. Sizes are measured against the point where Claude Code compacts on its
     own, which it reports, and against the model's window only when
     auto-compaction is off. The count of tokens in use includes the system

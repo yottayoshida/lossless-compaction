@@ -156,6 +156,10 @@ export const filled = (value: unknown): string | undefined =>
  * it was touched, so the account id is what tells the two apart (ADR 0009).
  * "In the settings" is "not blank", not "well formed": a malformed id read as
  * absent would send a Cloudflare key to TypeSafe.
+ *
+ * A key in the environment is used only where the settings chose the provider:
+ * `provider` set to one, or an account id entered. Left on `auto` with none, a
+ * key exported for another tool would start sending excerpts on its own (#103).
  */
 export function providerFrom(settings: Settings, env: Environment): Provider | null | { error: string } {
   const chosen = filled(settings.provider) ?? 'auto';
@@ -167,7 +171,8 @@ export function providerFrom(settings: Settings, env: Environment): Provider | n
   const entered = typeof id === 'string' ? filled(id) : id === undefined || id === null ? undefined : '';
   const kind = chosen === 'auto' ? (entered === undefined ? 'typesafe' : 'cloudflare') : chosen;
   const set = filled(settings.apiKey);
-  const key = set ?? filled(kind === 'typesafe' ? env.TYPESAFE_API_KEY : env.CLOUDFLARE_API_TOKEN);
+  const chosenHere = chosen !== 'auto' || entered !== undefined;
+  const key = set ?? (chosenHere ? filled(kind === 'typesafe' ? env.TYPESAFE_API_KEY : env.CLOUDFLARE_API_TOKEN) : undefined);
   if (key === undefined) return null;
   if (!/^[\x21-\x7e]+$/.test(key)) return { error: 'the API key holds a character a key cannot have' };
   if (kind === 'typesafe') {

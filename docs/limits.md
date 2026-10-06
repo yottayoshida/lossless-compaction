@@ -697,12 +697,19 @@ and none chooses TypeSafe. When the account id is not 32 hexadecimal
 characters, or `provider` is `typesafe` while an account id is entered,
 nothing is sent: with a key for the provider chosen, `find` is not
 registered and a line at the start of the session says why; with none,
-nothing is said, as for any setup without a key. With no key set there, the key of the
+nothing is said, as for any setup without a key. A key in the environment
+(`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only where the
+plugin's own settings choose the provider: `provider` set to `typesafe` or
+`cloudflare`, or a Cloudflare account id entered. Left on `auto` with no
+account id, nothing is sent without a key in the plugin's settings: a key
+exported for another tool does not start `find`, and nothing is said of it.
+Where the settings choose the provider and hold no key, the key of the
 provider chosen is read from the environment, unless a repository's settings
-set it: `TYPESAFE_API_KEY`, or `CLOUDFLARE_API_TOKEN` once Cloudflare is
-chosen, by the account id or by `provider` set to `cloudflare`; only the
-latter also reads `CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone
-choose nothing ([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md)).
+set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
+`CLOUDFLARE_API_TOKEN` once Cloudflare is chosen, by the account id or by
+`provider` set to `cloudflare`; only the latter also reads
+`CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone choose nothing
+([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md), [ADR 0028](adr/0028-a-key-in-the-environment-waits-for-a-choice.md)).
 
 Coming from `jev-lossless-compaction` (0.3.0 and before), an installed copy
 does not follow the rename: see [moving from the old
@@ -938,7 +945,9 @@ value it would use that one of them holds stops it:
   moved out and the built-in compaction runs; `recall` and `find` read
   nothing.
 - `TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID`,
-  when the plugin's settings hold no key; `apiKey`, `provider`,
+  when the key would be read from the environment: the plugin's settings
+  hold no key and choose the provider ([Setting it up](#setting-it-up));
+  `apiKey`, `provider`,
   `cloudflareAccountId` or `model` under its `pluginConfigs`; or a proxy or
   certificate variable (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` in either
   case, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`,

@@ -282,8 +282,8 @@ export async function find(input: FindInput): Promise<string> {
   if (input.provider === null) {
     return (
       `[${PLUGIN}] find needs a Jev key: set apiKey in the plugin's settings, and cloudflareAccountId as well for ` +
-      'Cloudflare, or have TYPESAFE_API_KEY in the environment (CLOUDFLARE_API_TOKEN once Cloudflare is chosen). ' +
-      'recall reads a result by its id without one.'
+      'Cloudflare. TYPESAFE_API_KEY in the environment is used once provider is set to typesafe there, and ' +
+      'CLOUDFLARE_API_TOKEN once Cloudflare is chosen. recall reads a result by its id without one.'
     );
   }
   const provider = input.provider;

@@ -22,7 +22,7 @@ const FILE: Record<RepoSource, string> = { project: '.claude/settings.json', loc
 
 /** The variables the default place is built from. */
 export const PLACE_VARIABLES = ['HOME', 'USERPROFILE', 'CLAUDE_CONFIG_DIR'] as const;
-/** The variables a key and a Cloudflare account are read from, when the plugin's settings hold no key. */
+/** The variables a key and a Cloudflare account are read from, when the plugin's settings hold no key and choose the provider (ask.ts). */
 export const KEY_VARIABLES = ['TYPESAFE_API_KEY', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const;
 /** The variables that change where a request goes, or which certificate it trusts, while the process runs. */
 export const ROUTE_VARIABLES = [
@@ -113,7 +113,8 @@ export function placeTaints(taints: readonly Taint[], options: Seen['options']):
 /** The repository's values that would decide where `find` sends, or with what key. */
 export function sendTaints(taints: readonly Taint[], options: Seen['options']): Taint[] {
   const found = [...has(taints, 'option', SEND_OPTIONS), ...has(taints, 'env', ROUTE_VARIABLES)];
-  // A key of your own is sent with an account of your own; the key variables then decide nothing (ask.ts).
+  // A key of your own is sent with an account of your own; the key variables then decide nothing (ask.ts). Without one, they
+  // count only once ask.ts found a key in them, which takes the settings to choose the provider: this is asked only then.
   if (filled(options['apiKey']) === undefined) found.push(...has(taints, 'env', KEY_VARIABLES));
   return found;
 }
