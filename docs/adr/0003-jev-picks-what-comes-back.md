@@ -53,7 +53,9 @@ to 255 named options with a probability for each and a confidence, and
    tool list stays as it is. Called with a question in words, `find` puts one
    `choice` question to Jev whose options are the results moved out of this
    conversation, each described by its call, its size and a digest of its
-   text, and returns the text of the one Jev chooses.
+   text, and returns the text of the one Jev chooses. (Amended by ADR 0032:
+   without a key `find` is registered all the same; it looks on the machine,
+   sends nothing, and gives the agent the results to choose from.)
 3. The options are the tickets in the conversation at hand, not everything
    the store holds. A subagent's call is answered at once with "nothing to
    find": this plugin never moves a subagent's results out (ADR 0001). (Since
@@ -133,6 +135,8 @@ to 255 named options with a probability for each and a confidence, and
   `find` that a quoted phrase does not settle, the question and a digest of
   every result moved out of the conversation. The README says so at the top.
 - Without a key there is no `find`; `recall` needs no key and is unchanged.
+  (Amended by ADR 0032: without a key `find` looks on the machine and sends
+  nothing.)
 - `find` adds one round of requests per call, and a last round when there
   were several.
 - A result that was read twice into the conversation gives two options that

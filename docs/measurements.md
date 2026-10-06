@@ -331,7 +331,7 @@ counting was replaced:
 
 ### `find`
 
-`find` needs a key and was compared apart, with Haiku 4.5 and Jev on
+`find` needed a key then (before #110) and was compared apart, with Haiku 4.5 and Jev on
 Cloudflare Workers AI. Its questions ask which earlier result something was
 in, in two ways: by a value the result holds (a number, a checksum), or by
 what the result was, in other words than the call that made it or its text.
@@ -831,7 +831,7 @@ holding every value, and on those three questions `find` said none.
 
 **With an agent in between** (Haiku 4.5 with a key, three runs,
 `bench/results/2026-10-03-values/`). The arm with no key was not run again:
-it has no `find`, and nothing it meets changed. A unit names the code it was
+it had no `find` then, and nothing it meets changed. A unit names the code it was
 measured with by `plugin`, the hash of the tree of that code; its
 `pluginCommit` is a commit made to measure, which was not pushed.
 
@@ -927,7 +927,7 @@ right, and is what was built. A line fell one short of it on both, 6 and 6.
 - With the tools listed the agent searched for no tool: none of the 138
   questions had a call to Claude Code's tool search, where 85 of the
   baseline's 138 had one.
-- With no key there is no `find`, and listing `recall` did not make the
+- With no key there was no `find` then, and listing `recall` did not make the
   agent fetch more: by meaning it called for 4 questions where the baseline
   called for 8, and was right on 3 where the baseline was on 4, which is no
   further apart than one set of three runs lies from the next. Its answers

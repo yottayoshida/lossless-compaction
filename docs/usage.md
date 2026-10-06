@@ -76,9 +76,9 @@ conversation says, and its id; where the id given is itself written in the
 conversation, with the parts alone
 ([what is not taken](limits.md#what-an-agent-does-not-fetch)).
 
-**`find`.** Optional. Asked in words, it returns the moved-out result of this
-conversation that the question is about, or lists the likeliest few when Jev
-is not sure which. Asked in other words which of thirteen moved-out results
+**`find`.** With a key for Jev, asked in words, it returns the moved-out
+result of this conversation that the question is about, or lists the
+likeliest few when Jev is not sure which. Asked in other words which of thirteen moved-out results
 reported a refusal on an unsupported kernel call, in a session where the
 calls said nothing of what they returned, the agent called `find` and got it
 back:
@@ -87,7 +87,20 @@ back:
 [found] Bash result, 2271 bytes; id 968e6cdd8a21069b3907388db507c061ce28cac950b7a63eae5a0967adf39edc; probability 0.99
 ```
 
-It needs a Jev key: set it with
+With no key, `find` looks through what was moved out on this machine and
+sends nothing (#110, ADR 0032). A phrase of twelve characters or more in
+double quotes is looked for as written, and the one result that holds it
+comes back as it was; several are listed. A number, a checksum or a code the
+question names is looked for a line at a time, and the results with such a
+line are listed with it. A question in words lists every result by its call
+and its first line, those written in the conversation newest first and
+then those in kept parts, for the agent to choose from: nothing is
+ranked, so a result whose first line says nothing is no easier to pick than
+by reading it with `recall`. Each answer ends saying Jev was not asked. A
+key set during a session is used from the next call, though the tool's
+description stays as it was when the session started.
+
+To have Jev choose, set a key with
 `/plugin configure lossless-compaction@lossless-compaction` inside Claude
 Code. For Jev on Cloudflare Workers AI, enter the account id there as well:
 with `provider` left on `auto`, an account id entered there sends the key to
@@ -127,4 +140,5 @@ Jev chooses among them, with "none of these" among the choices; a phrase of
 twelve characters or more in double quotes is looked for as written first.
 Shapes of secrets are blanked before anything is sent, which is a courtesy
 and not a guarantee. A result that holds an image is not offered, and nothing
-of it is sent. Without a key there is no `find`, and nothing is sent.
+of it is sent. Without a key `find` looks on this machine, and nothing is
+sent.

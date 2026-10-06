@@ -8,11 +8,11 @@ Nothing has been graded by a model yet: the answers a program cannot grade are c
 
 ### The questions `find` is for, asked of an agent
 
-| Trace | Model | Run | Tools | Compaction | Right | Answered by another model after a refusal | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
+| Trace | Model | Run | Key | Compaction | Right | Answered by another model after a refusal | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| opaque | claude-sonnet-5-5 | 1 | `recall` only | moved | 9/10 | 1 | 0 | 103 | 0 | 219.6 | 1359167 | 3.2049 |
-| opaque | claude-sonnet-5-5 | 2 | `recall` only | moved | 9/10 | 1 | 0 | 113 | 1 | 231.3 | 1415453 | 1.9324 |
-| opaque | claude-sonnet-5-5 | 3 | `recall` only | moved | 9/10 | 1 | 0 | 97 | 1 | 210.6 | 1337419 | 1.5936 |
+| opaque | claude-sonnet-5-5 | 1 | no key | moved | 9/10 | 1 | 0 | 103 | 0 | 219.6 | 1359167 | 3.2049 |
+| opaque | claude-sonnet-5-5 | 2 | no key | moved | 9/10 | 1 | 0 | 113 | 1 | 231.3 | 1415453 | 1.9324 |
+| opaque | claude-sonnet-5-5 | 3 | no key | moved | 9/10 | 1 | 0 | 97 | 1 | 210.6 | 1337419 | 1.5936 |
 
 ### Where the answer went, and how far the agent got in fetching it
 

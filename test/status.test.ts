@@ -14,8 +14,8 @@ const NONE = { TYPESAFE_API_KEY: false, CLOUDFLARE_API_TOKEN: false };
 const base = (over: Partial<StatusInput> = {}): StatusInput => ({
   claudeCode: '2.1.291',
   options: { provider: 'auto', model: 'jev-latest', targetPercent: 1, keepTokens: 20_000, minChars: 2000, maxAfterPercent: 75 },
-  atStart: { registered: false, why: 'no key' },
-  now: { registered: false, why: 'no key' },
+  atStart: { registered: true, local: true, why: 'no key' },
+  now: { registered: true, local: true, why: 'no key' },
   keysIn: NONE,
   messages: [],
   ...over,
@@ -30,7 +30,7 @@ test('the version is the one the plugin is published under', () => {
 test('/lossless-status says it runs, its version and Claude Code\'s, and each setting in use, as Claude Code hands the defaults over', () => {
   const lines = statusReport(base()).split('\n');
   assert.equal(lines[0], `version ${VERSION} on Claude Code 2.1.291: running in this session`);
-  assert.equal(lines[1], 'find: not registered in this session: no key');
+  assert.equal(lines[1], 'find: registered in this session: looks on this machine and sends nothing (no key)');
   assert.equal(lines[2], 'settings in use: targetPercent 1 (the default), keepTokens 20000 (the default), minChars 2000 (the default), maxAfterPercent 75 (the default)');
   assert.equal(lines[3], "find's settings: provider auto, model the default, apiKey not set, cloudflareAccountId none");
   assert.equal(lines[4], 'storeDir: the default; /lossless-store says where results are kept and how much, or why none can be');
@@ -81,14 +81,14 @@ test('find: registered and with what key, or why not, and a key in the environme
   // Kept for another tool, left unused: said only here, with what would use it.
   assert.equal(
     said({ keysIn: { ...NONE, TYPESAFE_API_KEY: true } }),
-    "find: not registered in this session: no key; TYPESAFE_API_KEY is in the environment, and is used once provider is set to typesafe, unless a repository's settings put it there",
+    "find: registered in this session: looks on this machine and sends nothing (no key; TYPESAFE_API_KEY is in the environment, and is used once provider is set to typesafe, unless a repository's settings put it there)",
   );
-  assert.equal(said({ keysIn: { ...NONE, TYPESAFE_API_KEY: true }, options: { ...base().options, provider: 'cloudflare' } }), 'find: not registered in this session: no key');
+  assert.equal(said({ keysIn: { ...NONE, TYPESAFE_API_KEY: true }, options: { ...base().options, provider: 'cloudflare' } }), 'find: registered in this session: looks on this machine and sends nothing (no key)');
   assert.equal(said({ atStart: { registered: false, why: 'the cloudflare provider needs an account id of 32 hexadecimal characters' } }), 'find: not registered in this session: the cloudflare provider needs an account id of 32 hexadecimal characters');
   // The settings changed since the start: the tool stays as it was registered, and what they give now is said beside it.
   assert.equal(
-    said({ atStart: { registered: true, kind: 'typesafe' }, now: { registered: false, why: 'no key' }, options: { ...base().options, apiKey: 'k' } }),
-    'find: registered in this session: asks TypeSafe, key from your settings; with the settings now it would not be: no key',
+    said({ atStart: { registered: true, kind: 'typesafe' }, now: { registered: true, local: true, why: 'no key' }, options: { ...base().options, apiKey: 'k' } }),
+    'find: registered in this session: asks TypeSafe, key from your settings; with the settings now it would be registered: looks on this machine and sends nothing (no key)',
   );
   // Claude Code did not take the tool: the settings cannot tell whether it would now, so nothing is said of them.
   assert.equal(
@@ -103,8 +103,9 @@ test('find: registered and with what key, or why not, and a key in the environme
 });
 
 test('the lookup for find is told as registration would take it', () => {
-  assert.deepEqual(findFrom(null), { registered: false, why: 'no key' });
-  assert.deepEqual(findFrom(undefined), { registered: false, why: 'looking for its key failed' });
+  // With no key, or where looking for it failed, find is registered to look on this machine (#110).
+  assert.deepEqual(findFrom(null), { registered: true, local: true, why: 'no key' });
+  assert.deepEqual(findFrom(undefined), { registered: true, local: true, why: 'looking for its key failed' });
   assert.deepEqual(findFrom({ error: 'no' }), { registered: false, why: 'no' });
   // The key itself is not kept: only the kind of the provider.
   assert.deepEqual(findFrom({ kind: 'typesafe', key: 'k', model: 'jev-latest' }), { registered: true, kind: 'typesafe' });

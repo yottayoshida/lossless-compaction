@@ -164,7 +164,7 @@ How the questions went, all runs together:
 
 ### The questions `find` is for, asked of an agent
 
-| Trace | Model | Run | Tools | Compaction | Right | Answered by another model after a refusal | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
+| Trace | Model | Run | Key | Compaction | Right | Answered by another model after a refusal | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| opaque | claude-opus-5-5 | 1 | `recall` only | moved | 4/10 | 3 | 0 | 63 | 0 | 167.0 | 892114 | 2.5209 |
-| opaque | claude-opus-5-5 | 1 | `recall` and `find` | moved | 8/10 | 2 | 8 | 0 | 0 | 97.6 | 670304 | 0.5197 |
+| opaque | claude-opus-5-5 | 1 | no key | moved | 4/10 | 3 | 0 | 63 | 0 | 167.0 | 892114 | 2.5209 |
+| opaque | claude-opus-5-5 | 1 | with a key | moved | 8/10 | 2 | 8 | 0 | 0 | 97.6 | 670304 | 0.5197 |

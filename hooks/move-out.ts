@@ -680,27 +680,33 @@ type WithTools = { tool: { register: (tool: { name: string; description: string;
 let findAtStart: Find | undefined;
 
 /**
- * Registers `find` when there is a key it may use, then `recall`, whose
- * description names `find` only if `find` was registered. `provider` is
- * undefined when looking for the key failed: that was said where it failed.
- * Returns what became of `find`.
+ * Registers `find`, with Jev where there is a key it may use and looking on this machine where there is none or looking
+ * for one failed (#110), then `recall`, whose description names `find` only if `find` was registered. `provider` is
+ * undefined when looking for the key failed: that was said where it failed. Returns what became of `find`.
  */
 export async function registerTools($: WithTools & WithUi, provider: Provider | null | { error: string } | undefined): Promise<Find> {
   let found = findFrom(provider);
   let withFind = false;
-  // Only with a key: without one the tool would have nothing to answer with.
+  // With a key Jev chooses; with none, or where looking for it failed, what can be is looked for here and nothing is
+  // sent (#110). Settings that name a key that cannot be used register nothing: that is said, to be set right.
+  const withKey = provider !== undefined && provider !== null && !('error' in provider);
   if (provider !== undefined && provider !== null && 'error' in provider) {
     say($, `the find tool is not registered: ${provider.error}`);
-  } else if (provider !== undefined && provider !== null) {
+  } else {
     try {
       await $.tool.register({
         name: FIND,
-        description:
-          `Finds, among the tool results that ${PLUGIN} moved out of this conversation and the parts of it that were ` +
-          'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about; a phrase of twelve characters ' +
-          'or more in double quotes is looked for as written. A number, a checksum or a code the question names, one of them with three digits or more, is looked for as written, letter case too, in the whole of each result, a line at a time, and Jev is told when one result alone holds it. ' +
-          'When Jev is not sure which result it is, the likeliest few ' +
-          'are listed with the ids to recall them by; when none of them seems to be about it, it says so.',
+        description: withKey
+          ? `Finds, among the tool results that ${PLUGIN} moved out of this conversation and the parts of it that were ` +
+            'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about; a phrase of twelve characters ' +
+            'or more in double quotes is looked for as written. A number, a checksum or a code the question names, one of them with three digits or more, is looked for as written, letter case too, in the whole of each result, a line at a time, and Jev is told when one result alone holds it. ' +
+            'When Jev is not sure which result it is, the likeliest few ' +
+            'are listed with the ids to recall them by; when none of them seems to be about it, it says so.'
+          : `Looks, on this machine, through the tool results that ${PLUGIN} moved out of this conversation and the parts of it ` +
+            'that were kept, and sends nothing. A phrase of twelve characters or more in double quotes is looked for as written, and the one result ' +
+            'that holds it is returned unchanged. A number, a checksum or a code the question names, one of them with three digits or more, is looked ' +
+            'for a line at a time, and the results with such a line are listed with it. A question in words lists every result by its call and first ' +
+            'line, those written in the conversation newest first, for you to choose from and recall by its id: nothing is ranked.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -751,7 +757,8 @@ export const register: Register = (on, options) => {
     try {
       provider = await providerOf($, options);
     } catch (error) {
-      say($, `the find tool could not be registered: ${error instanceof Error ? error.message : String(error)}`);
+      // find is registered all the same, with no key (#110): what failed is said as that.
+      say($, `looking for the find tool's key failed, so it looks on this machine and sends nothing: ${error instanceof Error ? error.message : String(error)}`);
     }
     findAtStart = await registerTools($, provider);
     // A command, not a tool: what it says is shown to you, and the agent is not offered it (ADR 0016).
@@ -886,7 +893,16 @@ export const register: Register = (on, options) => {
     try {
       const store = await storeOf($, options);
       if (typeof store === 'string') return { result: `[${PLUGIN}] Nothing is read: ${store}.` };
-      const provider = await providerOf($, options);
+      // Where looking for the key fails, it is looked for here with none: nothing is sent (#110).
+      let provider: Awaited<ReturnType<typeof providerOf>>;
+      try {
+        provider = await providerOf($, options);
+      } catch {
+        provider = null;
+      }
+      // Registered at the start as sending nothing, it sends nothing, whatever key turns up, until the plugin's settings
+      // change: that loads the hook again with no record of the start, and a key set there is used, as it was set to be.
+      if (findAtStart?.registered === true && 'local' in findAtStart) provider = null;
       if (provider !== null && 'error' in provider) {
         return { result: `[${PLUGIN}] find cannot ask Jev: ${provider.error}. recall reads a result by its id.` };
       }

@@ -257,8 +257,10 @@ export function chains(units: readonly Unit[], grades: Grades | null): string {
 
 /**
  * The units that asked the questions `find` is for, an agent in between: the
- * plugin's arm with `recall` alone (`default`) and with `find` as well. Right
- * is decided by the program: the line asked for is in the answer.
+ * plugin's arm with no key (`default`), which had `recall` alone before #110
+ * and has `find` looking on the machine since, and with a key (`find`), or the
+ * checkouts named. Right is decided by the program: the line asked for is in
+ * the answer.
  */
 export function finds(units: readonly Unit[]): string {
   const asked = units.filter((unit) => unit.mode === 'find');
@@ -270,7 +272,8 @@ export function finds(units: readonly Unit[]): string {
       unit.trace,
       unit.model,
       String(unit.run),
-      unit.variant === 'default' ? '`recall` only' : '`recall` and `find`',
+      // Since #110 `find` is there with no key as well: what tells the variants apart is the key, else the checkout named.
+      unit.variant === 'default' ? 'no key' : unit.variant === 'find' ? 'with a key' : unit.variant,
       unit.compaction.line?.outcome ?? '—',
       `${unit.questions.filter((one) => one.verdict === 'correct').length}/${unit.questions.length}`,
       ...(fellBack ? [String(unit.questions.filter((one) => one.fellBackTo !== undefined).length)] : []),
@@ -282,7 +285,7 @@ export function finds(units: readonly Unit[]): string {
       sum(unit.questions.map((one) => one.own.costUSD)).toFixed(4),
     ]);
   return table(
-    ['Trace', 'Model', 'Run', 'Tools', 'Compaction', 'Right', ...(fellBack ? ['Answered by another model after a refusal'] : []), '`find` calls', '`recall` calls', 'Files read again', 'Seconds', 'Input tokens', 'Cost, USD'],
+    ['Trace', 'Model', 'Run', 'Key', 'Compaction', 'Right', ...(fellBack ? ['Answered by another model after a refusal'] : []), '`find` calls', '`recall` calls', 'Files read again', 'Seconds', 'Input tokens', 'Cost, USD'],
     rows,
   );
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { digest } from '../src/ask.ts';
-import { HEAD_CHARS, MIN_DIGITS, NAMED_ON_REFUSAL, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, lineHolds, mayStandFor, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
+import { HEAD_CHARS, LISTED_CHARS, MIN_DIGITS, NAMED_ON_REFUSAL, NO_KEY, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, lineHolds, mayStandFor, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
 import { FIND_TOOL, RECALL_TOOL, moveInputOut, moveOut, partTicketText, ticketText } from '../src/store.ts';
 import type { Http, Message } from '../src/types.ts';
 import { MemoryFiles, TOLD, conversation, ok, output, questionsOf, recordingHttp, trusting, type Call, type Sent } from './helpers.ts';
@@ -318,13 +318,92 @@ test('nothing moved out, a subagent, no key, no question: each is answered witho
   // A subagent's call is told where what a summary replaced went: kept in parts, read back by id (ADR 0026).
   const toSubagent = await find(input(files, messages, 'Which?', refuse, { agentId: 'agent-1' }));
   assert.ok(toSubagent.includes("find does not look in a subagent's conversation") && toSubagent.includes('recall reads one by its id'), toSubagent);
-  assert.ok((await find(input(files, messages, 'Which?', refuse, { provider: null }))).includes('find needs a Jev key'));
+  // With no key it looks on this machine, and says so (#110).
+  const noKey = await find(input(files, messages, 'Which?', refuse, { provider: null }));
+  assert.ok(noKey.endsWith(`\n${NO_KEY}`) && !noKey.includes('needs a Jev key'), noKey);
   assert.ok((await find(input(files, messages, undefined))).includes('Ask in words'));
   assert.ok((await find(input(files, messages, '   '))).includes('Ask in words'));
   // A subagent's call reads nothing: the store is not even looked at.
   const looked = files.looked.length;
   await find(input(files, messages, 'Which?', refuse, { agentId: 'agent-1' }));
   assert.equal(files.looked.length, looked);
+});
+
+test('with no key, find looks on this machine and sends nothing: a quoted phrase is found, values are listed with their line, and a question in words lists every result newest first, ranked by nothing (#110)', async () => {
+  const files = new MemoryFiles();
+  // The oldest holds every word of the question in words, and is about none of it: a ranking by words would put it first.
+  const oldest: Call = { tool: 'Bash', input: { command: 'show oldest' }, text: `The holiday rota for the support desk\n${'when does the team meet each week '.repeat(40)}\n` };
+  const build: Call = { tool: 'Bash', input: { command: 'show build' }, text: `Build 4821 finished\nstep 1 ok\nchecksum sha256 ${'d'.repeat(64)} of build 4821\n` };
+  // As `Read` returns lines: each numbered, and no line break after the last.
+  const notes: Call = { tool: 'Read', input: { file_path: 'notes.md' }, text: ['1\tMeeting notes', '2\tThe team meets on Thursday at ten.', ...Array.from({ length: 30 }, (_, i) => `${i + 3}\tsomething else`)].join('\n') };
+  const messages = await compacted(files, [oldest, build, notes]);
+  const ids = [...new Set(messages.flatMap((message) => (message.toolResults ?? []).map((result) => /id ([0-9a-f]{64})/.exec(result.text)?.[1] ?? '')))].filter(Boolean);
+  assert.equal(ids.length, 3);
+  const [oldestId, buildId, notesId] = ids as [string, string, string];
+  const ask = async (question: string) => {
+    const { http, sent } = recordingHttp(() => ok({}));
+    const answer = await find(input(files, messages, question, http, { provider: null }));
+    assert.equal(sent.length, 0, 'nothing sent');
+    assert.ok(answer.endsWith(`\n${NO_KEY}`), answer);
+    return answer;
+  };
+
+  // A quoted phrase one result holds: that result, as it was.
+  const quoted = await ask('Which result says "The team meets on Thursday"?');
+  assert.ok(quoted.startsWith('[found] Read result') && quoted.includes(`id ${notesId}`) && quoted.includes('The team meets on Thursday at ten.'), quoted);
+
+  // Values: the results with a line holding them, with that line, and none of them given as the answer.
+  const valued = await ask('Which result has the checksum of build 4821?');
+  assert.ok(valued.startsWith('[not sure] One moved-out result has a line holding "4821"'), valued);
+  assert.ok(valued.includes(`; the line: Build 4821 finished; recall with ${RECALL_TOOL} id ${buildId}`), valued);
+
+  // In words: every result, newest first, by its call and first line; the line numbers of `Read` left out.
+  const words = await ask('When does the team meet each week?');
+  assert.ok(words.startsWith('[not sure] The moved-out results, by their call and first line, those written in the conversation newest first'), words);
+  const at = (id: string) => words.indexOf(id);
+  assert.ok(at(notesId) > 0 && at(notesId) < at(buildId) && at(buildId) < at(oldestId), words);
+  assert.ok(words.includes(': Meeting notes; recall with') && words.includes(': Build 4821 finished;') && words.includes(': The holiday rota for the support desk;'), words);
+
+  // A quoted phrase no result holds: said, with every result to choose from, and not said to be certain.
+  const none = await ask('Which result says "nothing of the kind anywhere"?');
+  assert.ok(none.startsWith('[not found] No moved-out result read here holds the quoted phrase as written. It may still be in the conversation'), none);
+  assert.ok(none.includes(`id ${oldestId}`) && none.includes(`id ${notesId}`), none);
+});
+
+test('with no key, the results with a line holding the values are all counted, the newest listed first up to the bound, and the rest said; a quoted phrase that misses leaves them listed (#110)', async () => {
+  const files = new MemoryFiles();
+  const many: Call[] = Array.from({ length: 12 }, (_, at) => ({ tool: 'Bash', input: { command: `show r${at}` }, text: `run r${at}\nbuild 4821 step ${at}\n` }));
+  const messages = await compacted(files, many);
+  const ids = messages.flatMap((message) => (message.toolResults ?? []).map((result) => /id ([0-9a-f]{64})/.exec(result.text)?.[1] ?? ''));
+  const answer = await find(input(files, messages, 'Which run of build 4821 failed?', refuse, { provider: null }));
+  assert.ok(answer.startsWith('[not sure] 12 moved-out results have a line holding "4821"'), answer);
+  assert.equal(answer.split('; the line: build 4821 step').length - 1, VALUED_LISTED);
+  assert.ok(answer.includes(`id ${ids[11]}`) && !answer.includes(`id ${ids[0]}`), 'the newest first');
+  assert.match(answer, /\n- and 4 more: quote a phrase or name a value to narrow\n/);
+  // A quoted phrase no result holds, beside a value some do: said, and the values' results listed with their line.
+  const missed = await find(input(files, messages, 'Which run of build 4821 said "the deploy finished cleanly"?', refuse, { provider: null }));
+  assert.ok(missed.startsWith('[not found] No moved-out result read here holds the quoted phrase as written.'), missed);
+  assert.ok(missed.includes('\n[not sure] 12 moved-out results have a line holding "4821"'), missed);
+});
+
+test('with no key, what find lists of a result is blanked as what is digested for Jev is (#110)', async () => {
+  const files = new MemoryFiles();
+  const secret: Call = { tool: 'Bash', input: { command: 'cat .env' }, text: `password=hunter2-not-real\nbuild 4821\n` };
+  const messages = await compacted(files, [secret]);
+  for (const question of ['Which file held the settings?', 'Which one names build 4821 password=hunter2-not-real?']) {
+    const answer = await find(input(files, messages, question, refuse, { provider: null }));
+    assert.ok(!answer.includes('hunter2-not-real'), answer);
+  }
+});
+
+test('with no key, what find lists stays within its bound, and says how many more there are (#110)', async () => {
+  const files = new MemoryFiles();
+  const many = Array.from({ length: 120 }, (_, at) => call(`r${at}`, 30));
+  const messages = await compacted(files, many);
+  const answer = await find(input(files, messages, 'Which one was about the deploy?', refuse, { provider: null }));
+  const list = answer.slice(0, answer.indexOf(`\n${NO_KEY}`));
+  assert.ok(list.length <= LISTED_CHARS, `${list.length}`);
+  assert.match(list, /\n- and \d+ more: quote a phrase or name a value to narrow$/);
 });
 
 test('a large stored text is digested from its head only, cut at a line, and a key that begins there is blanked to the end', async () => {

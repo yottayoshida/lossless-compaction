@@ -1218,8 +1218,8 @@ test('the questions find is for, asked of an agent, are tabled per unit: with re
   const text = finds([found, asked('default', false, ['ToolSearch', 'mcp__lossless-compaction__recall']), unitOf('plugin', 1, [])]);
   const rows = text.split('\n').slice(2);
   assert.equal(rows.length, 2, 'the units that asked the trace\'s own questions are not in it');
-  assert.match(rows[0] ?? '', /\| results \| haiku \| 1 \| `recall` only \| — \| 0\/2 \| 0 \| 2 \| 0 \|/);
-  assert.match(rows[1] ?? '', /\| results \| haiku \| 1 \| `recall` and `find` \| — \| 1\/2 \| 2 \| 0 \| 0 \|/);
+  assert.match(rows[0] ?? '', /\| results \| haiku \| 1 \| no key \| — \| 0\/2 \| 0 \| 2 \| 0 \|/);
+  assert.match(rows[1] ?? '', /\| results \| haiku \| 1 \| with a key \| — \| 1\/2 \| 2 \| 0 \| 0 \|/);
 });
 
 // --- what was published ---
