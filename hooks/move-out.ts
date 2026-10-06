@@ -16,7 +16,7 @@ import { beforeTrying, configFrom, nextStep, settingNotes, type Step } from '../
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
 import { guarded, longestIn, middleDropped, middleRefusal, placedTicketIds, refused } from '../src/guard.ts';
-import { keepThenSummarize, messagesFromApi, namedThroughParts } from '../src/keep.ts';
+import { keepThenSummarize, messagesFromApi, namedThroughParts, type ToKeep } from '../src/keep.ts';
 import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
@@ -83,16 +83,17 @@ type WithSettings = { settings: { read: (args: { source: 'project' | 'local' | '
 type WithSession = {
   session: {
     id: () => Promise<string>;
-    messages: (args?: { as: 'api' }) => Promise<unknown>;
+    messages: (args?: { as?: 'api'; agentId?: string }) => Promise<unknown>;
     usage: (args: { breakdown: 'summary' }) => Promise<{ context?: (Context & { tokens?: unknown }) | undefined }>;
   };
 };
 type Compacting = { messages: readonly unknown[]; instructions?: string | undefined; trigger?: string | undefined };
 
-function say($: WithUi, text: string): void {
+/** A line in the transcript and, unless `toast` is false, a notice over it. */
+function say($: WithUi, text: string, toast = true): void {
   try {
     $.ui.log(`${PLUGIN}: ${text}`);
-    $.ui.toast(`${PLUGIN}: ${text}`);
+    if (toast) $.ui.toast(`${PLUGIN}: ${text}`);
   } catch {
     // A surface that cannot show it must not change what the plugin does.
   }
@@ -140,9 +141,9 @@ async function markRunning($: WithEnvSet & WithProcess): Promise<void> {
 }
 
 /** The directory written to, made or closed to its owner alone, else why not; the others read from, closed where they can be. */
-async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs): Promise<string | null> {
+async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs, sayIt: (text: string) => void = (text) => say($, text)): Promise<string | null> {
   const { refused, warnings } = await closeStore(filesOf($), runOf($), store);
-  for (const warning of warnings) say($, `a directory results are read from could not be made private: ${warning}`);
+  for (const warning of warnings) sayIt(`a directory results are read from could not be made private: ${warning}`);
   return refused === null ? null : `the place results are kept in cannot be made private: ${refused}`;
 }
 
@@ -487,6 +488,46 @@ async function summarizeKeeping(
 }
 
 /**
+ * A subagent's compaction: nothing of its conversation is moved out or rebuilt
+ * (ADR 0003, decision 3), but what the summary replaces is kept first and its
+ * tickets put after the summary, as for the main conversation where it cannot
+ * be rebuilt (ADR 0026). A write the disk refuses does not hold the summary
+ * back: no one can type `/compact` in a subagent once room is made. Said in
+ * the transcript alone, as subagents run side by side.
+ */
+async function summarizeSubagent(
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  e: SessionCompactInput,
+  next: (e: SessionCompactInput) => Promise<SessionCompactResult>,
+  options: PluginOptions,
+): Promise<SessionCompactResult> {
+  // Which subagent, by its id: subagents run side by side, and their lines stand in one transcript. Whole, as named
+  // subagents of a team share the start of theirs.
+  const sayIt = (text: string) => say($, `subagent ${String(e.agentId)}: ${text}`, false);
+  let keep: ToKeep;
+  try {
+    const store = await storeOf($, options);
+    // The reason said in full, as the main conversation says it.
+    const unsafe = typeof store === 'string' ? null : await privateOf($, store, sayIt);
+    if (typeof store === 'string') keep = { unkept: store };
+    else if (unsafe !== null) keep = { unkept: unsafe };
+    else {
+      // As before the main conversation's summary: the place its transcript is in is recorded, so that a clean-up
+      // reads what names the parts kept here, and what it names that a clean-up moved to the trash comes back first.
+      await noteRootOf($, store, options);
+      const messages = e.messages as readonly Message[];
+      await restoreFor($, store, ticketIds(messages), partIds(messages));
+      // Read with its blocks, so that an image is named where it stood; else as the hook was handed it.
+      const api = await $.session.messages({ as: 'api', agentId: e.agentId });
+      keep = { dir: store.write, read: store.read, messages: messagesFromApi(api) ?? messages };
+    }
+  } catch (error) {
+    keep = { unkept: error instanceof Error ? error.message : String(error) };
+  }
+  return keepThenSummarize(storingFilesOf($), keep, sayIt, () => next(e), (why) => ({ skip: why }), 'summarize');
+}
+
+/**
  * Keeps the messages from `after` up to `at` of what a compaction rebuilt, in
  * place of a summary, and says so (src/cut.ts keeps them). Null when a part
  * could not be written: nothing is cut then, and the caller hands over as
@@ -700,11 +741,15 @@ export const register: Register = (on, options) => {
     const id = (e as { id?: unknown }).id;
     const agentId = (e as { agentId?: string | undefined }).agentId;
     // An id copied wrong is taken for the one id written in the conversation that begins as it does
-    // (src/store.ts decides). The tickets are in the main conversation: a subagent's has none to match.
+    // (src/store.ts decides): the main conversation's, or the subagent's own, whose kept parts are named
+    // after its summary (ADR 0026). One the session cannot read is answered as holding none.
     const found = await recallMeant(
       (one) => recalled($, store, one),
       id,
-      async () => (agentId === undefined ? ((await $.session.messages()) as readonly Message[]) : []),
+      async () => {
+        const read = agentId === undefined ? await $.session.messages() : await $.session.messages({ agentId });
+        return Array.isArray(read) ? (read as readonly Message[]) : [];
+      },
     );
     if ('error' in found) return { result: `[${PLUGIN}] ${found.error}` };
     // An image goes back as an image: as text its bytes would fill the conversation.
@@ -719,7 +764,8 @@ export const register: Register = (on, options) => {
 
   // A file Claude Code shows again after a summary, which the plugin's line there names as changed
   // since it was read: a line with the id of that reading stands in its place, unless the person
-  // handed the file over (#54, src/changed.ts decides). A subagent's conversation has no such line.
+  // handed the file over (#54, src/changed.ts decides). A subagent's conversation is left as shown: its line after a
+  // summary (ADR 0026) says that the file shown again is the file as it is now, with the id of what was read.
   on('prompt.attachment', { type: 'file' }, async ($, e, next) => {
     const shown = await next(e);
     if (e.agentId !== undefined || shown.text === null) return shown;
@@ -823,7 +869,7 @@ export const register: Register = (on, options) => {
   on('session.compact', async ($, e, next) => {
     const before = beforeTrying({ trigger: e.trigger, agentId: e.agentId });
     if (before.step === 'skip') return { skip: before.why };
-    if (before.step === 'pass') return next(e);
+    if (before.step === 'subagent') return summarizeSubagent($, e, next, options);
 
     const tried = await attempt($, e, options);
     if ('why' in tried) {

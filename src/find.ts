@@ -277,7 +277,7 @@ function listed(entries: readonly [Entry, number][], none: number | undefined, v
 /** The text of the `find` tool's answer. Nothing is thrown. */
 export async function find(input: FindInput): Promise<string> {
   if (input.agentId !== undefined) {
-    return `[${PLUGIN}] Nothing to find: this plugin does not move a subagent's results out of its conversation.`;
+    return `[${PLUGIN}] Nothing to find: find does not look in a subagent's conversation. What a summary replaced there is kept in parts named after the summary; recall reads one by its id.`;
   }
   if (input.provider === null) {
     return (

@@ -56,7 +56,9 @@ to 255 named options with a probability for each and a confidence, and
    text, and returns the text of the one Jev chooses.
 3. The options are the tickets in the conversation at hand, not everything
    the store holds. A subagent's call is answered at once with "nothing to
-   find": this plugin never moves a subagent's results out (ADR 0001). Tickets
+   find": this plugin never moves a subagent's results out (ADR 0001). (Since
+   ADR 0026 what a summary replaces in a subagent's conversation is kept in
+   parts, named after it for `recall`; `find` still does not look there.) Tickets
    that stand for an earlier `find` or `recall` result — whichever of the
    three names the ticket carries — are left out: their text is a copy of a
    result already on the list.

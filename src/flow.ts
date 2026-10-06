@@ -2,8 +2,8 @@
 // tries to compact a conversation itself and what it falls back to. The hook
 // carries out the step returned here and decides nothing of its own.
 //
-// In order: a compaction computed ahead is skipped and a subagent's goes
-// straight to the built-in summary (`beforeTrying`). Then results are moved
+// In order: a compaction computed ahead is skipped, and a subagent's goes to
+// the built-in summary, its conversation kept first (`beforeTrying`). Then results are moved
 // out (`compact()`); where that could not be tried, the built-in summary runs
 // on the conversation as it was, kept first. Once tried (`nextStep`): a `/compact`
 // by hand with nothing to move out and room left is left undone (ADR 0015);
@@ -17,14 +17,15 @@ import { leftUndone, reportLine, tokensOf, undoneLine, type Config, type Count, 
 import { cutLine, decide } from './cut.ts';
 import { PLUGIN } from './store.ts';
 
-/** What the hook does before trying anything: skip the compaction, hand it straight on, or try. */
-export type Before = { step: 'skip'; why: string } | { step: 'pass' } | { step: 'try' };
+/** What the hook does before trying anything: skip the compaction, keep a subagent's and hand it to the summary, or try. */
+export type Before = { step: 'skip'; why: string } | { step: 'subagent' } | { step: 'try' };
 
 export function beforeTrying(e: { trigger: string | undefined; agentId: string | undefined }): Before {
   // A result computed ahead would be the built-in summary, paid for and then not used.
   if (e.trigger === 'precompute') return { step: 'skip', why: `${PLUGIN} computes nothing ahead of a compaction` };
-  // A subagent may have no tool to read a result back with.
-  if (e.agentId !== undefined) return { step: 'pass' };
+  // Nothing of a subagent's conversation is moved out or rebuilt: a subagent may have no tool to read a result back
+  // with (ADR 0003, decision 3). It is kept before the built-in summary, as the main one is (ADR 0026).
+  if (e.agentId !== undefined) return { step: 'subagent' };
   return { step: 'try' };
 }
 

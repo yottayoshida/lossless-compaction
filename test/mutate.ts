@@ -176,6 +176,14 @@ export const MUTATIONS: readonly Mutation[] = [
   },
   {
     promise: 'I6',
+    breaks: "a subagent's summary is held back where the disk refuses the write, and the subagent runs over its window",
+    file: 'src/keep.ts',
+    find: "      if ('failed' in done && done.failed === 'write-failed' && refused === 'summarize') {",
+    replace: '      if (false) {',
+    killedBy: "for a subagent's conversation a refused write is said and the summary runs all the same: no one can compact it again once room is made (ADR 0026)",
+  },
+  {
+    promise: 'I6',
     breaks: 'the oldest messages are cut though a part of them was not written',
     file: 'src/cut.ts',
     find: "  if ('failed' in done) return { failed: done.failed, ...(done.code === undefined ? {} : { code: done.code }) };\n",

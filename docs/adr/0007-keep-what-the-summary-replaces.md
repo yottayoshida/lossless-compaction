@@ -82,6 +82,7 @@ messages, and a message without Claude Code's handle may be added to them.
 - A compaction that goes to the built-in summary keeps what it summarizes,
   except images, documents, thinking, and messages older than the 4096
   Claude Code shows; subagents and an unset or unwritable store keep nothing.
+  (Amended by ADR 0026: a subagent's conversation is kept as well.)
 - Every such compaction stores the whole conversation, so the store grows
   faster; bounding it is #12.
 - The results a part holds are named in the part, not in any transcript, so

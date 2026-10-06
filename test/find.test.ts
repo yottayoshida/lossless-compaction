@@ -315,7 +315,9 @@ test('nothing moved out, a subagent, no key, no question: each is answered witho
   const messages = await compacted(files, [call('a')]);
 
   assert.ok((await find(input(files, kept, 'Which?'))).includes('No ticket of a moved-out result is in this conversation'));
-  assert.ok((await find(input(files, messages, 'Which?', refuse, { agentId: 'agent-1' }))).includes("subagent's results"));
+  // A subagent's call is told where what a summary replaced went: kept in parts, read back by id (ADR 0026).
+  const toSubagent = await find(input(files, messages, 'Which?', refuse, { agentId: 'agent-1' }));
+  assert.ok(toSubagent.includes("find does not look in a subagent's conversation") && toSubagent.includes('recall reads one by its id'), toSubagent);
   assert.ok((await find(input(files, messages, 'Which?', refuse, { provider: null }))).includes('find needs a Jev key'));
   assert.ok((await find(input(files, messages, undefined))).includes('Ask in words'));
   assert.ok((await find(input(files, messages, '   '))).includes('Ask in words'));

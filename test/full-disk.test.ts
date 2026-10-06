@@ -99,6 +99,24 @@ test('when a refused write leaves nothing kept, the summary does not run and the
   }
 });
 
+test('for a subagent\'s conversation a refused write is said and the summary runs all the same: no one can compact it again once room is made (ADR 0026)', async () => {
+  for (const [name, files, code] of [
+    ['a full disk', Object.assign(new DiskFiles(true), { full: () => true }), 'ENOSPC'],
+    ['a move that fails', new DiskFiles(true, false), 'the move into place failed'],
+  ] as const) {
+    let runs = 0;
+    const said: string[] = [];
+    const summary = { messages: [{ role: 'user', text: 'the summary', toolUses: [] }] };
+    const r = await keepThenSummarize(files, { dir: DIR, messages: conversation([{ tool: 'Bash', input: { command: 'x' }, text: output('x', 80) }]) }, (text) => said.push(text), async (): Promise<Compacted> => {
+      runs += 1;
+      return summary;
+    }, skipped, 'summarize');
+    assert.equal(runs, 1, name);
+    assert.equal(r, summary, `${name}: handed back as the built-in compaction made it, with no tickets after it`);
+    assert.deepEqual(said, [`nothing of the conversation is kept before the built-in summary: could not write: ${code}`], name);
+  }
+});
+
 test('a summary still runs when nothing could be kept for a reason other than a refused write, or there was nothing to keep', async () => {
   for (const [name, keep] of [
     ['no place', { unkept: 'there is no place to keep it in' }],

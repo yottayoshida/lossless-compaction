@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import type { Provider } from '../src/ask.ts';
 import { changedLine, shownAgainLine } from '../src/changed.ts';
 import { KEPT } from '../src/keep.ts';
+import { MemoryFiles, enospc } from './helpers.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
 import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
@@ -129,11 +130,11 @@ test("where results are kept and where find sends both go through the repository
   assert.ok(user !== undefined && both?.includes('repo = null;') && !user.includes('repo = null'), 'the user file is read on its own');
   assert.ok(hooks.includes('placeTaints(taints, options)'), 'the place');
   assert.ok(hooks.includes('sendTaints(taints, options)'), 'the sending');
-  // Each of recall, find, the compaction, the clean-up, /lossless-store and a message sent again from a rewind (ADR 0024)
-  // takes the place from storeOf and gives up on its reason.
+  // Each of recall, find, the compaction, a subagent's compaction (ADR 0026), the clean-up, /lossless-store and a message
+  // sent again from a rewind (ADR 0024) takes the place from storeOf and gives up on its reason.
   const givingUp = hooks.split("if (typeof store === 'string')").length - 1;
   // The compaction calls it `place` until the place is known to be private (it keeps the conversation after that).
-  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 6, 'six callers');
+  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 7, 'seven callers');
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes("const store = await storeOf($, options);\n    if (typeof store === 'string') return;"), 'the clean-up too');
 });
@@ -167,9 +168,11 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recallHook.includes('(one) => recalled($, store, one),') && !recallHook.includes('recall(filesOf('), 'recall, through recalled alone');
   const recalledAt = hooks.indexOf('async function recalled(');
   const recalled = hooks.slice(recalledAt, hooks.indexOf('\n}\n', recalledAt));
-  // The id that was meant is told by the main conversation: a subagent's call is handed an empty one, and refused as before (#54).
+  // The id that was meant is told by the conversation that calls: the main one, or the subagent's own, whose kept parts are
+  // named after its summary (ADR 0026); one the session cannot read holds none (#54).
   assert.ok(recallHook.includes('const found = await recallMeant('), 'recall, by the id that was meant');
-  assert.ok(recallHook.includes('async () => (agentId === undefined ? ((await $.session.messages()) as readonly Message[]) : []),'), 'recall, the main conversation alone');
+  assert.ok(recallHook.includes('const read = agentId === undefined ? await $.session.messages() : await $.session.messages({ agentId });'), "recall, the caller's conversation");
+  assert.ok(recallHook.includes('return Array.isArray(read) ? (read as readonly Message[]) : [];'), 'recall, a conversation refused holds none');
   assert.ok(recallHook.includes('const agentId = (e as { agentId?: string | undefined }).agentId;'), "recall, the subagent told by the event's own agentId");
   // What is put back takes along what the kept parts among it name, through earlier parts (#73).
   const restoreForAt = hooks.indexOf('async function restoreFor(');
@@ -178,9 +181,11 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recalledAt > 0 && putBack > 0 && putBack < recalled.lastIndexOf('recall(filesOf($), store.read, id)'), 'recall, put back first');
   const findHook = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
   assert.ok(findHook.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < findHook.indexOf('await find('), 'find, first');
-  const attempt = hooks.slice(hooks.indexOf('async function attempt('), hooks.indexOf('export const register'));
+  const attempt = hooks.slice(hooks.indexOf('async function attempt('), hooks.indexOf('async function summarizeKeeping('));
   assert.ok(attempt.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < attempt.indexOf('await compact('), 'the compaction, first');
-  assert.ok(attempt.indexOf('await privateOf($, store)') < attempt.indexOf('noteRootOf('), 'the place recorded once private');
+  // Both found, in that order: an index of -1 would pass a bare comparison without either being there.
+  const madePrivate = attempt.indexOf('await privateOf($, place)');
+  assert.ok(madePrivate > 0 && madePrivate < attempt.indexOf('noteRootOf('), 'the place recorded once private');
 });
 
 test('a compaction imports nothing that sends: compact.ts does not reach ask.ts', () => {
@@ -188,31 +193,34 @@ test('a compaction imports nothing that sends: compact.ts does not reach ask.ts'
   assert.ok(!compaction.includes('http'));
 });
 
-test('a compaction computed ahead is skipped and a subagent goes straight on, run through the hook itself, before anything of the host is touched', async () => {
+test('a compaction computed ahead is skipped, run through the hook itself, before anything of the host is touched', async () => {
   const found = await registered<undefined>('session.compact');
   assert.equal(found.length, 1);
   // Registered with no matcher: the handler stands where a matcher would.
   const compacting = found[0]?.matcher as (...args: unknown[]) => Promise<unknown>;
-  // Every noun of the host the handler reads is recorded. A throw would not do: what the hook tries catches what
-  // goes wrong and still ends in `next`, so a subagent's compaction that was tried would come back the same.
+  // Every noun of the host the handler reads is recorded.
   const touched: string[] = [];
   const $ = new Proxy({}, { get: (_, noun) => void touched.push(String(noun)) });
   const handed: unknown[] = [];
-  const passed = { passed: true };
-  const next = async (e: unknown) => (handed.push(e), passed);
+  const next = async (e: unknown) => (handed.push(e), { passed: true });
   assert.deepEqual(await compacting($, { trigger: 'precompute', messages: [] }, next), { skip: `${PLUGIN_NAME} computes nothing ahead of a compaction` });
-  const subagent = { trigger: 'auto', agentId: 'a1', messages: [] };
-  assert.equal(await compacting($, subagent, next), passed);
-  assert.equal(handed.length, 1);
-  assert.equal(handed[0], subagent, 'handed on as it came');
+  assert.deepEqual(handed, []);
   assert.deepEqual(touched, [], 'nothing of the host was read');
 });
 
-test('every way the main conversation reaches the built-in summary keeps it first; only a subagent goes straight on', () => {
+test("every way a conversation reaches the built-in summary keeps it first: a subagent's too, through its own step (ADR 0026)", () => {
   const handler = hooks.slice(hooks.indexOf("on('session.compact'"));
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
-  assert.deepEqual([...handler.matchAll(/next\(e\)/g)].length, 1, 'the subagent branch alone');
-  assert.ok(handler.includes("if (before.step === 'pass') return next(e);"), 'and it is the subagent branch');
+  assert.deepEqual([...handler.matchAll(/next\(e\)/g)].length, 0, 'nothing is handed straight on');
+  assert.ok(handler.includes("if (before.step === 'subagent') return summarizeSubagent($, e, next, options);"), 'a subagent, through its own step');
+  const subagent = hooks.slice(hooks.indexOf('async function summarizeSubagent('), hooks.indexOf('async function cutKeeping('));
+  assert.ok(subagent.includes("return keepThenSummarize(storingFilesOf($), keep, sayIt, () => next(e), (why) => ({ skip: why }), 'summarize');"), 'kept first, and summarized where a write is refused');
+  assert.ok(subagent.includes("await $.session.messages({ as: 'api', agentId: e.agentId })"), "the subagent's own conversation, with its blocks");
+  assert.ok(subagent.includes('const sayIt = (text: string) => say($, `subagent ${String(e.agentId)}: ${text}`, false);'), 'said in the transcript, with no notice, naming which subagent');
+  // As before the main conversation's summary: the place its transcript is in recorded, what it names put back from the trash.
+  const madePrivate = subagent.indexOf('await privateOf($, store, sayIt)');
+  assert.ok(madePrivate > 0 && subagent.indexOf('await noteRootOf($, store, options);') > madePrivate, 'recorded once private');
+  assert.ok(subagent.includes('await restoreFor($, store, ticketIds(messages), partIds(messages));'), 'put back first');
   assert.ok(!/\bnext\(/.test(carrying), 'no step is handed on but through summarizeKeeping, which keeps first');
   assert.ok(handler.includes('return summarizeKeeping($, e, next, tried.keep);'), 'why the compaction did not run');
   assert.ok(
@@ -581,4 +589,104 @@ test('a number setting not used as it was set is said at the start of a session,
   // Kept by the process, not by the register: a reload with the setting changed says the new line.
   assert.ok(hooks.includes('const toldSettings = new Set<string>();'));
   assert.equal(hooks.split('toldSettings.add(').length - 1, 1);
+});
+
+/** A host for the compaction hook: files in memory, mkdir, chmod, mv and rm as the store runs them, and a subagent's conversation. */
+function compactionHost(files: MemoryFiles, conversation: unknown, options: { refuseWrites?: boolean } = {}) {
+  const logged: string[] = [];
+  const toasted: string[] = [];
+  const read: unknown[] = [];
+  const host = {
+    env: { get: async (name: string) => (name === 'HOME' ? '/home/u' : undefined) },
+    settings: { read: async () => ({}) },
+    fs: {
+      read: (path: string) => files.read(path),
+      write: async (path: string, text: string) => {
+        if (options.refuseWrites === true && path.includes('/lossless-compaction/')) throw enospc(path);
+        return files.write(path, text);
+      },
+      stat: (path: string) => files.stat(path),
+      list: (path: string) => files.list(path),
+    },
+    process: {
+      run: async (argv: readonly string[]) => {
+        const [program = '', ...args] = argv;
+        const operands = args.filter((arg, at) => arg !== '--' && !arg.startsWith('-') && args[at - 1] !== '-m');
+        if (program.endsWith('/mkdir')) {
+          for (const dir of operands) for (let cut = dir.length; cut > 0; cut = dir.lastIndexOf('/', cut - 1)) files.dirs.add(dir.slice(0, cut));
+          return { exitCode: 0, stdout: '' };
+        }
+        if (program.endsWith('/chmod')) return { exitCode: 0, stdout: '' };
+        if (program.endsWith('/mv')) {
+          const [from = '', to = ''] = operands;
+          const text = files.files.get(from);
+          if (text === undefined) return { exitCode: 1, stdout: '' };
+          files.files.set(to, text);
+          files.files.delete(from);
+          return { exitCode: 0, stdout: '' };
+        }
+        if (program.endsWith('/rm')) {
+          for (const path of operands) files.files.delete(path);
+          return { exitCode: 0, stdout: '' };
+        }
+        return { exitCode: 127, stdout: '' };
+      },
+    },
+    session: {
+      id: async () => 'sess-1',
+      messages: async (args?: unknown) => {
+        read.push(args);
+        return conversation;
+      },
+    },
+    ui: { log: (text: string) => void logged.push(text), toast: (text: string) => void toasted.push(text) },
+  };
+  return { host, logged, toasted, read };
+}
+
+/** A subagent's conversation as Claude Code gives it with its blocks: a request, a call and what it returned. */
+const SUBAGENT_API = [
+  { role: 'user', content: [{ type: 'text', text: 'Find where the limit is set.' }] },
+  { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'grep -rn limit src' } }] },
+  { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'src/limit.ts:3: export const LIMIT = 40;\n'.repeat(40) }] },
+];
+
+test("a subagent's compaction keeps its conversation, hands it to the built-in summary once, puts the ticket of what was kept after the summary and says so in the transcript alone (ADR 0026)", async () => {
+  const [found] = await registered<undefined>('session.compact');
+  const compacting = found?.matcher as (...args: unknown[]) => Promise<{ messages?: { role: string; text: string }[]; skip?: string }>;
+  const files = new MemoryFiles();
+  // The session's transcript, where the place it is in can be recorded from.
+  await files.write('/home/u/.claude/projects/-w/sess-1.jsonl', '');
+  const { host, logged, toasted, read } = compactionHost(files, SUBAGENT_API);
+  const handed: unknown[] = [];
+  const summary = { role: 'user', text: 'Summary: the limit is in src/limit.ts.', toolUses: [] };
+  const e = { trigger: 'auto', agentId: 'agent-1', messages: [] };
+  const answer = await compacting(host, e, async (given: unknown) => (handed.push(given), { messages: [summary] }));
+  assert.deepEqual(handed, [e], 'summarized once, as it came');
+  assert.deepEqual(read, [{ as: 'api', agentId: 'agent-1' }], "the subagent's own conversation, with its blocks");
+  // The summary stands first, the ticket of the kept conversation right after it.
+  assert.equal(answer.messages?.[0], summary);
+  assert.ok(answer.messages?.[1]?.text.startsWith(KEPT), JSON.stringify(answer.messages?.[1]));
+  // What was kept reads back: its part holds the request.
+  const id = /id ([0-9a-f]{64})/.exec(answer.messages?.[1]?.text ?? '')?.[1] ?? '';
+  const part = files.files.get(`/home/u/.claude/lossless-compaction/blobs/${id}.txt`) ?? '';
+  assert.ok(part.includes('Find where the limit is set.'), 'the part holds the conversation');
+  assert.deepEqual(logged, [`${PLUGIN_NAME}: subagent agent-1: kept the conversation in 1 part before the built-in summary`]);
+  assert.deepEqual(toasted, [], 'no notice: subagents run side by side');
+  // The place the transcript is in is recorded, so that a clean-up reads what names the part.
+  const roots = [...files.files.keys()].filter((path) => path.startsWith('/home/u/.claude/lossless-compaction/roots/'));
+  assert.equal(roots.length, 1);
+  assert.match(files.files.get(roots[0] as string) ?? '', /\/home\/u\/\.claude\/projects/);
+});
+
+test("a subagent's compaction runs the summary where the disk refuses the write, says nothing was kept, and never that the summary did not run (ADR 0026)", async () => {
+  const [found] = await registered<undefined>('session.compact');
+  const compacting = found?.matcher as (...args: unknown[]) => Promise<unknown>;
+  const { host, logged } = compactionHost(new MemoryFiles(), SUBAGENT_API, { refuseWrites: true });
+  let runs = 0;
+  const summary = { messages: [{ role: 'user', text: 'Summary.', toolUses: [] }] };
+  const answer = await compacting(host, { trigger: 'auto', agentId: 'agent-1', messages: [] }, async () => ((runs += 1), summary));
+  assert.equal(runs, 1);
+  assert.equal(answer, summary, 'as the built-in compaction made it');
+  assert.deepEqual(logged, [`${PLUGIN_NAME}: subagent agent-1: nothing of the conversation is kept before the built-in summary: could not write: ENOSPC`]);
 });

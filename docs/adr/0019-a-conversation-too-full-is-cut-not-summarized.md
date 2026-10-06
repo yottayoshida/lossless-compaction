@@ -167,6 +167,7 @@ How far to cut was measured before it was decided, on `full` with Haiku
   instructions; a conversation no cut between messages brings under the
   line, or with no place to cut; one that cannot be rebuilt (0007, 0012);
   and when a part cannot be written. A subagent's conversation goes straight on, as before.
+  (Amended by ADR 0026: it is kept first, then summarized; it is still never cut.)
 - A conversation over the line for what is not the conversation alone is
   handed back in two ways, both without a summary: as it is once results
   were moved out, which is how it was, and cut down to `keepTokens` where

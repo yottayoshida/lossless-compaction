@@ -36,6 +36,9 @@ be kept, and Claude Code's summary ran anyway.
 3. When a failed write leaves nothing kept before Claude Code's summary,
    the summary does not run: the compaction is skipped with the reason the
    system gave, and the conversation stays as it is until there is room.
+   (Amended by ADR 0026: in a subagent's conversation the summary runs all
+   the same, with nothing kept, and that is said; no one can compact a
+   subagent again once room is made.)
 4. A record of where transcripts are, or an entry, that does not read as
    JSON is written again rather than taken as done.
 
