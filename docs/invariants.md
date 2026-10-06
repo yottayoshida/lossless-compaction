@@ -113,6 +113,12 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   the messages a compaction rebuilds is gone after it, and no part holds it.
   Nor is the order of blocks inside a turn promised: calls made side by side
   are regrouped with their results.
+- **A reminder Claude Code sends as a turn of its own.** What it attaches to
+  a message as it sends it is kept at a compaction that rebuilds the
+  conversation (#105); one it sends as a system turn is in no message, and
+  nothing of it is kept. Nor is the place in a message of what was attached
+  kept: it stands apart, under a heading naming the message it came with
+  as near as the conversation as sent tells it.
 - **That Claude Code's summary never runs with nothing kept.** It does in a
   subagent's conversation where the disk refuses the write; where there is
   no place of your own to keep it in; where a part does not read back as

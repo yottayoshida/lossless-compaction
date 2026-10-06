@@ -76,7 +76,13 @@ drive is no longer only on your machine.
   was to write, a Bash command); whole long messages of yours and Claude's
   whose middle left; runs of old small tool calls with what they returned; and
   the conversation as it stood before a summary or a cut, what you and Claude
-  said with every tool call and result, long messages whole. Not kept:
+  said with every tool call and result, long messages whole; and, at each
+  compaction that rebuilds or summarizes the conversation, a copy of what
+  Claude Code attached to the messages as it sent them: files you handed
+  over with `@`, what hooks added, reminders, and what Claude Code puts in
+  front of a session, which can be your CLAUDE.md files, its memory of you,
+  your account's email address, the state of your git repository, the
+  working directory, the platform and the date. Not kept:
   thinking, and images and documents outside tool results. Any of this can hold personal data a tool
   printed or you wrote: names, addresses, email addresses, a secret.
 - `index/`: the size of each and the name of the tool it came from.
@@ -130,8 +136,11 @@ by the plugin.
   each result, long input and kept part moved out of the conversation, with
   the call a result or an input came from; and a sentence where one result has
   a line holding a value the question names. Nothing of the middle of a long
-  message that left is sent; a message kept whole in a part, before a summary
-  or a cut, can have lines in that part's digest. Shapes of secrets are blanked first, which is a courtesy
+  message that left is sent, nor anything of the parts that keep what Claude
+  Code attached as it sent the messages; a message kept whole in a part,
+  before a summary or a cut, can have lines in that part's digest, and a
+  conversation kept as it was sent (where it was not rebuilt) can have what
+  Claude Code attached to it there too. Shapes of secrets are blanked first, which is a courtesy
   and not a guarantee. A proxy set in the environment is used for these
   requests. How long the provider keeps what it is sent is set by its terms.
 - Installing the plugin fetches it from GitHub, under GitHub's own terms.

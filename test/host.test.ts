@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FUNCTION_HOOKS } from '../bench/cc.ts';
-import { FAILING, UNSET, ZERO, judgeCut, judgeFailed, judgeNothingToSet, judgeNotRunning, judgeRunning, judgeSessions, namedAfterCompaction, partsIn, streamOf, type Stream } from '../bench/host.ts';
+import { ATTACHED_WORDS, FAILING, UNSET, ZERO, judgeAttached, judgeCut, judgeFailed, judgeNothingToSet, judgeNotRunning, judgeRunning, judgeSessions, namedAfterCompaction, partsIn, streamOf, type Stream } from '../bench/host.ts';
 import { failedLine } from '../src/flow.ts';
 import { KEPT } from '../src/keep.ts';
 import { PART, PLUGIN, RECALL_TOOL, idOf, partTicketText } from '../src/store.ts';
@@ -194,6 +194,19 @@ test('a compaction whose hook failed is told from its lines, its own store, its 
   assert.deepEqual(failed({ ...base, boundaries: 0 }), ['throw: one compaction']);
   assert.deepEqual(failed(base, { names: [] }), ['throw: the conversation after it holds the tickets'], 'what the handler answered was not taken');
   assert.deepEqual(failed(base, { names: [...named, { id: 'b'.repeat(64), stored: false }] }), ['throw: the conversation after it holds the tickets']);
+});
+
+test('what Claude Code attached is told kept from one compaction and a part holding the three words, and come back from recall and the answer (#105)', () => {
+  const { second, hook, after } = ATTACHED_WORDS;
+  const compact: Stream = { ...streamOf(JSON.stringify({ type: 'system', subtype: 'compact_boundary' })) };
+  const asked: Stream = { ...streamOf(''), calls: [{ id: 'c1', name: RECALL_TOOL, input: { id: 'a'.repeat(64) } }], result: `${second} ${hook} ${after}` };
+  const parts = ['--- user\nwith message 1:\nHOOK-WORD: walrus\n', `--- user\nwith message 1:\nSECOND-WORD: ${second}\nHOOK-WORD: ${hook}\n--- user\nwith message 3:\nAFTER-WORD: ${after}\n`];
+  const failed = (c: Stream, a: Stream, p = parts) => failing(judgeAttached(c, a, p));
+  assert.deepEqual(failed(compact, asked), []);
+  assert.deepEqual(failed({ ...compact, boundaries: 0 }, asked), ['attached: a compaction keeps what Claude Code attached'], 'no compaction');
+  assert.deepEqual(failed(compact, asked, parts.slice(0, 1)), ['attached: a compaction keeps what Claude Code attached'], 'no part holds all three');
+  assert.deepEqual(failed(compact, { ...asked, calls: [] }), ['attached: the agent recalls it and gives the three words'], 'answered from what was still in view');
+  assert.deepEqual(failed(compact, { ...asked, result: `${second} ${hook}` }), ['attached: the agent recalls it and gives the three words']);
 });
 
 test("the parts a session's record names after its last compaction are read from the messages after its boundary (#102)", () => {

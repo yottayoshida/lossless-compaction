@@ -180,7 +180,9 @@ messages are rebuilt, whatever is moved out: images, taken off at about
 estimated from how long the signatures of the thinking blocks are; and what
 Claude Code added to the conversation as it sent it — reminders after
 results and after what you said, the text of commands and attachments —
-which is in no message a plugin is handed. What is left of the row is spread
+which is in no message a plugin is handed (it is kept apart, and named at
+the end of what is handed back: [what a summary replaces](#what-a-summary-replaces)).
+What is left of the row is spread
 over the characters that were sent, a digit counting as two and a character
 that is not ASCII as three, and what Claude Code added at four fifths of
 what the messages' characters count; the rebuilt conversation is counted at
@@ -371,9 +373,57 @@ written before this change are as they were: there a line of what was
 returned may read as a fixed line, and a line that starts with `\` is as
 it was said. `recall`'s description tells the agent how a part is read.
 
+What Claude Code attached to the messages as it sent them — a file handed
+over with `@`, what a hook added to what you said or to what a tool
+returned, the text it shows with a command, reminders — is in no message a
+plugin is handed, and a rebuilt conversation would not carry it (#105, ADR
+0030). Wherever a compaction rebuilds the conversation, cuts it, or hands
+what it rebuilt or what it was handed to the summary, that is kept first,
+in parts as a conversation is, and a message at the end of what is handed
+back names the parts; where the summary runs, that message is the last of
+the conversation kept before it, reached through the summary's tickets.
+Each block stands under a heading that says it is
+Claude Code's and names the message it came with, by its number among the
+messages the hook was handed, as near as the conversation as sent tells it
+(`What Claude Code attached with message 3:`, `before message 1:` where it
+came alone; blocks sent with two messages Claude Code joined stand under
+the first); a block sent again is written once:
+
+```text
+[lossless-compaction] What Claude Code attached to these messages as it sent them is kept, in 1 part; recall a part by its id.
+[moved out] what Claude Code attached as it sent the messages, part 1 of 1, 3214 bytes; recall with mcp__lossless-compaction__recall id …
+```
+
+It stands at the end, so that what an earlier compaction left stays as it
+was. What Claude Code puts back on its own after a compaction (the
+CLAUDE.md files, the environment, the date) is kept with the rest: the
+plugin does not tell the kinds apart. The figures a compaction's line gives
+leave that message out, but for a cut's, whose count of messages and of
+characters take it in. Where the parts cannot be written, the
+conversation is not rebuilt: it goes to the built-in summary kept as it was
+sent, what was attached and all, and where that cannot be written either,
+the summary does not run (ADR 0008); so on a disk with little room left a
+compaction that would have handed back a rebuilt conversation can now be
+skipped. A conversation that cannot be rebuilt (an image pasted into a
+message, say) is kept as it was sent, what was attached in its own parts,
+with no message at the end. A compaction left undone keeps nothing, as the
+conversation stays as it is. `find` looks through the parts named at the
+end here, as it does the middle of a long message, and sends nothing of
+them to Jev; a conversation kept as it was sent holds what was attached in
+its own parts, whose 400-character digest Jev can be sent (see
+[`find`](#find)).
+
+Measured with `-p` on Claude Code 2.1.291 by `npm run check:host`: a file
+handed over with `@`, a word a `UserPromptSubmit` hook added to the first
+thing said and one a `PostToolUse` hook added after a `Read` were kept in
+one part at a `/compact`, and the agent, asked afterwards with no tool to
+read a file, recalled it and gave all three. Before this change, asked the
+same of a file handed over with `@`, it answered that it was not visible.
+
 What is not kept: images and documents still in the conversation, which
 leave `[image not kept]` or `[document not kept]` (an image the plugin moved
 out with its result is a ticket by then, and is kept as one); thinking;
+a reminder Claude Code sends as a turn of its own, which is in no message;
 messages older than the 4096 Claude Code
 shows a plugin; a subagent's conversation where the disk refuses the write. Half of a character left
 alone (a UTF-16 surrogate with no other half, which UTF-8 cannot hold) is

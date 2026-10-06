@@ -7,7 +7,7 @@ import { cutLine, decide, keepOldest, type Asked, type Decision } from '../src/c
 import { ticketsIn } from '../src/find.ts';
 import { KEPT, KEPT_UNSUMMARIZED, keepConversation, messageText, namedThroughParts } from '../src/keep.ts';
 import { goalOf } from '../src/select.ts';
-import { PART, moveOut, partTicketText, readPartTicket, readTicket, recall } from '../src/store.ts';
+import { PART, attachedTicketText, moveOut, partTicketText, readPartTicket, readTicket, recall } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 import { DiskFiles, MemoryFiles } from './helpers.ts';
 
@@ -505,7 +505,11 @@ test('a part kept in place of a summary has a ticket that speaks of none, and bo
   const one = { part: 2, parts: 3, first: 40, last: 80, bytes: 1234, id };
   assert.equal(partTicketText(one, false), `[moved out] conversation, part 2 of 3, messages 40-80, 1234 bytes; recall with mcp__lossless-compaction__recall id ${id}`);
   assert.equal(partTicketText(one), `[moved out] conversation before the summary, part 2 of 3, messages 40-80, 1234 bytes; recall with mcp__lossless-compaction__recall id ${id}`);
-  for (const text of [partTicketText(one, false), partTicketText(one, true)]) assert.deepEqual(readPartTicket(text), { tool: 'conversation', ...one });
+  for (const text of [partTicketText(one, false), partTicketText(one, true)]) assert.deepEqual(readPartTicket(text), { tool: 'conversation', kind: 'conversation', ...one });
+  // A part of what Claude Code attached as it sent the messages names none of them (#105).
+  const attached = attachedTicketText({ part: 1, parts: 2, bytes: 99, id });
+  assert.equal(attached, `[moved out] what Claude Code attached as it sent the messages, part 1 of 2, 99 bytes; recall with mcp__lossless-compaction__recall id ${id}`);
+  assert.deepEqual(readPartTicket(attached), { tool: 'conversation', kind: 'attached', part: 1, parts: 2, first: 0, last: 0, bytes: 99, id });
   // The result of a tool named `conversation` is a result, not a part.
   const result = `[moved out] conversation result, 1234 bytes; recall with mcp__lossless-compaction__recall id ${id}`;
   assert.equal(readPartTicket(result), null);

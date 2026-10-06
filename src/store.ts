@@ -54,28 +54,47 @@ const TICKET_2026_09 = new RegExp(
  * summary (ADR 0007), or in place of one (ADR 0019).
  */
 export const PART = 'conversation';
+/** How a part's ticket names what Claude Code attached to the messages as it sent them (#105). */
+const ATTACHED_WORDS = 'what Claude Code attached as it sent the messages';
+/**
+ * The first line of the message at the end of a rebuilt conversation that names what Claude Code attached to its
+ * messages as it sent them (#105): no summary, no place in the conversation, and nothing the person said.
+ */
+export const ATTACHED_KEPT = `[${PLUGIN}] What Claude Code attached to these messages as it sent them is kept`;
 // A part has a wording of its own, so that no tool named `conversation` is taken for one. The words
-// "before the summary" are written where a summary followed and left out where none did; both are read.
+// "before the summary" are written where a summary followed and left out where none did; both are read. A part of
+// what Claude Code attached to the messages as it sent them names no messages (#105).
 const PART_TICKET = new RegExp(
-  `^\\[moved out\\] conversation(?: before the summary)?, part (\\d{1,6}) of (\\d{1,6}), messages (\\d{1,6})-(\\d{1,6}), (\\d{1,9}) bytes; recall with ${RECALL_TOOL} id ([0-9a-f]{64})$`,
+  `^\\[moved out\\] (?:conversation(?: before the summary)?, part (\\d{1,6}) of (\\d{1,6}), messages (\\d{1,6})-(\\d{1,6})|${ATTACHED_WORDS}, part (\\d{1,6}) of (\\d{1,6})), (\\d{1,9}) bytes; recall with ${RECALL_TOOL} id ([0-9a-f]{64})$`,
 );
 
 export type Ticket = { tool: string; bytes: number; id: string };
 
-/** Which part of a kept conversation a line stands for, and which of its messages the part holds. */
-export type PartTicket = Ticket & { part: number; parts: number; first: number; last: number };
+/**
+ * Which part of a kept conversation a line stands for, and which of its messages the part holds; or, `attached`,
+ * which part of what Claude Code attached to the messages as it sent them, which names none (`first` and `last` 0).
+ */
+export type PartTicket = Ticket & { part: number; parts: number; first: number; last: number; kind: 'conversation' | 'attached' };
 
 /** The line that stands for one part. `summarized` is false where no summary took the conversation's place. */
-export function partTicketText({ part, parts, first, last, bytes, id }: Omit<PartTicket, 'tool'>, summarized = true): string {
+export function partTicketText({ part, parts, first, last, bytes, id }: Omit<PartTicket, 'tool' | 'kind'>, summarized = true): string {
   return `[moved out] conversation${summarized ? ' before the summary' : ''}, part ${part} of ${parts}, messages ${first}-${last}, ${bytes} bytes; recall with ${RECALL_TOOL} id ${id}`;
+}
+
+/** The line that stands for one part of what Claude Code attached to the messages as it sent them (#105). */
+export function attachedTicketText({ part, parts, bytes, id }: Pick<PartTicket, 'part' | 'parts' | 'bytes' | 'id'>): string {
+  return `[moved out] ${ATTACHED_WORDS}, part ${part} of ${parts}, ${bytes} bytes; recall with ${RECALL_TOOL} id ${id}`;
 }
 
 /** Reads a line that has the shape of a part's ticket. The shape alone proves nothing: see `isStored`. */
 export function readPartTicket(text: string): PartTicket | null {
   const match = PART_TICKET.exec(text);
   if (!match) return null;
-  const [, part, parts, first, last, bytes, id] = match.map(String);
-  return { tool: PART, part: Number(part), parts: Number(parts), first: Number(first), last: Number(last), bytes: Number(bytes), id: id as string };
+  const [, part, parts, first, last, attachedPart, attachedParts, bytes, id] = match;
+  if (part === undefined) {
+    return { tool: PART, kind: 'attached', part: Number(attachedPart), parts: Number(attachedParts), first: 0, last: 0, bytes: Number(bytes), id: id as string };
+  }
+  return { tool: PART, kind: 'conversation', part: Number(part), parts: Number(parts), first: Number(first), last: Number(last), bytes: Number(bytes), id: id as string };
 }
 
 export type Moved = Ticket & { text: string };

@@ -8,9 +8,10 @@ Claude Code's `/compact` asks a model for a summary: tens of seconds, a
 request the size of the conversation, and the summary in place of what was
 said. This plugin moves old tool results out instead, leaving a line in
 their place. That takes a fraction of a second and calls no model, and
-what you and the agent said is stored word for word. Where that is not enough,
-the oldest messages are stored too and listed in their place. What left is
-out of sight until recalled ([limits](docs/limits.md)).
+what you and the agent said, Claude Code's attachments included, is stored
+word for word. Where that is not enough, the oldest messages are stored too
+and listed in their place. What left is out of sight until recalled
+([limits](docs/limits.md)).
 
 ## Demo
 

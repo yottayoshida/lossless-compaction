@@ -15,7 +15,7 @@
 //   node bench/host.ts --plugin-dir <a copy>     the running plugin's checks on another copy (the not-running
 //                                                 copy and the broken ones are always made from the working tree)
 //
-// Signs in as you do and spends about 1.50 USD of Sonnet 5.5, about 0.90 of it on
+// Signs in as you do and spends about 1.70 USD of Sonnet 5.5, about 0.90 of it on
 // the summaries the broken copies run. The files it reads and
 // the plugin's store are in a directory of its own; Claude Code keeps its record
 // of each session where it keeps every session's (`--resume` needs it), and what
@@ -197,8 +197,11 @@ export const FAILING = [
   { patch: 'timeout', kind: 'timeout', repeated: '' },
 ] as const;
 
-/** The ids of the parts whose tickets the conversation holds after its last compaction, read from Claude Code's record of the session. */
-export function namedAfterCompaction(transcript: string): string[] {
+/**
+ * The ids of the parts whose tickets the conversation holds after its last compaction, read from Claude Code's record of
+ * the session; with `kind`, those of that kind alone (#105).
+ */
+export function namedAfterCompaction(transcript: string, kind?: 'conversation' | 'attached'): string[] {
   const rows = transcript.split('\n').flatMap((line): Record<string, unknown>[] => {
     try {
       return [JSON.parse(line) as Record<string, unknown>];
@@ -212,7 +215,10 @@ export function namedAfterCompaction(transcript: string): string[] {
     .slice(boundary + 1)
     .filter((row) => row['type'] === 'user')
     .flatMap((row) => textOf((row['message'] as { content?: unknown } | undefined)?.content).split('\n'))
-    .flatMap((line) => readPartTicket(line)?.id ?? []);
+    .flatMap((line) => {
+      const part = readPartTicket(line);
+      return part === null || (kind !== undefined && part.kind !== kind) ? [] : [part.id];
+    });
 }
 
 /**
@@ -246,6 +252,26 @@ export function judgeFailed(
       ok: named.length > 0 && named.every((one) => one.stored),
       detail: named.length === 0 ? 'no ticket of a part after the compaction' : `${named.length} named, ${named.filter((one) => one.stored).length} in the copy's store`,
     },
+  ];
+}
+
+/** The words Claude Code attaches in the check of #105: one of a file handed over with `@` is never said again in the conversation. */
+export const ATTACHED_WORDS = { first: 'heron', second: 'marigold', hook: 'walrus', after: 'otter' } as const;
+
+/**
+ * What Claude Code attached as it sent the messages is kept at a compaction that rebuilt the conversation, and
+ * comes back (#105): a part the conversation names afterwards as what was attached (`parts`, read from the store)
+ * holds the three words no message handed over holds, and the agent, with no tool to read a file, recalled and gave
+ * all three.
+ */
+export function judgeAttached(compact: Stream, asked: Stream, parts: readonly string[]): Check[] {
+  const { second, hook, after } = ATTACHED_WORDS;
+  const holding = parts.filter((part) => [second, hook, after].every((word) => part.includes(word)));
+  const recalled = asked.calls.filter((call) => call.name === RECALL_TOOL).length;
+  const answer = asked.result.toLowerCase();
+  return [
+    { name: 'attached: a compaction keeps what Claude Code attached', ok: compact.boundaries === 1 && holding.length > 0, detail: `${compact.boundaries} compaction, ${parts.length} part${parts.length === 1 ? '' : 's'} named as what was attached, ${holding.length} holding the three words` },
+    { name: 'attached: the agent recalls it and gives the three words', ok: recalled > 0 && [second, hook, after].every((word) => answer.includes(word)), detail: `${recalled} recall${recalled === 1 ? '' : 's'}; ${asked.result.slice(0, 120) || 'nothing said'}` },
   ];
 }
 
@@ -322,9 +348,26 @@ async function main(): Promise<void> {
     resume?: string,
     env: Record<string, string> = {},
     pluginOptions?: Record<string, unknown>,
-    { fork = false, storeDir = store }: { fork?: boolean; storeDir?: string } = {},
+    {
+      fork = false,
+      storeDir = store,
+      allowedTools = ['Read', 'ToolSearch', RECALL_TOOL],
+      hooks,
+    }: { fork?: boolean; storeDir?: string; allowedTools?: readonly string[]; hooks?: Record<string, unknown> } = {},
   ): Stream => {
-    const args = argsOf({ out: '', cwd: work, model: MODEL, arm: 'plugin', pluginDir, storeDir, allowedTools: ['Read', 'ToolSearch', RECALL_TOOL], prompt, ...(resume ? { resume, fork } : {}), ...(pluginOptions ? { pluginOptions } : {}) });
+    const args = argsOf({
+      out: '',
+      cwd: work,
+      model: MODEL,
+      arm: 'plugin',
+      pluginDir,
+      storeDir,
+      allowedTools,
+      prompt,
+      ...(resume ? { resume, fork } : {}),
+      ...(pluginOptions ? { pluginOptions } : {}),
+      ...(hooks ? { hooks } : {}),
+    });
     const started = envOf({ env });
     const ran = spawnSync('claude', [...args, '--include-hook-events'], { cwd: work, env: started, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: LIMIT_MS });
     if (ran.error !== undefined) throw new Error(`claude could not be run, or ran past ${LIMIT_MS / 60000} minutes: ${ran.error.message}`);
@@ -356,6 +399,39 @@ async function main(): Promise<void> {
     const named = namedAfterCompaction(recordOf(stream.sessionId)).map((id) => ({ id, stored: existsSync(join(own, 'blobs', `${id}.txt`)) }));
     return judgeFailed(failure.patch, stream, partsIn(own), named, said, failure);
   });
+  // What Claude Code attaches to messages as it sends them (#105): a file handed over with `@`, a word a hook adds to the
+  // first thing said, and one a hook adds after a file is read; none is in a message the plugin is handed. Asked after
+  // a /compact with no tool to read a file, the agent has them only from what was kept.
+  const attachedStore = join(dir, 'store-attached');
+  spawnSync('mkdir', ['-p', attachedStore]);
+  writeFileSync(join(work, 'notes.txt'), `Notes for the check.\nFIRST-WORD: ${ATTACHED_WORDS.first}\nSECOND-WORD: ${ATTACHED_WORDS.second}\n`);
+  const once = join(dir, 'prompt-hook-ran');
+  const promptHookFile = join(dir, 'prompt-hook.sh');
+  const readHookFile = join(dir, 'read-hook.sh');
+  const context = (event: string, text: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
+  writeFileSync(promptHookFile, `#!/bin/sh\ncat >/dev/null\n[ -e '${once}' ] && exit 0\n: > '${once}'\nprintf '%s\\n' '${context('UserPromptSubmit', `HOOK-WORD: ${ATTACHED_WORDS.hook}`)}'\n`);
+  writeFileSync(readHookFile, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${context('PostToolUse', `AFTER-WORD: ${ATTACHED_WORDS.after}`)}'\n`);
+  spawnSync('chmod', ['+x', promptHookFile, readHookFile]);
+  const hooks = {
+    UserPromptSubmit: [{ hooks: [{ type: 'command', command: promptHookFile }] }],
+    PostToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: readHookFile }] }],
+  };
+  const withAttached = { storeDir: attachedStore, hooks };
+  const attachedFirst = run('attached', plugin, `Here are my notes: @notes.txt. Remember the first word in them. Then read ${names[0]} with the Read tool, and reply only: read.`, undefined, unmarked, undefined, withAttached);
+  // A turn more, so that the read is before the last thing said, which a /compact typed by hand reaches up to (ADR 0023).
+  run('attached-then', plugin, 'Reply only: ok.', attachedFirst.sessionId, unmarked, undefined, withAttached);
+  const attachedCompact = run('attached-compact', plugin, '/compact', attachedFirst.sessionId, unmarked, { keepTokens: 0 }, withAttached);
+  const attachedAsked = run(
+    'attached-asked',
+    plugin,
+    'Do not read any file. Reply with three words, a space apart and nothing else: the second word in my notes, the word the hook added to my first message, and the word added after you read the log. Recall what was kept if you need it.',
+    attachedFirst.sessionId,
+    unmarked,
+    undefined,
+    // No Read; ToolSearch stays, as with none at all Claude Code offers no tool of a plugin either.
+    { ...withAttached, allowedTools: ['ToolSearch', RECALL_TOOL] },
+  );
+
   const compact = run('compact', plugin, '/compact', first.sessionId, unmarked);
   // A result that was moved out, chosen by its own text: the id is the SHA-256 of what was read.
   let chosen: { id: string; text: string } | undefined;
@@ -383,6 +459,15 @@ async function main(): Promise<void> {
     ...judgeRunning(first, compact, recalled, chosen?.id ?? '-', chosen?.text ?? ''),
     ...judgeCut(cut, partsIn(store), said, asked),
     ...failing.flat(),
+    // The parts the conversation names after the compaction as what Claude Code attached: not a conversation kept as sent.
+    ...judgeAttached(
+      attachedCompact,
+      attachedAsked,
+      namedAfterCompaction(recordOf(attachedFirst.sessionId), 'attached').flatMap((id) => {
+        const blob = join(attachedStore, 'blobs', `${id}.txt`);
+        return existsSync(blob) ? [readFileSync(blob, 'utf8')] : [];
+      }),
+    ),
     ...judgeNotRunning(notFirst, notCompact),
     ...judgeNothingToSet(sessions, zero),
   ];

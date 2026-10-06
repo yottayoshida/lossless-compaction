@@ -8,7 +8,7 @@
 // id each reading comes back by.
 
 import { HOST_TEXT, WRITES, fileOf } from './select.ts';
-import { PLUGIN, RECALL_TOOL, moveOut, readTicket, recall } from './store.ts';
+import { ATTACHED_KEPT, PLUGIN, RECALL_TOOL, moveOut, readTicket, recall } from './store.ts';
 import type { Files, Message, ToolResult } from './types.ts';
 
 /** How many files are set against their reading at one summary, newest first. */
@@ -288,6 +288,9 @@ export function shownAgainNote(messages: readonly Message[], shown: string): str
     // What the agent said, and a message that holds results, is neither the plugin's message nor typed by the person.
     if (message.role !== 'user' || (message.toolResults?.length ?? 0) > 0) continue;
     const said = message.text.replace(HOST_TEXT, '').trim();
+    // The message naming what Claude Code attached as it sent the messages stands at the end of what a compaction
+    // handed back, after the one this looks for, and names no file read (#105).
+    if (said.startsWith(ATTACHED_KEPT)) continue;
     if (said.startsWith(`[${PLUGIN}] `)) {
       // The plugin's message after the last summary: what it names, and no older one.
       if (handedOver) return null;

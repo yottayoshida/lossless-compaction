@@ -10,7 +10,7 @@ import { KEPT } from '../src/keep.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles, conversation, enospc, sized } from './helpers.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
-import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
+import { ATTACHED_KEPT, FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
 import { KEY_VARIABLES, PLACE_VARIABLES, ROUTE_VARIABLES } from '../src/trust.ts';
 
@@ -415,9 +415,14 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   // Whatever the step, the newest ticket of the conversation handed back, else of the one handed in, is noted after (ADR 0027).
   assert.ok(handler.includes("const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;\n    await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);\n    return result;"), 'the witness, after, this compaction\'s tickets first');
   assert.ok(
-    carrying.includes("return step.of === 'given'\n        ? summarizeKeeping($, e, next, { store, messages: e.messages as readonly Message[] })"),
-    'nothing moved out: kept as handed in, where the step says so',
+    carrying.includes(
+      "return step.of === 'given'\n        ? summarizeKeeping($, e, next, { store, messages: [...(e.messages as readonly Message[]), ...(tried.attached === undefined ? [] : [tried.attached])] })",
+    ),
+    'nothing moved out: kept as handed in, with the message naming what Claude Code attached (#105), where the step says so',
   );
+  // What Claude Code attached is kept for every step but a skip, and where it cannot be, the conversation goes over as sent (#105).
+  assert.ok(handler.includes("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);"), 'kept before the step is carried out');
+  assert.ok(handler.includes("say($, `built-in compaction: ${ready.why}`);\n        result = await summarizeKeeping($, e, next, ready.keep);"), 'or handed over, kept as sent');
   assert.ok(carrying.includes(': summarizeKeeping($, { ...e, messages: outcome.messages }, next, { store, messages: outcome.messages });'), 'too much left: what is left');
   // The line is said before the summary runs, as it was said before a hand-over.
   const summarizing = carrying.slice(carrying.indexOf("case 'summarize':"));
@@ -512,13 +517,18 @@ test('a /compact left undone is decided in src/: by who asked, with what, what C
   // A skip is said once: as the reason Claude Code shows, with no line of the plugin's beside it, and nothing kept, cut or summarized.
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
   assert.ok(carrying.includes("case 'skip':\n      return { skip: step.why };"));
-  // Two skips in all: a compaction computed ahead, and a /compact left undone. A third is no compaction's: what the
-  // hook answers once Claude Code went on without it, which Claude Code does not read (#102).
+  // Two skips in all: a compaction computed ahead, and a /compact left undone. The others are no compaction's: what the
+  // hook answers once Claude Code went on without it, which Claude Code does not read (#102), looked at after each
+  // thing the hook waits on before it says or hands on anything: the attempt, and keeping what was attached (#105).
   const handler = hooks.slice(hooks.indexOf("on('session.compact'"));
-  assert.equal(handler.match(/return \{ skip: /g)?.length, 2);
-  const aborted = handler.indexOf("if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };");
+  assert.equal(handler.match(/return \{ skip: /g)?.length, 3);
+  const abort = "if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };";
+  const aborted = handler.indexOf(abort);
   const attempted = handler.indexOf('const tried = await attempt($, e, options);');
   assert.ok(attempted > 0 && aborted > attempted && aborted < handler.indexOf('say($,'), 'right after the attempt, before anything is said or handed on');
+  const kept = handler.indexOf("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);");
+  const abortedAgain = handler.indexOf(abort, aborted + 1);
+  assert.ok(kept > 0 && abortedAgain > kept && abortedAgain < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'and right after what was attached is kept');
   assert.equal(carrying.match(/return \{ skip: /g)?.length, 1);
 });
 
@@ -892,4 +902,105 @@ test("a subagent's compaction runs the summary where the disk refuses the write,
   assert.equal(runs, 1);
   assert.equal(answer, summary, 'as the built-in compaction made it');
   assert.deepEqual(logged, [`${PLUGIN_NAME}: subagent agent-1: nothing of the conversation is kept before the built-in summary: could not write: ENOSPC`]);
+});
+
+/** The compaction hook as Claude Code is handed it, registered with the plugin's settings `options`. */
+async function compactionHook(options: Record<string, unknown> = {}) {
+  const { register } = (await import(new URL('../hooks/move-out.ts', import.meta.url).href)) as {
+    register: (on: (name: string, ...rest: unknown[]) => unknown, options: Record<string, unknown>) => void;
+  };
+  type Hook = ($: unknown, e: unknown, next: ((e: unknown) => Promise<unknown>) & { signal: AbortSignal }) => Promise<{ messages?: { role: string; text: string }[]; skip?: string }>;
+  const hooks: Hook[] = [];
+  register((name, ...rest) => {
+    if (name === 'session.compact') hooks.push(rest[0] as Hook);
+    return { catch: () => undefined };
+  }, options);
+  assert.equal(hooks.length, 1);
+  return hooks[0] as Hook;
+}
+
+/** A `next` as Claude Code hands a hook it: what runs beneath, and the signal that says Claude Code went on without it. */
+const nextOn = (beneath: (e: unknown) => Promise<unknown>) => Object.assign(beneath, { signal: new AbortController().signal });
+
+/** A conversation as the hook is handed it, and as Claude Code sent it: a hook's word after the first thing said, a reminder after the first result (#105). */
+function sentWithAttached() {
+  const handed = conversation([sized('a.ts', 3000), sized('b.ts', 2500)], 'Keep the API notes in mind.');
+  const api = asSent(handed, '<system-reminder>\nUserPromptSubmit hook additional context: PROBE-HOOK-WORD: walrus\n</system-reminder>');
+  const result = api[2]?.content[0] as { content: string };
+  result.content = `${result.content.trimEnd()}\n\n<system-reminder>\nPostToolUse hook additional context: PROBE-POST-WORD: otter\n</system-reminder>`;
+  return { handed, api };
+}
+
+/** compactionHost for the main conversation: the conversation as it was sent apart from the one handed, and no figure of Claude Code's for what is in use. */
+function mainHost(files: MemoryFiles, handed: readonly Message[], api: unknown, write?: (path: string, text: string) => Promise<void>) {
+  const made = compactionHost(files, api);
+  Object.assign(made.host.session, { messages: async (args?: { as?: string }) => (args?.as === 'api' ? api : handed), usage: async () => ({}) });
+  if (write !== undefined) made.host.fs.write = write;
+  return made;
+}
+
+/** The text of every part a message names, joined. */
+async function partsNamed(files: MemoryFiles, text: string): Promise<string> {
+  const got = await Promise.all(text.split('\n').flatMap((line) => readPartTicket(line)?.id ?? []).map((id) => recall(files, [CAUGHT_STORE], id)));
+  return got.map((one) => ('text' in one ? one.text : '')).join('');
+}
+
+test('what Claude Code attached as it sent the messages is kept when the conversation is rebuilt, and a message at its end names it; what was said and returned are not in it (#105)', async () => {
+  forgetMove();
+  // Every result may leave: none is among the newest kept.
+  const hook = await compactionHook({ keepTokens: 0 });
+  const files = new MemoryFiles();
+  const { handed, api } = sentWithAttached();
+  const answer = await hook(
+    mainHost(files, handed, api).host,
+    { trigger: 'manual', messages: handed },
+    nextOn(async () => {
+      throw new Error('no summary is asked for');
+    }),
+  );
+  const messages = answer.messages ?? [];
+  const last = messages.at(-1);
+  assert.ok(last !== undefined && last.text.startsWith(ATTACHED_KEPT), JSON.stringify(answer).slice(0, 300));
+  assert.equal(messages.filter((message) => message.text.startsWith(ATTACHED_KEPT)).length, 1, 'one, at the end');
+  const kept = await partsNamed(files, last.text);
+  assert.ok(kept.includes('PROBE-HOOK-WORD: walrus') && kept.includes('PROBE-POST-WORD: otter'), kept.slice(0, 300));
+  assert.ok(!kept.includes('Keep the API notes in mind.'), 'not what the person said');
+  assert.ok(!kept.includes((handed[2]?.toolResults?.[0]?.text ?? '').slice(0, 200)), 'nor what a tool returned');
+});
+
+test('handed to the built-in summary as it was, the conversation is kept with the message naming what Claude Code attached, which the summary is followed by (#105)', async () => {
+  forgetMove();
+  // Nothing may leave, and the /compact asks for something: the conversation goes to the summary as handed in.
+  const hook = await compactionHook({ minChars: 10_000_000 });
+  const files = new MemoryFiles();
+  const { handed, api } = sentWithAttached();
+  const handedOn: unknown[] = [];
+  const answer = await hook(mainHost(files, handed, api).host, { trigger: 'manual', instructions: 'Keep the API notes.', messages: handed }, nextOn(async (e) => (handedOn.push(e), { messages: [SUMMARY] })));
+  assert.equal(handedOn.length, 1, 'summarized once');
+  assert.deepEqual(answer.messages?.[0], SUMMARY);
+  assert.ok(answer.messages?.[1]?.text.startsWith(KEPT), JSON.stringify(answer).slice(0, 300));
+  // The kept conversation holds the message naming what was attached; through it, what was attached is reached.
+  const conversationKept = await partsNamed(files, answer.messages?.[1]?.text ?? '');
+  assert.ok(conversationKept.includes(ATTACHED_KEPT), conversationKept.slice(-400));
+  assert.ok((await partsNamed(files, conversationKept)).includes('PROBE-HOOK-WORD: walrus'));
+});
+
+test('where what Claude Code attached cannot be written, the conversation is not rebuilt: it is kept as sent, or, refused that too, the summary does not run (#105, ADR 0008)', async () => {
+  forgetMove();
+  // Every result may leave: none is among the newest kept.
+  const hook = await compactionHook({ keepTokens: 0 });
+  const files = new MemoryFiles();
+  const { handed, api } = sentWithAttached();
+  // The disk refuses whatever holds what was attached; the results alone go through.
+  const write = async (path: string, text: string) => {
+    if (text.includes('walrus')) throw enospc(path);
+    return files.write(path, text);
+  };
+  const { host, logged } = mainHost(files, handed, api, write);
+  let asked = 0;
+  const answer = await hook(host, { trigger: 'manual', messages: handed }, nextOn(async () => ((asked += 1), { messages: [SUMMARY] })));
+  assert.equal(answer.messages, undefined, 'no rebuilt conversation handed back');
+  assert.match(answer.skip ?? '', /nothing could be kept \(could not write: ENOSPC\), so the summary did not run/);
+  assert.equal(asked, 0);
+  assert.ok(logged.includes(`${PLUGIN_NAME}: built-in compaction: what Claude Code attached to the messages could not be kept (could not write: ENOSPC)`), logged.join(' | '));
 });
