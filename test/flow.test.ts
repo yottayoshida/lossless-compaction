@@ -49,10 +49,10 @@ function tried(messages: readonly Message[], over: { report?: Partial<Report>; e
   };
 }
 
-test('a compaction computed ahead is skipped and a subagent goes straight on, before anything is tried', () => {
+test("a compaction computed ahead is skipped and a subagent's goes to its own step, kept and summarized, before anything is tried (ADR 0026)", () => {
   assert.deepEqual(beforeTrying({ trigger: 'precompute', agentId: undefined }), { step: 'skip', why: `${PLUGIN} computes nothing ahead of a compaction` });
   assert.deepEqual(beforeTrying({ trigger: 'precompute', agentId: 'a1' }), { step: 'skip', why: `${PLUGIN} computes nothing ahead of a compaction` }, 'skipped first');
-  assert.deepEqual(beforeTrying({ trigger: 'auto', agentId: 'a1' }), { step: 'pass' });
+  assert.deepEqual(beforeTrying({ trigger: 'auto', agentId: 'a1' }), { step: 'subagent' });
   assert.deepEqual(beforeTrying({ trigger: 'manual', agentId: undefined }), { step: 'try' });
 });
 

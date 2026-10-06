@@ -339,6 +339,10 @@ export type ToKeep = { dir: string; messages: readonly Message[]; read?: readonl
  * summary does not run: `skip` says why, and the conversation stays as it is
  * (ADR 0008). Anything else that goes wrong in keeping is said, and the
  * summary is then handed back as the built-in compaction made it; so is a skip.
+ *
+ * With `refused` set to `summarize`, a refused write is said like any other
+ * failure to keep and the summary runs: for a subagent's conversation, which
+ * no one can compact again once room is made (ADR 0026).
  */
 export async function keepThenSummarize<R extends { messages?: readonly unknown[] | undefined }>(
   files: Files,
@@ -346,6 +350,7 @@ export async function keepThenSummarize<R extends { messages?: readonly unknown[
   say: (text: string) => void,
   summarize: () => Promise<R>,
   skip: (why: string) => R,
+  refused: 'skip' | 'summarize' = 'skip',
 ): Promise<R> {
   const unkept = (why: string) => say(`nothing of the conversation is kept before the built-in summary: ${why}`);
   let kept: { text: string; parts: number } | null = null;
@@ -354,7 +359,9 @@ export async function keepThenSummarize<R extends { messages?: readonly unknown[
   } else {
     try {
       const done = await keepConversation(files, keep.dir, keep.messages, keep.read);
-      if ('failed' in done && done.failed === 'write-failed') {
+      if ('failed' in done && done.failed === 'write-failed' && refused === 'summarize') {
+        unkept(`could not write: ${done.code ?? 'unknown'}`);
+      } else if ('failed' in done && done.failed === 'write-failed') {
         const code = done.code ?? 'unknown';
         // Only a full disk is helped by making room; any other refusal is named and left to the reader.
         const advice = code === 'ENOSPC' || code === 'EDQUOT' ? 'free some space and compact again' : 'compact again once the place results are kept in can be written to';
@@ -362,8 +369,7 @@ export async function keepThenSummarize<R extends { messages?: readonly unknown[
         // `say` names the plugin itself; the notice a skip shows does not.
         say(why);
         return skip(`${PLUGIN}: ${why}`);
-      }
-      if ('failed' in done) unkept(`a part could not be written (${done.failed})`);
+      } else if ('failed' in done) unkept(`a part could not be written (${done.failed})`);
       else if ('nothing' in done) unkept('there is nothing to keep');
       else kept = done;
     } catch (error) {

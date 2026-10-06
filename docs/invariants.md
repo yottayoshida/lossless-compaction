@@ -73,10 +73,12 @@ refused write.** The messages a cut takes out are kept in parts before they
 leave, and nothing is cut where one part cannot be written. A conversation
 is said to be kept before Claude Code's summary only when every part of what
 is kept of it was written; and where the disk refuses the write and nothing
-is kept, the summary does not run.
+is kept, the summary of the main conversation does not run (a subagent's
+runs all the same, with nothing kept, ADR 0026).
 
 - `a part that cannot be written keeps nothing`
 - `when a refused write leaves nothing kept, the summary does not run and the compaction says why`
+- `for a subagent's conversation a refused write is said and the summary runs all the same: no one can compact it again once room is made (ADR 0026)`
 - `when a part cannot be written nothing is cut`
 
 **I7. What went to the trash while still in use comes back when it is asked
@@ -105,7 +107,7 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   Nor is the order of blocks inside a turn promised: calls made side by side
   are regrouped with their results.
 - **That Claude Code's summary never runs with nothing kept.** It does in a
-  subagent's conversation; where there is no place of your own to keep it in;
+  subagent's conversation where the disk refuses the write; where there is no place of your own to keep it in;
   where a part does not read back as written, or a link stands in its place;
   and after an error the plugin did not expect. The compaction says so each
   time. What is kept before a summary leaves out images, documents and

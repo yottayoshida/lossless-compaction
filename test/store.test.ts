@@ -352,7 +352,7 @@ test('recall reads the id that was meant when the id given is refused, and refus
   assert.deepEqual(await recallMeant(read, `${ticket.id.slice(0, 40)}${ticket.id[40] === '0' ? '1' : '0'}${ticket.id.slice(41)}`, messages), { text });
   assert.equal(asked, 2);
 
-  // Refused as the id was given: nothing in the conversation begins as it does, the conversation is empty (a subagent's), or it cannot be read.
+  // Refused as the id was given: nothing in the conversation begins as it does, the conversation is empty, or it cannot be read.
   assert.deepEqual(await recallMeant(read, 'f'.repeat(32), messages), refused);
   // What could tell no id is refused without the conversation being asked for: the size on a ticket, fewer than 16 characters, no text.
   const before = asked;

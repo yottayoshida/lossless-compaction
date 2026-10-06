@@ -1113,8 +1113,8 @@ would be a second one to match. What the agent wrote can still reach the
 user messages and the results, as Claude Code's summary or as a kept part
 `recall` returned; an id copied wrong there in full, 64 characters, makes
 two, and the id is refused. Where no id begins so, or more than one, the id is refused as
-before; so is every such id in a subagent's conversation, which holds no
-tickets. What comes back is the result as it was stored, checked against its
+before; so was every such id in a subagent's conversation, which then held no
+tickets (since ADR 0026 its own conversation is read). What comes back is the result as it was stored, checked against its
 id as any other.
 
 The 10 above were counted against every id stored for the units. Counted

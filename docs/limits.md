@@ -287,9 +287,11 @@ and with Haiku 4.5 at one too and at compactions Claude Code started
 
 ## What a summary replaces
 
-Before the built-in summary runs on the main conversation, the plugin keeps
-the conversation it summarizes (ADR 0007): every result of 400 bytes or more
-still in it is moved out as usual, a shorter one staying in the text, and the conversation is written as text in parts of at most
+Before the built-in summary runs, on the main conversation or a subagent's
+(ADR 0026), the plugin keeps the conversation it summarizes (ADR 0007): in
+the parts, every result of 400 bytes or more still in it is stored as usual
+and stands as its ticket, a shorter one staying in the text; the conversation
+the summary is made of is left as it was. It is written as text in parts of at most
 40,000 bytes, each stored like a result. Right after the summary, one message
 names each part:
 
@@ -297,6 +299,13 @@ names each part:
 [lossless-compaction] The conversation this summary replaces is kept, in 2 parts; recall a part by its id.
 [moved out] conversation before the summary, part 1 of 2, messages 1-40, 38211 bytes; recall with mcp__lossless-compaction__recall id …
 ```
+
+A subagent's conversation is never moved out of or rebuilt: Claude Code
+summarizes it, kept first in the same way, with its line in the transcript
+alone, starting `subagent <its id>:`. Where the disk refuses the write, its summary
+runs all the same, with nothing kept: no one can compact a subagent again
+once room is made. A subagent given a list of tools that leaves `recall` out
+cannot read its parts back.
 
 A part writes each message as `--- user` or `--- assistant`, then its text,
 then for each call `[call <tool> <id>]` with a one-line form of its input
@@ -312,7 +321,7 @@ What is not kept: images and documents still in the conversation, which
 leave `[image not kept]` or `[document not kept]` (an image the plugin moved
 out with its result is a ticket by then, and is kept as one); thinking;
 messages older than the 4096 Claude Code
-shows a plugin; the conversation of a subagent. Half of a character left
+shows a plugin; a subagent's conversation where the disk refuses the write. Half of a character left
 alone (a UTF-16 surrogate with no other half, which UTF-8 cannot hold) is
 kept as U+FFFD, what a UTF-8 file makes of it; a result, or a long input
 value, holding one is not moved out on its own, and stays as it was in the
@@ -994,8 +1003,9 @@ built-in compaction has run it may find none, though the files remain and
 `recall` reads them by id; and of a conversation longer than 4096 messages,
 the oldest tickets are not offered. Jev sees the first lines of a result and
 little of its middle, and of a result over 256 KB only the first 8 KB. A
-subagent's call is answered with nothing to find: the plugin moves nothing
-out of a subagent's conversation. A result over about 50 KB comes back the
+subagent's call is answered with nothing to find: `find` does not look in a
+subagent's conversation, whose parts kept before a summary are named after
+it for `recall` to read by id. A result over about 50 KB comes back the
 way Claude Code returns any large tool output: saved to a file whose path is
 shown, which the agent reads; what `recall` returns is unchanged, but a line
 of it longer than the agent's reading tool takes (Claude Code's `Read` cuts
@@ -1089,8 +1099,8 @@ less often, in made-up conversations asked right after the compaction
   conversation that begins with its first 16 characters: written in the user
   messages and in what tools returned, not in what the agent said or put in
   its calls. One that goes wrong within the first 16 characters is refused,
-  as is one that two ids begin with, what is no id, and any id copied wrong
-  in a subagent's conversation. What the agent wrote can still stand there,
+  as is one that two ids begin with, and what is no id. In a subagent, the
+  conversation read is the subagent's own. What the agent wrote can still stand there,
   in Claude Code's summary or in a kept part `recall` returned: an id it
   copied wrong there in full, 64 characters, makes two that begin alike,
   and the id is refused. Haiku gave `recall` an id it
