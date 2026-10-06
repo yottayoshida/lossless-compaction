@@ -28,10 +28,10 @@ In Claude Code 2.1.287 or later, type this at the prompt:
 ```
 
 Press `y` if asked, choose **Install for you**, then Esc. The plugin runs in that session (after `/reload-plugins --force` if
-Claude Code asks for it), with nothing to set, unless mods are turned off for
-you ([how to tell](docs/limits.md#function-hooks)). `/compact` and automatic
-compaction then go through it, each with a line marked `lossless-compaction:`
-([other ways to set it up](docs/limits.md#setting-it-up)).
+asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#function-hooks)):
+`/lossless-status` says it runs, with its version and settings.
+`/compact` and automatic compaction go through it, each with a
+`lossless-compaction:` line ([other setups](docs/limits.md#setting-it-up)).
 
 ## What it does
 

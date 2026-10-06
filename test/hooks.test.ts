@@ -6,7 +6,7 @@ import type { Provider } from '../src/ask.ts';
 import { changedLine, shownAgainLine } from '../src/changed.ts';
 import { KEPT } from '../src/keep.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
-import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STORE_COMMAND, ticketText } from '../src/store.ts';
+import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
 import { KEY_VARIABLES, PLACE_VARIABLES, ROUTE_VARIABLES } from '../src/trust.ts';
 
@@ -401,6 +401,46 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set) };'));
   // What answers it reads nothing itself: no recall, no read of a file.
   assert.ok(!/recall\(|\$\.fs\.read\(|files\.read\(/.test(handler));
+});
+
+test('/lossless-status is a command, registered at the start, that opens no place results are kept in and hands statusReport no key variable (#108)', async () => {
+  assert.ok(hooks.includes(`on('command.run', { command: '${STATUS_COMMAND}' }`), 'the matcher is spelled as STATUS_COMMAND');
+  const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
+  assert.ok(start.includes('await $.command.register({\n        name: STATUS_COMMAND,'), 'registered at the start');
+  assert.ok(start.includes('findAtStart = await registerTools($, provider);'), 'what became of find is kept for it');
+  // Loaded again for a change of the settings, with no session.start after: the record of an earlier start is dropped.
+  const registering = hooks.slice(hooks.indexOf('export const register: Register'), hooks.indexOf("on('session.start'"));
+  assert.ok(registering.includes('findAtStart = undefined;'), 'forgotten when register runs again');
+  const at = hooks.indexOf(`on('command.run', { command: '${STATUS_COMMAND}' }`);
+  const handler = hooks.slice(at, hooks.indexOf('\n  on(', at + 1));
+  // Nothing of the store: no place, no stored result, no index entry, no file of the host's.
+  assert.ok(!/storeOf\(|recall\(|recalled\(|filesOf\(|listOf\(|plainDirsOf\(|\$\.fs\./.test(handler), handler);
+  // Of the key variables, only whether each holds something.
+  assert.ok(handler.includes("keysIn: { TYPESAFE_API_KEY: (env.TYPESAFE_API_KEY ?? '').trim() !== '', CLOUDFLARE_API_TOKEN: (env.CLOUDFLARE_API_TOKEN ?? '').trim() !== '' },"));
+  assert.ok(!/env\.(TYPESAFE_API_KEY|CLOUDFLARE_API_TOKEN)(?! \?\? '')/.test(handler), 'no key variable is handed on');
+  assert.ok(handler.includes('now: findFrom(now),') && handler.includes('atStart: findAtStart,'), 'find as registered, and as the settings give it now');
+  assert.ok(handler.includes('claudeCode = (await $.session.version()).version;'));
+  assert.ok(!handler.includes('error.message'), 'what an error says is not shown');
+
+  // What registration came to is what the command is told of find.
+  const { registerTools } = (await import(new URL('../hooks/move-out.ts', import.meta.url).href)) as {
+    registerTools: (
+      $: { tool: { register: (tool: { name: string }) => Promise<unknown> }; ui: { log: (text: string) => void; toast: (text: string) => void } },
+      provider: Provider | null | { error: string } | undefined,
+    ) => Promise<unknown>;
+  };
+  const host = (refuseFind: boolean) => ({
+    tool: {
+      register: async (tool: { name: string }) => {
+        if (refuseFind && tool.name === 'find') throw new Error('refused by the host');
+      },
+    },
+    ui: { log: () => {}, toast: () => {} },
+  });
+  const provider = { kind: 'typesafe', key: 'test-key-for-typesafe', model: 'jev-latest' } as unknown as Provider;
+  assert.deepEqual(await registerTools(host(false), provider), { registered: true, kind: 'typesafe' });
+  assert.deepEqual(await registerTools(host(true), provider), { registered: false, why: 'Claude Code did not take it, as a line at the start of the session said' });
+  assert.deepEqual(await registerTools(host(false), null), { registered: false, why: 'no key' });
 });
 
 test('a clean-up that stops records the kind, never its words: from where it stopped, or as unexpected; one that ends clears it', () => {

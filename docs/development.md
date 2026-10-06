@@ -164,7 +164,9 @@ the version the README was last read against. The test fails unless
 `package.json`, `.claude-plugin/plugin.json` and
 `.claude-plugin/marketplace.json` all name that version, so a version is not
 raised without coming here. The test cannot tell that the README was read,
-only that this line was set.
+only that this line was set. `VERSION` in `src/status.ts`, which
+`/lossless-status` prints, is held to the same version by
+`test/status.test.ts`.
 
 README read against version: `0.7.1`
 

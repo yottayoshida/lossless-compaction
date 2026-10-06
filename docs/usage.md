@@ -1,6 +1,19 @@
 # Usage
 
-Three things, in the order you will meet them.
+Three things, in the order you will meet them, and a command that says how
+the plugin stands.
+
+**`/lossless-status`.** Typed at the prompt, it says that the plugin runs in
+this session, its version and Claude Code's, the value each number setting is
+used at and, where that is not what was set, what was set, whether the other
+settings are set, and whether `find` is registered, with where its key came
+from or why it is not. It prints no key and reads no stored result: of
+`find`'s settings it shows `provider` when it is `auto`, `typesafe` or
+`cloudflare`, and of the others only whether they are set. What it says stays
+in the conversation, as any command's output does. Its first lines are what a
+bug report needs. Where Claude Code does not know the command, the plugin is
+not running ([function hooks](limits.md#function-hooks)). `/lossless-store`
+says where results are kept and how much.
 
 **A compaction.** A line starting `lossless-compaction:` says what each one
 did. From a real session of `Read` results, with `targetPercent` at 40:

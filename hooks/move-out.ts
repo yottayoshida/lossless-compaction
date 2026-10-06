@@ -21,7 +21,8 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, PLUGIN, RECALL, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
+import { FIND, PLUGIN, RECALL, STATUS_COMMAND, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
+import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
@@ -539,12 +540,17 @@ async function carryOut(
 
 type WithTools = { tool: { register: (tool: { name: string; description: string; inputSchema: Record<string, unknown> }) => Promise<unknown> } };
 
+/** What the start of this session registered of `find`, for /lossless-status; undefined until a session.start of this process. */
+let findAtStart: Find | undefined;
+
 /**
  * Registers `find` when there is a key it may use, then `recall`, whose
  * description names `find` only if `find` was registered. `provider` is
  * undefined when looking for the key failed: that was said where it failed.
+ * Returns what became of `find`.
  */
-export async function registerTools($: WithTools & WithUi, provider: Provider | null | { error: string } | undefined): Promise<void> {
+export async function registerTools($: WithTools & WithUi, provider: Provider | null | { error: string } | undefined): Promise<Find> {
+  let found = findFrom(provider);
   let withFind = false;
   // Only with a key: without one the tool would have nothing to answer with.
   if (provider !== undefined && provider !== null && 'error' in provider) {
@@ -570,6 +576,8 @@ export async function registerTools($: WithTools & WithUi, provider: Provider | 
       withFind = true;
     } catch (error) {
       say($, `the find tool could not be registered: ${error instanceof Error ? error.message : String(error)}`);
+      // What the host said was said at the start; it is not repeated where it would stay in the conversation.
+      found = { registered: false, why: NOT_TAKEN };
     }
   }
   try {
@@ -587,9 +595,13 @@ export async function registerTools($: WithTools & WithUi, provider: Provider | 
   } catch (error) {
     say($, `the recall tool could not be registered: ${error instanceof Error ? error.message : String(error)}`);
   }
+  return found;
 }
 
 export const register: Register = (on, options) => {
+  // Run again when the settings change: what an earlier start registered is not known to hold for these settings until
+  // a session.start registers anew, and till then /lossless-status says what they give now.
+  findAtStart = undefined;
   on('session.start', async ($, e, next) => {
     await markRunning($);
     let provider: Awaited<ReturnType<typeof providerOf>> | undefined;
@@ -598,7 +610,7 @@ export const register: Register = (on, options) => {
     } catch (error) {
       say($, `the find tool could not be registered: ${error instanceof Error ? error.message : String(error)}`);
     }
-    await registerTools($, provider);
+    findAtStart = await registerTools($, provider);
     // A command, not a tool: what it says is shown to you, and the agent is not offered it (ADR 0016).
     try {
       await $.command.register({
@@ -608,6 +620,16 @@ export const register: Register = (on, options) => {
       });
     } catch (error) {
       say($, `the /${STORE_COMMAND} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    // The same kind of command (#108): that it runs, its version, its settings in use and whether find is there.
+    try {
+      await $.command.register({
+        name: STATUS_COMMAND,
+        description: `Says that ${PLUGIN} runs, its version and Claude Code's, its settings in use and whether find is there, without reading a result`,
+        immediate: true,
+      });
+    } catch (error) {
+      say($, `the /${STATUS_COMMAND} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
     }
     // Not waited for: reading every transcript can take a minute, and the session should not.
     void collectOnce($, options);
@@ -726,6 +748,45 @@ export const register: Register = (on, options) => {
     } catch (error) {
       // What the host threw names no key: keys are only ever read, not thrown.
       return { result: `[${PLUGIN}] find could not run: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  });
+
+  // Spelled out, not imported: a test holds it to STATUS_COMMAND. Told what the hook knows, it opens no place results
+  // are kept in and reads no stored result; of the key variables it is told only which hold something (#108).
+  on('command.run', { command: 'lossless-status' }, async ($) => {
+    try {
+      const env = await envOf($);
+      let now: Awaited<ReturnType<typeof providerOf>> | undefined;
+      try {
+        now = await providerOf($, options);
+      } catch {
+        // Told as a lookup that failed.
+      }
+      let claudeCode: string | null = null;
+      try {
+        claudeCode = (await $.session.version()).version;
+      } catch {
+        // Said as not known.
+      }
+      let messages: readonly Message[] = [];
+      try {
+        messages = (await $.session.messages()) as readonly Message[];
+      } catch {
+        // Counted as none.
+      }
+      return {
+        text: statusReport({
+          claudeCode,
+          options,
+          atStart: findAtStart,
+          now: findFrom(now),
+          keysIn: { TYPESAFE_API_KEY: (env.TYPESAFE_API_KEY ?? '').trim() !== '', CLOUDFLARE_API_TOKEN: (env.CLOUDFLARE_API_TOKEN ?? '').trim() !== '' },
+          messages,
+        }),
+      };
+    } catch {
+      // What an error says may name a path: it is not shown.
+      return { text: 'the status could not be read' };
     }
   });
 
