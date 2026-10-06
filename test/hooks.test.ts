@@ -173,6 +173,11 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recallHook.includes('const found = await recallMeant('), 'recall, by the id that was meant');
   assert.ok(recallHook.includes('const read = agentId === undefined ? await $.session.messages() : await $.session.messages({ agentId });'), "recall, the caller's conversation");
   assert.ok(recallHook.includes('return Array.isArray(read) ? (read as readonly Message[]) : [];'), 'recall, a conversation refused holds none');
+  // Read once: the id meant and the tickets named on a refusal are told by the same conversation (#107).
+  assert.ok(recallHook.includes('(conversation ??= (async () => {'), 'recall, the conversation read once');
+  assert.ok(recallHook.includes('const found = await recallMeant((one) => recalled($, store, one), id, messages);'), 'the id meant, from it');
+  assert.ok(recallHook.includes('const copied = found.error === NOT_AN_ID || found.error === NOT_STORED;'), 'tickets named only where the id may have been copied wrong');
+  assert.ok(recallHook.includes('mayStandFor(id, await messages()'), 'named from the same conversation');
   assert.ok(recallHook.includes('const agentId = (e as { agentId?: string | undefined }).agentId;'), "recall, the subagent told by the event's own agentId");
   // What is put back takes along what the kept parts among it name, through earlier parts (#73).
   const restoreForAt = hooks.indexOf('async function restoreFor(');

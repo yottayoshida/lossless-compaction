@@ -29,7 +29,7 @@ import { keysIn } from './lib.ts';
 import { pick, pickTable, wentOf, type Pick } from './pick.ts';
 import { whole } from './report.ts';
 import { leaf, runAll, variantsOf } from './run.ts';
-import { SETTINGS, drive, figuresOf, sessionTable, sessionsUnder } from './session.ts';
+import { SETTINGS, drive, figuresOf, sessionReport, sessionsUnder } from './session.ts';
 import { BUILT, FOUND, PROBED, TRACES, described, unnamed } from './traces.ts';
 
 /** The model that builds, answers and grades where none is named: the least the benchmark is measured with. */
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'session-report' && flag(args, 'from') !== undefined) {
-    process.stdout.write(`${sessionTable(sessionsUnder(resolve(flag(args, 'from') as string)))}\n`);
+    process.stdout.write(sessionReport(sessionsUnder(resolve(flag(args, 'from') as string))));
     return;
   }
   if (command === 'report' && flag(args, 'from') !== undefined) {
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'session-report') {
-    process.stdout.write(`${sessionTable(sessionsUnder(places.box))}\n`);
+    process.stdout.write(sessionReport(sessionsUnder(places.box)));
     return;
   }
   if (command === 'session') {

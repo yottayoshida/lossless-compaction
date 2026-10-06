@@ -63,7 +63,12 @@ at the first message you send, naming what the plugin needs: Claude Code
 
 **`recall`.** The agent calls it with the id on a ticket and gets the result
 back unchanged. It needs no key. An id the agent copied wrong is taken for the
-one id written in the conversation that begins with its first 16 characters
+one id written in the conversation that shares the most characters with it
+from the first, 8 or more, where no other shares as many; one still refused is
+answered with the tickets of the conversation whose ids begin as it does and
+the parts kept from it, up to five, each with what it stands for where the
+conversation says, and its id; where the id given is itself written in the
+conversation, with the parts alone
 ([what is not taken](limits.md#what-an-agent-does-not-fetch)).
 
 **`find`.** Optional. Asked in words, it returns the moved-out result of this

@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 import { claude } from './cc.ts';
 import { logFile, logLine, paragraph } from './fixtures.ts';
-import { holdsAll, lookedOutside, ownUsage, readLine, summarizedBy, type Arm, type Line, type Session, type ToolCall, type Usage } from './lib.ts';
+import { holdsAll, isRefusal, lookedOutside, ownUsage, readLine, summarizedBy, type Arm, type Line, type Session, type ToolCall, type Usage } from './lib.ts';
 import { checkoutOf } from './run.ts';
 import { QUESTION_TOOLS } from './traces.ts';
 
@@ -137,7 +137,12 @@ export type Turn = {
   /** A question's turn read outside the working directory: Claude Code's own record of the session, which a summary names. */
   outside?: true;
   calls: string[];
+  /** Each call to `recall` of the turn, with what it was handed as the id and whether the plugin refused it (#107). Absent from runs before it was recorded. */
+  recalled?: Recalled[];
 };
+
+/** One call to `recall`: the id handed, kept only as hexadecimal characters and white space, and whether it was refused. */
+export type Recalled = { given: string; refused: boolean };
 
 export type SessionRun = {
   version: number;
@@ -263,6 +268,7 @@ export async function drive(setting: Setting, model: string, run: number, places
       ...(session.fellBackTo !== null ? { refused: true as const } : {}),
       ...(kind === 'ask' && lookedOutside(sentCalls(text), session.cwd || cwd) ? { outside: true as const } : {}),
       calls: callsIn(text),
+      recalled: recalledIn(text),
     });
     if (boundary !== null) log(`  ${kind} ${step}: compacted (${boundary.trigger}) at ${inUseBefore}, ${boundary.preTokens} -> ${boundary.postTokens}${line ? `, ${line.outcome}` : ''}`);
     if (asked !== undefined) log(`  ${asked.id}: ${turns.at(-1)?.right ? 'right' : 'wrong'}`);
@@ -305,7 +311,36 @@ export async function drive(setting: Setting, model: string, run: number, places
  */
 export const callsIn = (text: string): string[] => sentCalls(text).map((call) => call.name);
 
-/** The same calls, with what each was handed. */
+/**
+ * Each call to `recall` of the responses a turn was sent, with the id it was handed and whether it was refused. An id is
+ * kept as it was handed where it is hexadecimal characters and white space alone, 200 at most, and is otherwise said to
+ * be no id by its length: what an agent hands as an id can be a path of the machine.
+ */
+export function recalledIn(text: string): Recalled[] {
+  const handed = new Map<string, string>();
+  for (const call of sentCalls(text)) if (call.name.endsWith('__recall') && call.id !== undefined) handed.set(call.id, String(call.input['id'] ?? ''));
+  const answers = new Map<string, string>();
+  for (const line of text.split('\n')) {
+    let event: Record<string, any>;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (event?.['type'] !== 'user') continue;
+    for (const block of event['message']?.['content'] ?? []) {
+      if (block?.type !== 'tool_result' || !handed.has(String(block.tool_use_id))) continue;
+      const content = block.content;
+      answers.set(String(block.tool_use_id), typeof content === 'string' ? content : Array.isArray(content) ? content.map((one: { text?: unknown }) => String(one?.text ?? '')).join('') : '');
+    }
+  }
+  return [...handed].map(([use, given]) => ({
+    given: /^[0-9a-f\s]{0,200}$/.test(given) ? given : `(no id: ${given.length} characters)`,
+    refused: isRefusal(answers.get(use) ?? ''),
+  }));
+}
+
+/** The same calls, with what each was handed and its id. */
 export function sentCalls(text: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
@@ -322,7 +357,7 @@ export function sentCalls(text: string): ToolCall[] {
     for (const block of event['message']?.['content'] ?? []) {
       if (block?.type !== 'tool_use' || seen.has(String(block.id))) continue;
       seen.add(String(block.id));
-      calls.push({ name: String(block.name ?? ''), input: block.input ?? {} });
+      calls.push({ name: String(block.name ?? ''), input: block.input ?? {}, id: String(block.id) });
     }
   }
   return calls;
@@ -420,6 +455,31 @@ export function sessionTable(runs: readonly SessionRun[]): string {
   });
   const head = ['Setting', 'Runs', 'Compactions', 'In use before each', 'Right after each', 'Read from the cache right after', 'Written to it right after', 'Sent per request', 'Right', 'Right after reading outside the work', '`recall` calls', ...MARKS.slice(0, -1).map((log) => `Cost by log ${log}, USD`), 'Cost, USD', 'Time, s'];
   return [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map((row) => `| ${row.join(' | ')} |`)].join('\n');
+}
+
+/**
+ * For the runs that recorded each call to `recall` (#107), a row a setting, each run in turn: the calls, those the plugin
+ * refused, and of those refused, the ones handed what is not 64 hexadecimal characters. Runs from before it was
+ * recorded are left out.
+ */
+export function recallsTable(runs: readonly SessionRun[]): string {
+  const recorded = runs.filter((run) => run.turns.some((turn) => turn.recalled !== undefined));
+  const settings = [...new Set(recorded.map((run) => run.setting))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  const rows = settings.map((setting) => {
+    const of = recorded.filter((run) => run.setting === setting).sort((a, b) => a.run - b.run);
+    const calls = of.map((run) => run.turns.flatMap((turn) => turn.recalled ?? []));
+    const each = (pick: (one: Recalled[]) => number) => calls.map((one) => String(pick(one))).join(', ');
+    const refused = (one: Recalled[]) => one.filter((call) => call.refused);
+    return [setting, String(of.length), each((one) => one.length), each((one) => refused(one).length), each((one) => refused(one).filter((call) => !/^[0-9a-f]{64}$/.test(call.given)).length)];
+  });
+  const head = ['Setting', 'Runs', '`recall` calls', 'Refused', 'Refused, not 64 hexadecimal characters'];
+  return [`| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.map((row) => `| ${row.join(' | ')} |`)].join('\n');
+}
+
+/** What `session-report` prints: the table, and where the runs recorded each call to `recall`, its table after. */
+export function sessionReport(runs: readonly SessionRun[]): string {
+  const recorded = runs.some((run) => run.turns.some((turn) => turn.recalled !== undefined));
+  return `${sessionTable(runs)}\n${recorded ? `\n${recallsTable(runs)}\n` : ''}`;
 }
 
 /** Every run under a directory of sessions: the box's, or results as they were published. */

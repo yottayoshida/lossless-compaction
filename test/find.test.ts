@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { digest } from '../src/ask.ts';
-import { HEAD_CHARS, MIN_DIGITS, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, lineHolds, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
+import { HEAD_CHARS, MIN_DIGITS, NAMED_ON_REFUSAL, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, lineHolds, mayStandFor, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
 import { FIND_TOOL, RECALL_TOOL, moveInputOut, moveOut, partTicketText, ticketText } from '../src/store.ts';
 import type { Http, Message } from '../src/types.ts';
 import { MemoryFiles, TOLD, conversation, ok, output, questionsOf, recordingHttp, trusting, type Call, type Sent } from './helpers.ts';
@@ -642,4 +642,46 @@ test('a long input value kept inside a part is one find chooses among, as it is 
 
   const found = await find(input(files, messages, 'Which file set "export const LIMIT = 8192"?'));
   assert.ok(found.includes(content), found.slice(0, 200));
+});
+
+test('a refused id is answered with the tickets of the conversation it may stand for: those that begin as it does, then the kept parts (#107)', () => {
+  const read = (n: number, id: string): Message[] => [
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: `t${n}`, tool: 'Read', input: { file_path: `/w/logs/log-0${n}.txt` } }] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `t${n}`, text: ticketText({ tool: 'Read', bytes: 1000 + n, id }), isError: false }] },
+  ];
+  const near = '6c7cc4406e6e8fb60cea6af41ecebabf800a6089e1b0ae27489e5ada8ef3b822';
+  const nearer = '6c7cc44fe'.padEnd(64, '1');
+  const far = 'a'.repeat(64);
+  const part = 'b'.repeat(64);
+  const messages: Message[] = [
+    { role: 'user', text: 'Read the logs.', toolUses: [] },
+    ...read(4, near),
+    ...read(5, nearer),
+    ...read(6, far),
+    { role: 'user', text: partTicketText({ part: 1, parts: 1, first: 2, last: 9, bytes: 4000, id: part }), toolUses: [] },
+  ];
+  const said = mayStandFor('6c7cc4406e8', messages).split('\n');
+  // What begins most as the id given first, then the next, then the kept part; not what begins otherwise.
+  assert.equal(said[1], 'The tickets of this conversation it may stand for:');
+  assert.ok(said[2]?.includes('/w/logs/log-04.txt') && said[2].endsWith(`id ${near}`), said[2] ?? '');
+  assert.ok(said[3]?.includes('/w/logs/log-05.txt') && said[3].endsWith(`id ${nearer}`), said[3] ?? '');
+  assert.ok(said[4]?.includes('part 1 of 1 of the kept conversation') && said[4].endsWith(`id ${part}`), said[4] ?? '');
+  assert.equal(said.length, 5);
+  assert.ok(said.slice(2).every((line) => line.includes(`recall with ${RECALL_TOOL} id `)));
+  // Nothing begins as it does: the parts still, where the tickets they hold are.
+  assert.ok(mayStandFor('ffff0000', messages).endsWith(`id ${part}`));
+  // Nothing begins as it does and no part: said so.
+  assert.match(mayStandFor('ffff0000', messages.slice(0, -1)), /^\nNo ticket of this conversation begins as that id does/);
+  // The id given is written in the conversation: nothing is stored under it here, and no other result is offered in its
+  // place; the kept parts still are, as a copy written whole can stand beside a ticket a part alone holds.
+  assert.deepEqual(mayStandFor(near, messages).split('\n').slice(1), [
+    'That id is written in this conversation, and nothing is stored under it here. The parts kept from the conversation hold tickets of their own:',
+    `- part 1 of 1 of the kept conversation, messages 2-9; 4000 bytes; recall with ${RECALL_TOOL} id ${part}`,
+  ]);
+  assert.equal(mayStandFor(near, messages.slice(0, -1)), '\nThat id is written in this conversation, and nothing is stored under it here.');
+  // A conversation with no ticket, a subagent's: nothing added.
+  assert.equal(mayStandFor('6c7cc4406e8', []), '');
+  // Never more than NAMED_ON_REFUSAL.
+  const many = Array.from({ length: 9 }, (_, n) => read(n, `6c7c${String(n).repeat(60)}`)).flat();
+  assert.equal(mayStandFor('6c7c', many).split('\n').length - 2, NAMED_ON_REFUSAL);
 });

@@ -2,6 +2,11 @@
 // Nothing here starts Claude Code or sends anything: `cc.ts` does, and hands the
 // text it got back to these functions, which the tests hold to recorded sessions.
 
+import { NOT_AN_ID, NOT_STORED } from '../src/store.ts';
+
+/** Whether what `recall` answered is its refusal of an id that may have been copied wrong, which names other tickets after it (#107). */
+export const isRefusal = (answer: string): boolean => [NOT_AN_ID, NOT_STORED].some((refusal) => answer.startsWith(`[lossless-compaction] ${refusal}`));
+
 export type Arm = 'plugin' | 'builtin';
 
 /** The token counts of one model over a session and every session it was forked from. */
@@ -424,7 +429,8 @@ export function fetchedOf(needles: readonly string[], conversation: string, stor
     inContext: holdsAll(conversation, needles),
     tried: recalls.length + finds.length > 0,
     chose: holders.some((id) => chosen.has(id)),
-    restored: recalls.some((call) => call.result !== undefined && holdsAll(call.result, needles)) || given.some((one) => holdsAll(one.text, needles)),
+    // A refusal names other tickets with what they stand for and their ids: what it holds is not what came back.
+    restored: recalls.some((call) => call.result !== undefined && !isRefusal(call.result) && holdsAll(call.result, needles)) || given.some((one) => holdsAll(one.text, needles)),
   };
 }
 
