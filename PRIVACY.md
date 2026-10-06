@@ -88,7 +88,8 @@ drive is no longer only on your machine.
 - `index/`: the size of each and the name of the tool it came from.
 - `roots/`: the paths of the directories Claude Code keeps transcripts in.
 - `gc.json`: when the clean-up last ended and last tried, how often it was
-  tried, and the kind of its last stop.
+  tried, and the kind of its last stop, with the ids of the stored things
+  that stopped it and why (at most twenty).
 - `sentinel.jsonl`: one line of 64 zeros, which a search of the transcripts
   must print to count as finished.
 - `witness/`: for each conversation compacted with tickets, its session id,

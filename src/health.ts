@@ -6,7 +6,7 @@
 // clean-up's own record. No stored result is opened.
 
 import { DATE, DAY, blobIdOf, blobsDir, entryIdOf, entryPath, indexDir, tmpDir, trashDayDir, trashDir, trashedIdOf } from './layout.ts';
-import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind } from './lifetime.ts';
+import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind, type Unread } from './lifetime.ts';
 import { PART, PLUGIN, isOwnTool } from './store.ts';
 import type { DirEntry, Files } from './types.ts';
 
@@ -86,12 +86,24 @@ function zero(): Tally {
   return { count: 0, bytes: 0 };
 }
 
+/**
+ * What one stored thing that stopped a clean-up is, and how the clean-up goes on, in each place above that holds a file
+ * under its id. Where taking it out loses what only it names, that is said.
+ */
+export const UNREAD_HOW: Record<Unread['why'], string> = {
+  entry: 'its entry, index/<id>.json, could not be read, while recall may still read its text; write the entry back as {"bytes":<size of the text>,"tool":"conversation"}, or move both its files out of the store, after which what only it named is no longer kept',
+  'text-missing': 'its text, blobs/<id>.txt, is not there; where you removed it yourself, remove index/<id>.json too in each place that has it, and the clean-up goes on. In a store a sync is still writing, wait for it',
+  'text-changed': 'its text, blobs/<id>.txt, is not what was stored; put the stored text back, or move both its files out of the store, after which what only it named is no longer kept',
+  'text-unreadable': 'its text, blobs/<id>.txt, could not be read; make it readable to you, or move both its files out of the store, after which what only it named is no longer kept',
+  'in-trash': 'it is named and in the trash, and could not be put back; move its files from trash/<day>/ back into blobs/ and index/, and the clean-up goes on',
+};
+
 /** What each kind of stop is said as: no path, nothing a command printed. */
 export const STOP_SAID: Record<StopKind, string> = {
   unread: 'the transcripts could not be read to the end',
   'too-many': 'one directory of transcripts held more ids than one search can return',
   place: 'a place transcripts are kept in is gone, or could not be looked at or listed',
-  part: 'a kept part of a conversation could not be read',
+  part: 'a stored thing it follows, a kept part of a conversation or what one names, could not be read',
   trash: 'the trash could not be listed, made or emptied',
   move: 'results could not be moved to or from the trash',
   unexpected: 'an error the clean-up does not name',
@@ -139,6 +151,9 @@ export function storeReport(counted: readonly Counted[], gc: GcState, now: numbe
   lines.push('', 'clean-up:');
   lines.push(`  last ended: ${gc.lastRun > 0 ? timeText(gc.lastRun) : 'never'}; last tried: ${gc.tried > 0 ? timeText(gc.tried) : 'never'}`);
   lines.push(`  tried since it last ended: ${gc.tries}${gc.stopped === null ? '' : `; last stopped ${timeText(gc.stopped.at)}: ${STOP_SAID[gc.stopped.kind]}`}`);
+  // What stopped it, one stored thing each, and how to go on: in whichever place above holds it (#114).
+  for (const one of gc.stopped?.unread ?? []) lines.push(`    ${one.id}: ${UNREAD_HOW[one.why]}`);
+  if ((gc.stopped?.more ?? 0) > 0) lines.push(`    and ${gc.stopped?.more} more, named once these are gone past`);
   const why = whyNotNow(gc, now);
   if (why?.kind === 'first-week') {
     lines.push(`  next: not before ${timeText(gc.firstSeen + FIRST_WAIT_MS)}, the first week after transcripts were found`);

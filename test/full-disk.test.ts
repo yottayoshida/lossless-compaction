@@ -178,3 +178,22 @@ test('a store with no directories yet takes its first results: the move makes th
   assert.equal(await isStored(files, [DIR], moved.text), true);
   assert.ok(![...files.files.keys()].some((path) => path.endsWith('.part')), 'no part left in tmp/');
 });
+
+test('an entry that does not read back as it was written is not relied on, and the result stays where it is: no ticket for what recall cannot find (I1)', async () => {
+  const files = new DiskFiles(true);
+  // The entry's part, on its way to index/, is stored as other text by a broken disk.
+  files.garble = (path) => path.includes('/tmp/') && path.includes('.json.');
+  const moved = await moveOut(files, DIR, 'Bash', TEXT);
+  assert.ok('reason' in moved, 'the result is not moved out');
+  assert.equal(moved.reason, 'differs');
+  assert.ok(![...files.files.keys()].some((path) => path.includes('/index/')), 'no entry was placed');
+  // With no mv, the entry is written in place: one that reads as other than it was written is not taken for placed.
+  const bare = new DiskFiles(false);
+  bare.garble = (path) => path.includes('/index/');
+  const inPlace = await moveOut(bare, DIR, 'Bash', TEXT);
+  assert.ok('reason' in inPlace, 'the result is not moved out where its entry does not read');
+  // Another tool that returned the same text, its entry there and read, is moved out as before.
+  const twice = new DiskFiles(false);
+  assert.ok(!('reason' in (await moveOut(twice, DIR, 'Bash', TEXT))));
+  assert.ok(!('reason' in (await moveOut(twice, DIR, 'Read', TEXT))), 'the same text from another tool');
+});
