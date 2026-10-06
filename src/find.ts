@@ -5,7 +5,7 @@ import { choose, digest, head, inputLine, stateFor, type Provider } from './ask.
 import { unnumbered } from './changed.ts';
 import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
-import { PART, PLUGIN, RECALL_TOOL, inputTicketsOf, isOwnTool, isStored, readBodyTicket, readInputTicket, readPartTicket, readTicket, recall, type Ticket } from './store.ts';
+import { PART, PLUGIN, RECALL_TOOL, headOf, idsWritten, inputTicketsOf, isOwnTool, isStored, readBodyTicket, readInputTicket, readPartTicket, readTicket, recall, sharedHead, type Ticket } from './store.ts';
 import type { Files, Http, Message } from './types.ts';
 
 /** The text of a result is returned when the likeliest option has at least this probability ... */
@@ -256,6 +256,43 @@ function middlesLine(middles: readonly Entry[], values: readonly string[]): stri
 type Entry = { ticket: Stored; option: string; holds: boolean; valued: boolean };
 
 const describe = (ticket: Stored) => `${ticket.about}; ${ticket.bytes} bytes`;
+
+/** At most this many tickets are named when `recall` refuses an id that may have been copied wrong. */
+export const NAMED_ON_REFUSAL = 5;
+/** A ticket is named for such an id when their first this many characters are the same. */
+export const NEAR_HEAD = 4;
+
+/**
+ * What `recall` adds to its refusal of an id that may have been copied wrong (#107): the tickets of the conversation it
+ * may stand for, at most NAMED_ON_REFUSAL, each with what it stands for where the conversation says, and its id. First
+ * those whose ids begin as it does, the most characters first; then the parts kept from the conversation, newest
+ * first, whose own tickets are not written in it. Where the id is itself one written in the conversation, the ids that
+ * begin as it does are not named, since another result would be read in its place, and the parts still are: a copy
+ * written whole, as in Claude Code's summary, can stand beside a ticket that only a part holds. Nothing stored is opened.
+ */
+export function mayStandFor(given: unknown, messages: readonly Message[]): string {
+  const written = idsWritten(messages);
+  if (written.length === 0) return '';
+  const tickets = ticketsIn(messages);
+  const middles = middlesOf(messages.flatMap((message) => message.text.split('\n').map((line) => ({ line, role: message.role }))), new Set());
+  const about = new Map([...tickets, ...middles].map((ticket): [string, string] => [ticket.id, describe(ticket)]));
+  const lineOf = (id: string) => `- ${about.get(id) ?? 'an id written in the conversation'}; recall with ${RECALL_TOOL} id ${id}`;
+  const parts = tickets.filter((ticket) => ticket.tool === PART).map((ticket) => ticket.id).reverse();
+  if (typeof given === 'string' && written.includes(given)) {
+    const kept = parts.filter((id) => id !== given).slice(0, NAMED_ON_REFUSAL);
+    const said = 'That id is written in this conversation, and nothing is stored under it here';
+    return kept.length === 0 ? `\n${said}.` : ['', `${said}. The parts kept from the conversation hold tickets of their own:`, ...kept.map(lineOf)].join('\n');
+  }
+  const head = typeof given === 'string' ? headOf(given) : '';
+  const near = written
+    .map((id): [string, number] => [id, sharedHead(head, id)])
+    .filter(([, shared]) => shared >= NEAR_HEAD)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
+  const named = [...new Set([...near, ...parts])].slice(0, NAMED_ON_REFUSAL);
+  if (named.length === 0) return "\nNo ticket of this conversation begins as that id does: copy the 64 characters at the end of the ticket's line.";
+  return ['', 'The tickets of this conversation it may stand for:', ...named.map(lineOf)].join('\n');
+}
 
 async function found(files: Files, dirs: readonly string[], ticket: Stored, why: string): Promise<string> {
   const got = await recall(files, dirs, ticket.id);

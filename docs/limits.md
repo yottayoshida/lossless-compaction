@@ -431,9 +431,9 @@ with the file as it is now twelve times of twelve; Sonnet 5.5 answered right
 with the line and without it, in one run on two conversations
 ([the benchmark](measurements.md#a-file-shown-again-after-a-summary)). An id
 is 64 characters, and an agent copying one gets it wrong now and then:
-`recall` takes it for the one id written in the conversation that begins
-with its first 16 characters, and refuses it where none or more than one
-does
+`recall` takes it for the one id written in the conversation that shares the
+most characters with it from the first, 8 or more, and refuses it where none
+does or two share as many, naming the tickets it may stand for
 ([what is not taken](#what-an-agent-does-not-fetch)). Measured with
 `claude -p` and a manual `/compact`; a compaction Claude Code starts on its
 own was not.
@@ -1121,19 +1121,35 @@ less often, in made-up conversations asked right after the compaction
   measured with no `@`, on the plugin before a line stood in the file's
   place; with the file handed over it was tried in one session, where the
   reading was fetched.
-- **An id copied wrong within its first 16 characters.** An id is 64
+- **An id copied wrong within its first 8 characters.** An id is 64
   characters. Copied wrong, it is taken for the one id written in the
-  conversation that begins with its first 16 characters: written in the user
-  messages and in what tools returned, not in what the agent said or put in
-  its calls. One that goes wrong within the first 16 characters is refused,
-  as is one that two ids begin with, and what is no id. In a subagent, the
-  conversation read is the subagent's own. What the agent wrote can still stand there,
-  in Claude Code's summary or in a kept part `recall` returned: an id it
-  copied wrong there in full, 64 characters, makes two that begin alike,
-  and the id is refused. Haiku gave `recall` an id it
+  conversation that shares the most characters with it from the first, 8 or
+  more, where no other shares as many: written in the user messages and in
+  what tools returned, not in what the agent said or put in its calls. What
+  the agent wrote can still stand there, in Claude Code's summary or in a
+  kept part `recall` returned; an id written there that is the one given,
+  whole, is passed over for the one it was copied from. One that goes wrong
+  within the first 8 characters is refused, as is one that two ids share as
+  many characters with, and what is no id. In a subagent, the conversation
+  read is the subagent's own. A refusal of what may be an id copied wrong names
+  up to five tickets of the conversation it may stand for, each with what it
+  stands for where the conversation says: those whose ids begin as it does,
+  then the parts kept from the conversation, newest first, whose own tickets
+  are not written in it. Where the id given is itself written in the
+  conversation, it says nothing is stored under it here and names the parts
+  alone, so that no other result is read in its place. Haiku gave `recall` an id it
   refused 15 times in 990 calls before this, over every plugin measured for
-  it: 10 of those are taken now, 3 went wrong at the thirteenth character,
-  and 2 were the size written on a ticket.
+  it: 10 of those were taken by their first 16 characters (#54), 3 went wrong
+  at the thirteenth character, which the first 12 now take where the id they
+  were copied from is written in the conversation (not measured again), and 2
+  were the size written on a ticket. In one session that compacts several
+  times, Sonnet 5.5 was refused 8 times in three runs, each time an id that
+  went wrong at the tenth character, where a pair of characters is written
+  twice over (`406e6e8` copied as `406e8`): 7 of those are taken now, and the
+  eighth was copied from Claude Code's summary while the id it stood for was
+  only in a part kept from the conversation: the refusal names the parts, the
+  newest five, and whether that one was among them in that session was not
+  measured ([the measurement](measurements.md#ids-copied-wrong-in-one-session-that-compacts-several-times)).
 
 ## What it was measured with
 

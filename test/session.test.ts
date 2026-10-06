@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { logLine } from '../bench/fixtures.ts';
-import { ASKS, defaultFrom, AUTO_LINE, LOGS, MARKS, REMOVED, REWRITTEN, RULE, SESSION_VERSION, SETTINGS, type SessionRun, type Turn, callsIn, figuresOf, logPath, longMessage, scriptOf, sessionTable, sessionsUnder } from '../bench/session.ts';
+import { NOT_AN_ID, NOT_STORED } from '../src/store.ts';
+import { ASKS, defaultFrom, AUTO_LINE, LOGS, MARKS, REMOVED, REWRITTEN, RULE, SESSION_VERSION, SETTINGS, type SessionRun, type Turn, callsIn, figuresOf, logPath, longMessage, recalledIn, recallsTable, scriptOf, sessionReport, sessionTable, sessionsUnder } from '../bench/session.ts';
 
 const usage = (costUSD: number) => ({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD, thinkingTokens: 0 });
 const request = (read: number, written: number, fresh = 5) => ({ fresh, read, written });
@@ -208,4 +209,40 @@ test("the default of targetPercent is what the rule gives of the sessions publis
   // The decision record gives the figures the rule was applied to.
   const adr = readFileSync(fileURLToPath(new URL('../docs/adr/0025-everything-that-may-leave-does.md', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
   assert.ok(adr.includes('It held: 4.23 and 4.03 USD at 1 against 5.02 and 5.13 at 40, 81 % on average'));
+});
+
+test('each call to recall a turn sent is recorded with the id handed and whether it was refused, and tabled for the runs that recorded them (#107)', () => {
+  const sent = (uses: { id: string; given: unknown }[], usage = 10) =>
+    JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: usage }, content: uses.map((use) => ({ type: 'tool_use', id: use.id, name: 'mcp__lossless-compaction__recall', input: { id: use.given } })) } });
+  const answered = (id: string, content: unknown) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const id = '6c7cc4406e6e8fb60cea6af41ecebabf800a6089e1b0ae27489e5ada8ef3b822';
+  const text = [
+    sent([{ id: 'a', given: '6c7cc4406e8\n6c7cc4406e8' }, { id: 'b', given: id }]),
+    answered('a', `[lossless-compaction] ${NOT_AN_ID}\nThe tickets of this conversation it may stand for:`),
+    answered('b', [{ type: 'text', text: 'line 1 of the log' }]),
+    sent([{ id: 'c', given: '/Users/someone/notes.txt' }, { id: 'd', given: 'f'.repeat(64) }]),
+    answered('c', `[lossless-compaction] ${NOT_AN_ID}`),
+    answered('d', `[lossless-compaction] ${NOT_STORED}`),
+    // Printed again after a compaction, with no usage: not this turn's call.
+    sent([{ id: 'e', given: '1234' }], 0),
+    answered('e', `[lossless-compaction] ${NOT_AN_ID}`),
+  ].join('\n');
+  assert.deepEqual(recalledIn(text), [
+    { given: '6c7cc4406e8\n6c7cc4406e8', refused: true },
+    { given: id, refused: false },
+    // What is no id is kept by its length only: it can be a path of the machine.
+    { given: '(no id: 24 characters)', refused: true },
+    { given: 'f'.repeat(64), refused: true },
+  ]);
+
+  const turnOf = (recalled?: { given: string; refused: boolean }[]): Turn => ({ step: 1, kind: 'ask', requests: [request(10, 0)], own: usage(0.1), wallMs: 1, calls: [], ...(recalled !== undefined ? { recalled } : {}) });
+  const runs = [
+    runOf('target-1', 1, [turnOf(recalledIn(text))]),
+    runOf('target-1', 2, [turnOf([])]),
+    runOf('target-40', 1, [turnOf()]),
+  ];
+  assert.deepEqual(recallsTable(runs).split('\n').slice(2), ['| target-1 | 2 | 4, 0 | 3, 0 | 2, 0 |']);
+  // Printed after the table only where a run recorded them: the runs published before it print as they did.
+  assert.ok(sessionReport(runs).includes('| Setting | Runs | \`recall\` calls | Refused |'));
+  assert.equal(sessionReport([runOf('target-40', 1, [turnOf()])]), `${sessionTable([runOf('target-40', 1, [turnOf()])])}\n`);
 });

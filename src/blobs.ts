@@ -194,13 +194,17 @@ export async function storedAs(files: Files, dirs: readonly string[], id: string
   return null;
 }
 
+/** The two refusals of an id that may have been copied wrong: not an id at all, or one nothing is stored under. */
+export const NOT_AN_ID = 'That id is not 64 hexadecimal characters. Copy it from the ticket in the conversation.';
+export const NOT_STORED = 'Nothing is stored under that id on this machine.';
+
 /** What is stored under an id. For a result that held images, `text` is its text without their bytes, and `parts` is all of it in order. */
 export type Recalled = { text: string; parts?: MediaPart[] } | { error: string };
 
 /** The text behind an id, from the first of `dirs` that holds it, checked against the id before it is handed over. */
 export async function recall(files: Files, dirs: string | readonly string[], id: unknown): Promise<Recalled> {
   if (typeof id !== 'string' || !ID.test(id)) {
-    return { error: 'That id is not 64 hexadecimal characters. Copy it from the ticket in the conversation.' };
+    return { error: NOT_AN_ID };
   }
   for (const dir of dirsOf(dirs)) {
     if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
@@ -216,5 +220,5 @@ export async function recall(files: Files, dirs: string | readonly string[], id:
     const media = decodeMedia(text);
     return media === null ? { text } : { text: textOf(media), parts: media };
   }
-  return { error: 'Nothing is stored under that id on this machine.' };
+  return { error: NOT_STORED };
 }

@@ -8,7 +8,7 @@ import { dirsOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
 import { entryPath } from './layout.ts';
 import type { Files, Message } from './types.ts';
 
-export { MAX_BYTES, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
+export { MAX_BYTES, NOT_AN_ID, NOT_STORED, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
 
 export const PLUGIN = 'lossless-compaction';
 /** The name the plugin carried up to 0.3.0. What was written under it is still read (ADR 0004). */
@@ -292,32 +292,32 @@ export function inputTicketsOf(value: unknown, into: string[] = [], depth = 0): 
 
 // An id as it is written in a text: 64 hexadecimal characters, with none right before or after.
 const WRITTEN_ID =/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/g;
-/** How many characters of an id, from its first, tell which one an agent meant. */
-export const ID_HEAD = 16;
+/** The fewest characters of an id, from its first, that tell which one an agent meant. */
+export const ID_LEAST = 8;
 
-/** True when `given` begins with 16 hexadecimal characters: only then is the conversation read for the id that was meant. */
+/** The hexadecimal characters `given` begins with: what of it can be told against an id. */
+export const headOf = (given: string): string => /^[0-9a-f]{0,64}/.exec(given)?.[0] ?? '';
+
+/** True when `given` begins with ID_LEAST hexadecimal characters: only then is the conversation read for the id that was meant. */
 function mayBeMeant(given: unknown): given is string {
-  return typeof given === 'string' && /^[0-9a-f]{16}/.test(given);
+  return typeof given === 'string' && headOf(given).length >= ID_LEAST;
+}
+
+/** How many characters, from the first, `a` and `b` share. */
+export function sharedHead(a: string, b: string): number {
+  let at = 0;
+  while (at < a.length && at < b.length && a[at] === b[at]) at += 1;
+  return at;
 }
 
 /**
- * The id an agent meant by one that `recall` refused: the one id written in
- * the conversation that begins with the first 16 characters of what it gave.
- * Null when none does, or more than one. An agent copying 64 characters gets
- * them wrong now and then: it gives the first half, drops a character further
- * on, or writes one that is no digit (#54).
- *
- * Read from the user messages, what tools returned and the tickets this plugin
- * put in calls, not from what the agent said or wrote in its calls: an id it
- * gave wrong before would stand
- * beside the one it was copied from. What the agent wrote can still reach
- * those, as Claude Code's summary or as a kept part `recall` returned; an id
- * copied wrong there in full makes two that begin alike, and it is refused.
+ * Every id written in the conversation, once each, oldest first. Read from the
+ * user messages, what tools returned and the tickets this plugin put in calls,
+ * not from what the agent said or wrote in its calls: an id it gave wrong
+ * before would stand beside the one it was copied from.
  */
-export function idMeant(given: unknown, messages: readonly Message[]): string | null {
-  if (!mayBeMeant(given)) return null;
-  const head = given.slice(0, ID_HEAD);
-  let meant: string | null = null;
+export function idsWritten(messages: readonly Message[]): string[] {
+  const ids = new Set<string>();
   for (const message of messages) {
     const texts = [
       message.role === 'user' ? message.text : '',
@@ -328,15 +328,37 @@ export function idMeant(given: unknown, messages: readonly Message[]): string | 
       // So is the line in place of the middle of a message of Claude's (ADR 0024).
       ...(message.role === 'assistant' ? message.text.split('\n').filter((line) => readBodyTicket(line) !== null) : []),
     ];
-    for (const text of texts) {
-      for (const [id] of text.matchAll(WRITTEN_ID)) {
-        if (!id.startsWith(head) || id === meant) continue;
-        if (meant !== null) return null;
-        meant = id;
-      }
-    }
+    for (const text of texts) for (const [id] of text.matchAll(WRITTEN_ID)) ids.add(id);
   }
-  return meant;
+  return [...ids];
+}
+
+/**
+ * The id an agent meant by one that `recall` refused: of the ids written in
+ * the conversation, the one that shares the most characters from the first
+ * with what it gave, ID_LEAST or more, where no other shares as many. Null
+ * when none does, or two do. An agent copying 64 characters gets them wrong
+ * now and then: it gives the first half, drops a character, or writes one that
+ * is no digit (#54); it drops one of two characters written twice over, as
+ * `406e6e8` copied as `406e8` ten characters in, or stops after a few (#107).
+ *
+ * An id written there that is what it gave, whole, is not the one it meant:
+ * Claude Code's summary or a kept part `recall` returned can hold an id the
+ * agent copied wrong in full, beside the one it was copied from. So is `past`, where it is given.
+ */
+export function idMeant(given: unknown, messages: readonly Message[], past?: string): string | null {
+  if (!mayBeMeant(given)) return null;
+  const head = headOf(given);
+  let meant: string | null = null;
+  let most = ID_LEAST - 1;
+  let tied = false;
+  for (const id of idsWritten(messages)) {
+    if (id === given || id === past) continue;
+    const shared = sharedHead(head, id);
+    if (shared > most) [meant, most, tied] = [id, shared, false];
+    else if (shared === most && meant !== null) tied = true;
+  }
+  return tied ? null : meant;
 }
 
 /**
@@ -358,5 +380,17 @@ export async function recallMeant(read: (id: unknown) => Promise<Recalled>, id: 
   }
   if (meant === null || meant === id) return found;
   const again = await read(meant);
-  return 'error' in again ? found : again;
+  if (!('error' in again)) return again;
+  // What it gave begins with a whole id written in the conversation that is not stored, as a copy written wrong in full and
+  // handed twice over (`W\nW`): the one it was copied from is looked for past it.
+  if (meant !== headOf(id as string)) return found;
+  let next: string | null = null;
+  try {
+    next = idMeant(id, await conversation(), meant);
+  } catch {
+    // Refused as it was given.
+  }
+  if (next === null) return found;
+  const last = await read(next);
+  return 'error' in last ? found : last;
 }

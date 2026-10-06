@@ -1105,8 +1105,10 @@ had gone through: no answer was lost to a refused id here.
 
 ### The id that was meant
 
-`recall` now takes an id it would refuse for the one id written in the
-conversation that begins with its first 16 characters. The id is looked for
+As measured here, `recall` takes an id it would refuse for the one id written in the
+conversation that begins with its first 16 characters; since #107 it takes
+the one that shares the most characters with it from the first, 8 or more
+([ids copied wrong in one session](#ids-copied-wrong-in-one-session-that-compacts-several-times)). The id is looked for
 in the user messages and in what tools returned, not in what the agent said
 or put in its calls: an id the agent gave wrong before stands there, and
 would be a second one to match. What the agent wrote can still reach the
@@ -1321,8 +1323,8 @@ told the id was not 64 hexadecimal characters, and gave up saying the id
 had been cut short. In the records of the sessions of 2026-10-02 kept
 beside the benchmark's box, which are not published, that happened in 4 of
 the 103 calls to `recall` found there. `recall` takes such an id since,
-where its first 16 characters tell which one was meant
-([the id that was meant](#the-id-that-was-meant)).
+where its first 16 characters tell which one was meant, and since #107 its
+first 8 ([the id that was meant](#the-id-that-was-meant)).
 
 ### With the line
 

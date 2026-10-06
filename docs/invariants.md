@@ -140,8 +140,10 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   the result stays in the trash for the week, and a clean-up does not remove
   it while it is named (I5).
 - **The id as it was typed.** An id copied wrong is taken for the one id the
-  conversation names that begins with its first 16 characters, and that
-  one's text is returned
+  conversation names that shares the most characters with it from the first,
+  8 or more, where no other shares as many, and that one's text is returned;
+  one still refused names up to five tickets of the conversation it may
+  stand for
   ([what is not taken](limits.md#what-an-agent-does-not-fetch)).
 - **A move into place where none can be started** (Windows): a text is then
   written in place, and a refused write can cut short what another write

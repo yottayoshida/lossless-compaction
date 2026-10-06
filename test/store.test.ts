@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import {
-  ID_HEAD,
+  ID_LEAST,
   MAX_BYTES,
   RECALL_TOOL,
   holds,
@@ -269,7 +269,7 @@ const withTicket = (id: string, bytes = 5600): Message[] => [
   { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'toolu_1', text: ticketText({ tool: 'Read', bytes, id }), isError: false }] },
 ];
 
-test('an id copied wrong is taken for the one id written in the conversation that begins with its first 16 characters (#54)', () => {
+test('an id copied wrong is taken for the one id written in the conversation that shares the most characters from the first with it, eight or more (#54, #107)', () => {
   const id = '743feea18b5621f139f1fcd383b3db8df5471116cfd5c7086af6fb95b9a1c2d3';
   const conversation = withTicket(id);
   // The ways an agent got 64 characters wrong where it was measured: the first half alone, with one more character,
@@ -283,17 +283,21 @@ test('an id copied wrong is taken for the one id written in the conversation tha
     `${id.slice(0, 59)}s${id.slice(60)}`,
     `${id}f2`,
     id.slice(0, 16),
+    // Wrong before the sixteenth character, or cut short of it: 16 were needed before #107, 8 are now.
+    id.slice(0, 15),
+    id.slice(0, 8),
+    `${id.slice(0, 12)}b20418df${id.slice(20)}`,
   ];
   for (const given of wrong) {
     assert.notEqual(given, id);
     assert.equal(idMeant(given, conversation), id, given);
   }
-  // Not told by fewer than 16 characters, by one that goes wrong before the sixteenth, or by what is no id:
+  // Not told by fewer than 8 characters, by one that goes wrong before the eighth, or by what is no id:
   // the size on a ticket, another letter case, a path, and what is no text.
-  for (const given of [id.slice(0, 15), `${id.slice(0, 12)}b20418df${id.slice(20)}`, '34375', '5600 bytes', id.toUpperCase(), `../${id}`, ` ${id}`, 42, undefined, null, { id }]) {
+  for (const given of [id.slice(0, 7), `${id.slice(0, 6)}00${id.slice(8)}`, '34375', '5600 bytes', id.toUpperCase(), `../${id}`, ` ${id}`, 42, undefined, null, { id }]) {
     assert.equal(idMeant(given, conversation), null, JSON.stringify(given));
   }
-  assert.equal(ID_HEAD, 16);
+  assert.equal(ID_LEAST, 8);
 
   // Wherever the agent did not write it: what the plugin said after a summary, a result as the model read it, and a ticket inside a result.
   const part = 'c'.repeat(64);
@@ -317,16 +321,49 @@ test('an id copied wrong is taken for the one id written in the conversation tha
     { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'toolu_4', text: '[lossless-compaction] Nothing is stored under that id on this machine.', isError: false }] },
   ];
   assert.equal(idMeant(once, wroteIt), id);
-  // The control: the same wrong id where the person wrote it stands beside the right one, and neither is taken.
-  assert.equal(idMeant(once, [...conversation, { role: 'user', text: `try ${once}`, toolUses: [] }]), null);
+  // The same wrong id written whole where it is read, as in Claude Code's summary: it is not what was meant, and the one it
+  // was copied from is taken (#107). Before, the two began alike and neither was taken.
+  assert.equal(idMeant(once, [...conversation, { role: 'user', text: `try ${once}`, toolUses: [] }]), id);
 
-  // Two ids that begin alike: neither. The same id written twice is one.
+  // Two ids that begin alike: the one that shares more with what was given (#107; before, neither). Two that share as
+  // many: neither. The same id written twice is one.
   const twin = `${id.slice(0, 16)}${'e'.repeat(48)}`;
-  assert.equal(idMeant(id.slice(0, 30), [...conversation, ...withTicket(twin)]), null);
+  assert.equal(idMeant(id.slice(0, 30), [...conversation, ...withTicket(twin)]), id);
+  assert.equal(idMeant(id.slice(0, 16), [...conversation, ...withTicket(twin)]), null);
   assert.equal(idMeant(id.slice(0, 30), [...conversation, ...withTicket(id)]), id);
   // A longer run of hexadecimal characters holds no id.
   assert.equal(idMeant(id.slice(0, 30), [{ role: 'user', text: `${id}ab`, toolUses: [] }]), null);
   assert.equal(idMeant(id.slice(0, 30), []), null);
+});
+
+test('the ids refused in the measured session are taken for the one they were copied from where it was written, and not where it was not (#107)', async () => {
+  const measured = JSON.parse(await readFile(new URL('fixtures/copied-ids.json', import.meta.url), 'utf8')) as {
+    meant: string;
+    refused: { setting: string; given: string; written: string[] }[];
+  };
+  const asWritten = (ids: readonly string[]): Message[] => [{ role: 'user', text: ids.join('\n'), toolUses: [] }];
+  assert.equal(measured.refused.length, 8);
+  for (const one of measured.refused) {
+    const meant = idMeant(one.given, asWritten(one.written));
+    // At 1 and at 40 the ticket stood in the conversation; under hybrid it was only in a kept part not yet read.
+    assert.equal(meant, one.written.includes(measured.meant) ? measured.meant : null, `${one.setting}: ${JSON.stringify(one.given)}`);
+  }
+  assert.deepEqual(
+    measured.refused.map((one) => one.written.includes(measured.meant)),
+    [true, true, true, true, true, true, true, false],
+  );
+
+  // What the rule rests on, each against the same conversation of the session at 1.
+  const written = (measured.refused[0] as { written: string[] }).written;
+  const given = '6c7cc4406e8fb60cea6af41ecebabf800a6089e1b0ae27489e5ada8ef3b822';
+  // An id that shares seven characters with what was given, and nothing else near it: not taken.
+  const seven = `6c7cc44${'0'.repeat(57)}`;
+  assert.equal(idMeant('6c7cc44f', asWritten([...written.filter((id) => id !== measured.meant), seven])), null);
+  // Two that share as many with what was given: neither.
+  const twin = `6c7cc4406e${'1'.repeat(54)}`;
+  assert.equal(idMeant(given, asWritten([...written, twin])), null);
+  // What was given, written whole beside the one it was copied from, as a summary can hold it: that one is taken.
+  assert.equal(idMeant(given, asWritten([...written, given])), measured.meant);
 });
 
 test('recall reads the id that was meant when the id given is refused, and refuses the id as it was given otherwise (#54)', async () => {
@@ -352,11 +389,19 @@ test('recall reads the id that was meant when the id given is refused, and refus
   assert.deepEqual(await recallMeant(read, `${ticket.id.slice(0, 40)}${ticket.id[40] === '0' ? '1' : '0'}${ticket.id.slice(41)}`, messages), { text });
   assert.equal(asked, 2);
 
+  // A copy written wrong in full where it is read, as in Claude Code's summary, handed twice over: what it begins with is
+  // that copy, which is not stored, and the one it was copied from is read past it (#107).
+  const copy = `${ticket.id.slice(0, 10)}${ticket.id[10] === 'e' ? 'f' : 'e'}${ticket.id.slice(11)}`;
+  const summarized = async () => [...conversation, { role: 'user' as const, text: `The log was read: ${copy}`, toolUses: [] }];
+  assert.deepEqual(await recallMeant(read, `${copy}\n${copy}`, summarized), { text });
+  assert.deepEqual(await recallMeant(read, copy, summarized), { text });
+  // The control: with the one it was copied from not written, the copy is refused as it was given.
+  assert.ok('error' in (await recallMeant(read, `${copy}\n${copy}`, async () => [{ role: 'user' as const, text: copy, toolUses: [] }])));
   // Refused as the id was given: nothing in the conversation begins as it does, the conversation is empty, or it cannot be read.
   assert.deepEqual(await recallMeant(read, 'f'.repeat(32), messages), refused);
-  // What could tell no id is refused without the conversation being asked for: the size on a ticket, fewer than 16 characters, no text.
+  // What could tell no id is refused without the conversation being asked for: the size on a ticket, fewer than 8 characters, no text.
   const before = asked;
-  for (const given of ['5600', ticket.id.slice(0, 15), 5600, undefined, ticket.id.toUpperCase()]) {
+  for (const given of ['5600', ticket.id.slice(0, 7), 5600, undefined, ticket.id.toUpperCase()]) {
     assert.ok('error' in (await recallMeant(read, given, messages)), String(given));
   }
   assert.equal(asked, before);

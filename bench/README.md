@@ -364,8 +364,12 @@ read from the prompt cache and wrote to it (the responses Claude Code prints
 again after a compaction, with no usage, are not requests); the compaction,
 with what was in use at the last request before it; the turn's own cost; the
 tools it called; for a question, the answer, whether it holds the line asked
-for, and whether the turn read outside the working directory.
-`session-report` tables them a setting a row, with what a session had cost by
+for, and whether the turn read outside the working directory; and each call
+to `recall`, with the id it was handed and whether the plugin refused it (an
+id that is not hexadecimal characters is kept by its length only;
+`session-report` tables those calls after its main table, for the runs that
+recorded them, which runs before 2026-10-06 did not).
+`session-report` tables the runs a setting a row, with what a session had cost by
 the twenty-fourth and the thirtieth log beside its total, since the settings
 end at different places between two compactions. The first message names the
 setting and the run, so that no session reads what another wrote to the

@@ -41,7 +41,7 @@ import { unnumbered } from '../src/changed.ts';
 import { find, lineHolds, valuesOf } from '../src/find.ts';
 import { termsOf } from '../src/select.ts';
 import { reportLine, undoneLine, type Report } from '../src/compact.ts';
-import { ID_HEAD } from '../src/store.ts';
+import { ID_LEAST } from '../src/store.ts';
 import type { Http } from '../src/types.ts';
 import { TOLD, ok, optionsAsked, questionsOf, recordingHttp, trusting, type Sent } from './helpers.ts';
 
@@ -661,6 +661,9 @@ test('where the answer went and how far the agent got: each step is counted from
   assert.deepEqual(fetchedOf(needles, '', stored, [recall(other, 'another log')]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
   // An id copied wrong that recall took for the one meant: what came back holds it, though the id given was not the holder's.
   assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 16)}${'0'.repeat(48)}`, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: false, restored: true });
+  // Refused, the answer naming tickets with what they stand for, here one whose call holds what was asked: nothing came back (#107).
+  const refusedNaming = `[lossless-compaction] Nothing is stored under that id on this machine.\nThe tickets of this conversation it may stand for:\n- Bash called with {"command":"grep \x278 warnings\x27 log | grep 5384f20e"}; 40 bytes; recall with x id ${holder}`;
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 63)}0`, refusedNaming)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
   // `find` gave the holder as its answer, with its text under the line it opens with: chosen, and it came back, with no `recall`.
   const finding = (result: string): ToolCall => ({ name: FIND, input: { question: 'which batch warned?' }, result });
   assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 40 bytes; id ${holder}; probability 0.9\n\n${stored.get(holder)}`)]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true });
@@ -2674,9 +2677,12 @@ test('the units in the repository measured with recall taking the id that was me
   const [meaning, , code] = ofOpaque(asked.meant);
   has(`right on ${meaning} of the 7 questions by meaning and on ${code} of the 3 codes. It called \`recall\` ${recalls(sonnet(sent.meant)) + recalls(sonnet(asked.meant))} times in the two`, 'Sonnet');
 
-  // What the documents say `recall` does now, with the number of characters the code tells an id by.
-  const taken = `the one id written in the conversation that begins with its first ${ID_HEAD} characters`;
-  for (const [name, document] of [['limits', limits], ['usage', usage], ['CHANGELOG', changelog], ['measurements', section]] as const) assert.ok(document.includes(taken), name);
+  // What the documents say `recall` does now, with the fewest characters the code tells an id by (#107); and what this
+  // measurement was taken with, which the CHANGELOG of its release and the section keep.
+  const taken = `the one id written in the conversation that shares the most characters with it from the first, ${ID_LEAST} or more`;
+  for (const [name, document] of [['limits', limits], ['usage', usage], ['CHANGELOG', changelog]] as const) assert.ok(document.includes(taken), name);
+  const then = 'the one id written in the conversation that begins with its first 16 characters';
+  for (const [name, document] of [['CHANGELOG', changelog], ['measurements', section]] as const) assert.ok(document.includes(then), name);
 
   // Nothing of the machine in what was published.
   assert.ok(!/[\/-]Users[\/-]|[\/-]home[\/-][a-z]|cctmp|CLOUDFLARE_API_TOKEN|TYPESAFE_API_KEY/.test(JSON.stringify([sent.meant, asked.meant])));

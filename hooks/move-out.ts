@@ -11,7 +11,7 @@ import { providerFrom, type Provider } from '../src/ask.ts';
 import { CHARS_PER_TOKEN, charsOf, compact, countFrom, windowFrom, type Config, type Context, type Count, type Host, type Outcome } from '../src/compact.ts';
 import { shownAgainNote } from '../src/changed.ts';
 import { cutLine, keepOldest } from '../src/cut.ts';
-import { find } from '../src/find.ts';
+import { find, mayStandFor } from '../src/find.ts';
 import { beforeTrying, configFrom, nextStep, settingNotes, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
@@ -21,7 +21,7 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, PLUGIN, RECALL, STATUS_COMMAND, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
+import { FIND, NOT_AN_ID, NOT_STORED, PLUGIN, RECALL, STATUS_COMMAND, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
 import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
@@ -782,18 +782,27 @@ export const register: Register = (on, options) => {
     if (typeof store === 'string') return { result: `[${PLUGIN}] Nothing is read: ${store}.` };
     const id = (e as { id?: unknown }).id;
     const agentId = (e as { agentId?: string | undefined }).agentId;
-    // An id copied wrong is taken for the one id written in the conversation that begins as it does
+    // An id copied wrong is taken for the one id written in the conversation that begins most as it does
     // (src/store.ts decides): the main conversation's, or the subagent's own, whose kept parts are named
-    // after its summary (ADR 0026). One the session cannot read is answered as holding none.
-    const found = await recallMeant(
-      (one) => recalled($, store, one),
-      id,
-      async () => {
+    // after its summary (ADR 0026). One the session cannot read is answered as holding none. It is read once.
+    let conversation: Promise<readonly Message[]> | undefined;
+    const messages = () =>
+      (conversation ??= (async () => {
         const read = agentId === undefined ? await $.session.messages() : await $.session.messages({ agentId });
         return Array.isArray(read) ? (read as readonly Message[]) : [];
-      },
-    );
-    if ('error' in found) return { result: `[${PLUGIN}] ${found.error}` };
+      })());
+    const found = await recallMeant((one) => recalled($, store, one), id, messages);
+    if ('error' in found) {
+      // Refused as copied wrong: the tickets it may stand for are named, read from the same conversation (#107).
+      const copied = found.error === NOT_AN_ID || found.error === NOT_STORED;
+      let named = '';
+      try {
+        if (copied) named = mayStandFor(id, await messages());
+      } catch {
+        // The conversation could not be read: refused as before, naming nothing.
+      }
+      return { result: `[${PLUGIN}] ${found.error}${named}` };
+    }
     // An image goes back as an image: as text its bytes would fill the conversation.
     return { result: found.parts === undefined ? found.text : blocksOf(found.parts) };
   });
