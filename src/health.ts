@@ -91,7 +91,6 @@ function zero(): Tally {
  * under its id. Where taking it out loses what only it names, that is said.
  */
 export const UNREAD_HOW: Record<Unread['why'], string> = {
-  entry: 'its entry, index/<id>.json, could not be read, while recall may still read its text; write the entry back as {"bytes":<size of the text>,"tool":"conversation"}, or move both its files out of the store, after which what only it named is no longer kept',
   'text-missing': 'its text, blobs/<id>.txt, is not there; where you removed it yourself, remove index/<id>.json too in each place that has it, and the clean-up goes on. In a store a sync is still writing, wait for it',
   'text-changed': 'its text, blobs/<id>.txt, is not what was stored; put the stored text back, or move both its files out of the store, after which what only it named is no longer kept',
   'text-unreadable': 'its text, blobs/<id>.txt, could not be read; make it readable to you, or move both its files out of the store, after which what only it named is no longer kept',

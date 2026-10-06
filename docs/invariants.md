@@ -65,14 +65,18 @@ newest ticket noted for it (ADR 0027): each stops the clean-up before
 anything moves to the trash or is removed. A noted ticket whose conversation
 is no longer there lets go of it. A stop by what it follows — a kept part, or something named
 in the trash — names every one it reaches in that try, with why, and
-`/lossless-store` says how the clean-up goes on for each (#114).
+`/lossless-store` says how the clean-up goes on for each (#114). An entry
+that does not read, over a text that is the one stored under its id, does
+not stop it: the text is read as a part's, which keeps more, never less
+(ADR 0033).
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
 - `a project directory that is a link stops it all: a search does not follow it`
 - `with every recorded place gone, nothing is collected: an empty set would name nothing in use`
 - `a collection stops when a kept part it is to follow cannot be read`
-- `a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed, an entry of another shape (#114)`
+- `a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed; an entry of another shape over a sound text is read (#114, ADR 0033)`
+- `a kept part whose entry does not read, its text the one stored, is read as a part: what it names comes back from the trash and is counted as named (ADR 0033)`
 - `a stop by what the clean-up follows is recorded with each id and why, read back as such, and /lossless-store says how to go on for each (#114)`
 - `where what is named cannot be put back from the trash, the collection is stopped before it counts what is named`
 - `a clean-up stops where a conversation compacted with tickets is still there and the search does not find the ticket noted for it: renamed, compressed, spelled otherwise, or moved inside its directory (ADR 0027)`

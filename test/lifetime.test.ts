@@ -630,3 +630,26 @@ test("a stop is not recorded over what another session wrote since this try star
   await noteStopped(files, DIR, first, 'move', NOW + DAY + 2000);
   assert.deepEqual({ tries: (await read()).tries, stopped: (await read()).stopped }, { tries: 2, stopped: null });
 });
+
+test('a kept part whose entry does not read, its text the one stored, is read as a part: what it names comes back from the trash and is counted as named (ADR 0033)', async () => {
+  const files = new MemoryFiles();
+  const [result] = await storeWith(files, [output('read once', 40)], 3 * DAY);
+  const part = await storePart(files, `[call Read t1] {"file_path":"/p/a"}\n[result t1]\n${ticketText({ tool: 'Read', bytes: 40, id: result as string })}`, 3 * DAY);
+  const { exec } = commands(files);
+  // The result alone goes to the trash, the part named by a transcript staying; then its entry stops reading.
+  assert.deepEqual(await collect(list(files), exec, DIR, new Set([part]), NOW), { trashed: 1, restored: 0, removed: 0 });
+  files.files.set(`${DIR}/index/${part}.json`, '');
+  assert.equal(await restoreThroughParts(files, list(files), exec, [DIR], new Set(), new Set([part])), 1);
+  assert.ok(files.files.has(`${DIR}/blobs/${result}.txt`), 'what it names is back');
+  const named = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok(!('stop' in named) && named.has(result as string), 'and counted as named');
+  // An entry of another shape than every version writes reads no better: the text is read all the same.
+  files.files.set(`${DIR}/index/${part}.json`, '{}');
+  const shaped = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok(!('stop' in shaped) && shaped.has(result as string), 'an entry of another shape too');
+  // Its text changed too: not read, and the collection stops on it.
+  files.files.set(`${DIR}/blobs/${part}.txt`, 'not what was stored');
+  const stopped = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok('stop' in stopped);
+  assert.deepEqual(stopped.unread, [{ id: part, why: 'text-changed' }]);
+});

@@ -583,7 +583,7 @@ test('keeping a conversation of 4096 messages and six million characters takes n
   assert.ok(large < small * 6, `${Math.round(large)} ms for 4096 messages, ${Math.round(small)} ms for 1024`);
 });
 
-test('a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed, an entry of another shape (#114)', async () => {
+test('a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed; an entry of another shape over a sound text is read (#114, ADR 0033)', async () => {
   const files = new MemoryFiles();
   const ids: string[] = [];
   for (const seed of ['a', 'b', 'c', 'd']) {
@@ -603,10 +603,10 @@ test('a clean-up stopped by what it follows names each of them and why, in one t
     [
       { id: missing, why: 'text-missing' },
       { id: changed, why: 'text-changed' },
-      { id: shapeless, why: 'entry' },
     ].sort(byId),
   );
-  assert.match(named.stop, /^3 stored things it follows could not be read or put back, [0-9a-f]{64} among them; \/lossless-store says how to go on$/);
+  assert.ok(!named.unread?.some((one) => one.id === shapeless), 'an entry of another shape over the text stored is read through its text');
+  assert.match(named.stop, /^2 stored things it follows could not be read or put back, [0-9a-f]{64} among them; \/lossless-store says how to go on$/);
   // One alone is named in the line.
   const only = await namedThroughParts(files, [DIR], new Set([changed]));
   assert.ok('stop' in only);

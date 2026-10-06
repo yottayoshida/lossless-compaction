@@ -9,9 +9,7 @@
 import { inputLine } from './ask.ts';
 import { changedLines } from './changed.ts';
 import type { Attached } from './attached.ts';
-import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, idOf, isPart, moveOut, partTicketText, readTicket, type NotMoved } from './store.ts';
-import { look } from './blobs.ts';
-import { blobPath, entryPath } from './layout.ts';
+import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, storedText, type NotMoved } from './store.ts';
 import { UNREAD_MAX, type Stop, type Unread } from './lifetime.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
@@ -400,11 +398,9 @@ export async function namedThroughParts(files: Files, dirs: readonly string[], l
       continue;
     }
     const part = await isPart(files, dirs, id);
-    if (part === null) {
-      unread.push({ id, why: 'entry' });
-      continue;
-    }
-    if (!part) continue;
+    if (part === false) continue;
+    // An entry that does not read cannot say whether it is a part: its text, where it is the one stored under this
+    // id, is followed all the same. That keeps more, never less (ADR 0033).
     const text = await storedText(files, dirs, id);
     if (!text.ok) {
       unread.push({ id, why: text.why });
@@ -421,7 +417,6 @@ export async function namedThroughParts(files: Files, dirs: readonly string[], l
 
 /** What makes a stored thing's text not to be followed, as a stop names it. */
 const UNREAD_SAID: Record<Unread['why'], string> = {
-  entry: 'its entry could not be read',
   'text-missing': 'its text is not there',
   'text-changed': 'its text has changed on disk',
   'text-unreadable': 'its text could not be read',
@@ -435,24 +430,6 @@ function unreadStop(unread: readonly Unread[]): Stop {
   const kind = unread.some((one) => one.why !== 'in-trash') ? 'part' : 'move';
   const more = unread.length - UNREAD_MAX;
   return { stop: `${what}; /lossless-store says how to go on`, kind, unread: unread.slice(0, UNREAD_MAX), ...(more > 0 ? { more } : {}) };
-}
-
-/**
- * The text stored under `id` in the first of `dirs` that holds its entry, as `recall` reads it, or why not: no text
- * there, one that does not read, one whose hash is no longer its name.
- */
-async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string } | { ok: false; why: Unread['why'] }> {
-  for (const dir of dirs) {
-    if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
-    let text: string;
-    try {
-      text = await files.read(blobPath(dir, id));
-    } catch {
-      return { ok: false, why: 'text-unreadable' };
-    }
-    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };
-  }
-  return { ok: false, why: 'text-missing' };
 }
 
 /** What to keep before a summary, or why nothing can be. */
