@@ -23,8 +23,6 @@ const base = (over: Partial<StatusInput> = {}): StatusInput => ({
 
 test('the version is the one the plugin is published under', () => {
   for (const file of ['../.claude-plugin/plugin.json', '../package.json']) assert.equal((JSON.parse(read(file)) as { version: string }).version, VERSION, file);
-  const market = JSON.parse(read('../.claude-plugin/marketplace.json')) as { plugins: { version: string }[] };
-  assert.equal(market.plugins[0]?.version, VERSION);
 });
 
 test('/lossless-status says it runs, its version and Claude Code\'s, and each setting in use, as Claude Code hands the defaults over', () => {

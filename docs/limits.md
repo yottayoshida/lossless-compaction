@@ -835,6 +835,43 @@ set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
 `CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone choose nothing
 ([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md), [ADR 0028](adr/0028-a-key-in-the-environment-waits-for-a-choice.md)).
 
+An installed copy is replaced only when the plugin's version changes.
+Claude Code does not update it on its own unless auto-update is turned on
+for this marketplace (`/plugin`, **Marketplaces**, `lossless-compaction`,
+**Enable auto-update**); otherwise `/plugin marketplace update
+lossless-compaction` in a session, or from the shell:
+
+```sh
+claude plugin marketplace update lossless-compaction
+claude plugin update lossless-compaction@lossless-compaction
+```
+
+and the new copy loads in the next session or after `/reload-plugins`.
+`claude plugin list` names the version installed. The marketplace points at
+the tip of `main`: a copy installed between two releases can hold changes not
+yet released, under the last release's number, and keeps them until the
+version changes (#106).
+
+To stay on one release, add the marketplace at its tag, before installing:
+
+```sh
+claude plugin marketplace add yottayoshida/lossless-compaction#v0.7.1
+claude plugin install lossless-compaction@lossless-compaction
+```
+
+Each tag from `v0.4.0` installs that release (measured with `v0.7.1` on
+Claude Code 2.1.291); the two before were named `jev-lossless-compaction`. A
+marketplace that is added cannot be moved to another tag from the shell:
+adding it again from another one is refused, and with its `ref` edited in
+`~/.claude/settings.json`, `claude plugin marketplace update` and `claude
+plugin install` said it was not found (measured on 2.1.291). It is removed
+and added again, and removing it removes the plugin's settings with it,
+`storeDir` among them (measured). Note them first and set them again when
+installing, with `--config storeDir=…`: with `storeDir` not set again, the
+store is looked for at its default place, and what was kept elsewhere comes
+back as not stored. Whether an older version reads a store a newer one wrote,
+or whether its clean-up removes what the newer one keeps, was not checked.
+
 Coming from `jev-lossless-compaction` (0.3.0 and before), an installed copy
 does not follow the rename: see [moving from the old
 name](#moving-from-the-old-name).

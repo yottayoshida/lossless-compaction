@@ -171,9 +171,11 @@ to the published units in `test/bench.test.ts`.
 
 What a machine cannot check is read at each release. The line below names
 the version the README was last read against. The test fails unless
-`package.json`, `.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json` all name that version, so a version is not
-raised without coming here. The test cannot tell that the README was read,
+`package.json` and `.claude-plugin/plugin.json` both name that version, so a
+version is not raised without coming here. The marketplace entry names no
+version: Claude Code takes it from `plugin.json` first, says nothing of a
+difference when it installs (`claude plugin validate` does), and an entry
+pointing at a tag would have nothing to compare it with. The test cannot tell that the README was read,
 only that this line was set. `VERSION` in `src/status.ts`, which
 `/lossless-status` prints, is held to the same version by
 `test/status.test.ts`.
@@ -193,3 +195,34 @@ To read it, for the release being made:
    figure is of a smaller one. A figure of code that has changed since is
    measured again or taken out.
 4. Then set the line above to the new version.
+
+## Releasing
+
+A copy installed from the marketplace is replaced only when the version in
+`plugin.json` changes; a new install takes what the marketplace entry points
+at. While the entry's source is `"./"`, the tip of `main`, what is merged
+between two releases reaches new installs under the old number (#106). A
+release points it at the release's tag
+([ADR 0031](adr/0031-the-marketplace-points-at-a-release.md)), in three steps
+with nothing else merged between them:
+
+1. A pull request raises the version (`package.json` and both its places in
+   `package-lock.json`, `plugin.json`, `VERSION` in `src/status.ts`, and,
+   once the README is read as "The README" above says, the line naming the
+   version it was read against) and dates the CHANGELOG's section. It sets
+   the entry's source back to `"./"`, and the paragraph of `docs/limits.md`
+   back to saying the marketplace points at the tip of `main`, where a
+   release before pointed them at its tag: the tag's tree then installs as
+   itself, and `#vX.Y.Z` added to the marketplace installs X.Y.Z.
+2. Once it is merged: the tag `vX.Y.Z` on that commit, pushed, and the GitHub
+   Release.
+3. A pull request points the entry at the tag: `{"source": "url", "url":
+   "https://github.com/yottayoshida/lossless-compaction.git", "ref": "vX.Y.Z",
+   "sha": "<the tag's commit>"}`, rewrites the paragraph of `docs/limits.md`
+   that says the marketplace points at the tip of `main` (a test holds the
+   two together), and, the first time, adds a check that the entry's `ref` and
+   `sha` are a tag of this repository and its commit. Until it is merged, new
+   installs take the tip of `main`, which is the release's commit.
+
+`claude plugin validate --strict` reads the marketplace too (`npm run
+validate`); it cannot tell that the tag exists.
