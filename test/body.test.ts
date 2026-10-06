@@ -218,6 +218,8 @@ test('a message without its middle handed to any tool that does not only read is
   const guards: Call[] = [];
   register((name, ...rest) => {
     if (name === 'tool.call' && typeof rest[0] === 'function') guards.push(rest[0] as Call);
+    // What `on` returns, which the compaction hook's `.catch` is called on.
+    return { catch: () => undefined };
   }, {});
   assert.equal(guards.length, 1, 'one hook stands in front of every tool');
   const guard = guards[0] as Call;

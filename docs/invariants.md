@@ -114,10 +114,18 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   Nor is the order of blocks inside a turn promised: calls made side by side
   are regrouped with their results.
 - **That Claude Code's summary never runs with nothing kept.** It does in a
-  subagent's conversation where the disk refuses the write; where there is no place of your own to keep it in;
-  where a part does not read back as written, or a link stands in its place;
-  and after an error the plugin did not expect. The compaction says so each
-  time. What is kept before a summary leaves out images, documents and
+  subagent's conversation where the disk refuses the write; where there is
+  no place of your own to keep it in; where a part does not read back as
+  written, or a link stands in its place;
+  where keeping it fails on an error the plugin did not expect; and where
+  the plugin's compaction failed and the second Claude Code then gives its
+  handler was not enough to keep it in, which a compaction that outran its
+  own time makes likelier. The compaction says so each time: why nothing
+  was kept, or, past that second, that it stopped. A compaction that
+  throws, or answers what Claude Code refuses, keeps the conversation
+  before the summary runs
+  ([when it fails](limits.md#when-the-built-in-compaction-runs-instead)).
+  What is kept before a summary leaves out images, documents and
   thinking, and messages older than the 4096 Claude Code shows
   ([what a summary replaces](limits.md#what-a-summary-replaces)).
 - **Half of a character.** A lone surrogate, which no file can hold, is kept

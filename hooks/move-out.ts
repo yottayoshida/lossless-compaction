@@ -12,7 +12,7 @@ import { CHARS_PER_TOKEN, charsOf, compact, countFrom, windowFrom, type Config, 
 import { shownAgainNote } from '../src/changed.ts';
 import { cutLine, keepOldest } from '../src/cut.ts';
 import { find, mayStandFor } from '../src/find.ts';
-import { beforeTrying, configFrom, nextStep, settingNotes, type Step } from '../src/flow.ts';
+import { beforeTrying, configFrom, failedLine, nextStep, settingNotes, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
 import { guarded, longestIn, middleDropped, middleRefusal, placedTicketIds, refused } from '../src/guard.ts';
@@ -437,6 +437,35 @@ type Tried = {
 };
 
 /**
+ * The place a compaction keeps what it moves out in, made private, with this
+ * session's transcript recorded and what the conversation names put back from
+ * the trash; or why nothing can be kept, and the shorter reason said where
+ * nothing of the conversation is kept. What `attempt` and the compaction
+ * hook's handler of a failure both start from.
+ */
+async function placeOf(
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  messages: readonly Message[],
+  options: PluginOptions,
+): Promise<{ store: StoreDirs } | { why: string; unkept: string }> {
+  const place = await storeOf($, options);
+  if (typeof place === 'string') return { why: place, unkept: 'there is no place to keep it in' };
+  // Before anything is written: what cannot be made private is not written to, the conversation included.
+  const unsafe = await privateOf($, place);
+  if (unsafe !== null) return { why: unsafe, unkept: 'the place to keep it in could not be made private' };
+  // Before a summary can run: a kept conversation is named by this session's transcript, which a collection must read.
+  await noteRootOf($, place, options);
+  // A ticket whose result a collection moved to the trash meanwhile is put back, so that it stays a ticket of this store.
+  // What cannot be told or put back is answered as not stored: the place is ready all the same.
+  try {
+    await restoreFor($, place, ticketIds(messages), partIds(messages));
+  } catch {
+    // As restoreFor's own failures.
+  }
+  return { store: place };
+}
+
+/**
  * One compaction, up to what would be handed back, or why the built-in
  * compaction runs instead. Nothing is thrown, so the caller calls `next` once
  * whatever happened here.
@@ -457,16 +486,9 @@ async function attempt(
     if (options['keepNewest'] !== undefined) {
       say($, 'the keepNewest setting is gone: the newest results are kept by size now, set keepTokens instead');
     }
-    const place = await storeOf($, options);
-    if (typeof place === 'string') return { why: place, keep: { unkept: 'there is no place to keep it in' } };
-    // Before anything is written: what cannot be made private is not written to, the conversation included.
-    const unsafe = await privateOf($, place);
-    if (unsafe !== null) return { why: unsafe, keep: { unkept: 'the place to keep it in could not be made private' } };
-    store = place;
-    // Before a summary can run: a kept conversation is named by this session's transcript, which a collection must read.
-    await noteRootOf($, store, options);
-    // A ticket whose result a collection moved to the trash meanwhile is put back, so that it stays a ticket of this store.
-    await restoreFor($, store, ticketIds(messages), partIds(messages));
+    const placed = await placeOf($, messages, options);
+    if (!('store' in placed)) return { why: placed.why, keep: { unkept: placed.unkept } };
+    store = placed.store;
     const api = await $.session.messages({ as: 'api' });
     asSent = messagesFromApi(api) ?? messages;
     const media = mediaIn(api);
@@ -917,12 +939,22 @@ export const register: Register = (on, options) => {
   });
 
   // What is done, and in what order, is src/flow.ts's: each step is carried out here as it is returned.
+  //
+  // Its `.catch` is run by Claude Code when the hook throws, answers what it refuses, or outruns its time; without
+  // it the hook would be taken for absent and the built-in summary would run with nothing kept (#102). The
+  // conversation is kept first, as where the compaction could not be tried. Where the hook had called `next`
+  // already, calling it again hands back what that call came to, and nothing beneath runs again: the tickets
+  // follow that. Called on `on(...)` itself: Claude Code refuses a hook file that keeps what `on` returns
+  // (2.1.287 to 2.1.291).
   on('session.compact', async ($, e, next) => {
     const before = beforeTrying({ trigger: e.trigger, agentId: e.agentId });
     if (before.step === 'skip') return { skip: before.why };
     if (before.step === 'subagent') return summarizeSubagent($, e, next, options);
 
     const tried = await attempt($, e, options);
+    // Claude Code went on without this hook meanwhile (out of its time, or interrupted), and what it answers now is
+    // not read: nothing more is said, written or handed on, after what its handler said.
+    if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
     let result: SessionCompactResult;
     if ('why' in tried) {
       say($, `built-in compaction: ${tried.why}`);
@@ -945,5 +977,26 @@ export const register: Register = (on, options) => {
     const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;
     await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);
     return result;
+  }).catch(async ($, e, next) => {
+    // A compaction computed ahead, or a subagent's, is what the hook above makes of it: the hook is absent.
+    if (beforeTrying({ trigger: e.trigger, agentId: e.agentId }).step !== 'try') return undefined;
+    say($, failedLine(next.error, next.called));
+    try {
+      // What the hook's own call came to first, before anything is written: a summary that failed fails here again.
+      const settled = next.called ? await next(e) : undefined;
+      const summarize = settled === undefined ? next : async () => settled;
+      const messages = e.messages as readonly Message[];
+      const placed = await placeOf($, messages, options);
+      const keep = 'store' in placed ? { store: placed.store, messages: messagesFromApi(await $.session.messages({ as: 'api' })) ?? messages } : { unkept: placed.why };
+      const result = await summarizeKeeping($, e, summarize, keep);
+      // As after the hook's own compaction: the newest ticket the conversation now holds, for a clean-up (ADR 0027).
+      const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : messages;
+      await noteWitnessOf($, newestOf(standing as readonly Message[], messages), options);
+      return result;
+    } catch (error) {
+      // Absent: Claude Code runs the built-in summary, or what the hook's call to it came to stands.
+      say($, `handing the conversation to the built-in summary failed as well: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
   });
 };

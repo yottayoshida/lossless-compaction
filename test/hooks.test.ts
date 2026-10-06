@@ -4,10 +4,13 @@ import { test } from 'node:test';
 
 import type { Provider } from '../src/ask.ts';
 import { changedLine, shownAgainLine } from '../src/changed.ts';
+import { forgetMove } from '../src/commands.ts';
+import { failedLine } from '../src/flow.ts';
 import { KEPT } from '../src/keep.ts';
-import { MemoryFiles, enospc } from './helpers.ts';
+import type { Message } from '../src/types.ts';
+import { MemoryFiles, conversation, enospc, sized } from './helpers.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
-import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, ticketText } from '../src/store.ts';
+import { FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
 import { KEY_VARIABLES, PLACE_VARIABLES, ROUTE_VARIABLES } from '../src/trust.ts';
 
@@ -28,6 +31,8 @@ async function registered<Handler>(event: string): Promise<{ matcher: unknown; h
   const found: { matcher: unknown; handler: Handler }[] = [];
   register((name, ...rest) => {
     if (name === event) found.push({ matcher: rest[0], handler: rest[1] as Handler });
+    // What `on` returns, which the compaction hook's `.catch` is called on.
+    return { catch: () => undefined };
   }, {});
   return found;
 }
@@ -140,17 +145,24 @@ test("where results are kept and where find sends both go through the repository
 });
 
 test('a compaction makes the place private before anything is written, and gives up when it cannot', () => {
+  // The place is prepared in one function, which the compaction and the handler of its failure both start from.
+  const placing = hooks.slice(hooks.indexOf('async function placeOf('), hooks.indexOf('async function attempt('));
   const attempt = hooks.slice(hooks.indexOf('async function attempt('), hooks.indexOf('export const register'));
-  const made = attempt.indexOf('await privateOf($, place)');
+  const made = placing.indexOf('await privateOf($, place)');
   assert.ok(made > 0, 'privateOf is called');
-  assert.ok(made < attempt.indexOf('await compact('), 'before the compaction writes');
-  assert.ok(made < attempt.indexOf('whyNotRebuilt('), 'and before a conversation that is not rebuilt is kept');
   assert.ok(
-    attempt.includes("if (unsafe !== null) return { why: unsafe, keep: { unkept: 'the place to keep it in could not be made private' } };"),
+    placing.includes("if (unsafe !== null) return { why: unsafe, unkept: 'the place to keep it in could not be made private' };"),
     'and gives up on its reason, keeping nothing',
   );
-  assert.ok(made < attempt.indexOf('store = place;'), 'the conversation is kept only in a place made private');
-  assert.ok(attempt.indexOf('await noteRootOf($, store, options);') < attempt.indexOf('whyNotRebuilt('), "this session's transcript is noted before any summary");
+  assert.ok(made < placing.indexOf('await noteRootOf($, place, options);') && made < placing.indexOf('await restoreFor($, place,'), 'nothing is written to it before');
+  assert.ok(made < placing.indexOf('return { store: place };'), 'the conversation is kept only in a place made private');
+  const placed = attempt.indexOf('const placed = await placeOf($, messages, options);');
+  assert.ok(placed > 0 && placed < attempt.indexOf('await compact('), 'before the compaction writes');
+  assert.ok(placed < attempt.indexOf('whyNotRebuilt('), "and before a conversation that is not rebuilt is kept, this session's transcript noted");
+  assert.ok(attempt.includes("if (!('store' in placed)) return { why: placed.why, keep: { unkept: placed.unkept } };"), 'kept nowhere where there is no place');
+  const handler = hooks.slice(hooks.indexOf('}).catch(async ($, e, next) => {'));
+  const handlerPlaced = handler.indexOf('const placed = await placeOf($, messages, options);');
+  assert.ok(handlerPlaced > 0 && handlerPlaced < handler.indexOf("const keep = 'store' in placed ? { store: placed.store,") && handler.includes('summarizeKeeping($, e, summarize, keep)'), 'and the handler of a failure keeps it only there');
   assert.ok(hooks.includes('$.process.run(argv, { timeoutMs: 10_000 })'), 'commands run through the host');
 });
 
@@ -186,11 +198,13 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recalledAt > 0 && putBack > 0 && putBack < recalled.lastIndexOf('recall(filesOf($), store.read, id)'), 'recall, put back first');
   const findHook = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
   assert.ok(findHook.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < findHook.indexOf('await find('), 'find, first');
+  const placing = hooks.slice(hooks.indexOf('async function placeOf('), hooks.indexOf('async function attempt('));
   const attempt = hooks.slice(hooks.indexOf('async function attempt('), hooks.indexOf('async function summarizeKeeping('));
-  assert.ok(attempt.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < attempt.indexOf('await compact('), 'the compaction, first');
+  assert.ok(placing.indexOf('await restoreFor($, place, ticketIds(messages), partIds(messages));') > 0, 'put back where the place is prepared');
+  assert.ok(attempt.indexOf('await placeOf(') > 0 && attempt.indexOf('await placeOf(') < attempt.indexOf('await compact('), 'the compaction, first');
   // Both found, in that order: an index of -1 would pass a bare comparison without either being there.
-  const madePrivate = attempt.indexOf('await privateOf($, place)');
-  assert.ok(madePrivate > 0 && madePrivate < attempt.indexOf('noteRootOf('), 'the place recorded once private');
+  const madePrivate = placing.indexOf('await privateOf($, place)');
+  assert.ok(madePrivate > 0 && madePrivate < placing.indexOf('noteRootOf('), 'the place recorded once private');
 });
 
 test('a compaction imports nothing that sends: compact.ts does not reach ask.ts', () => {
@@ -213,10 +227,180 @@ test('a compaction computed ahead is skipped, run through the hook itself, befor
   assert.deepEqual(touched, [], 'nothing of the host was read');
 });
 
+/** The compaction hook's handler of a failure, registered as Claude Code is handed it: `on(...).catch(handler)`. */
+async function compactionCatch(): Promise<Caught> {
+  const { register } = (await import(new URL('../hooks/move-out.ts', import.meta.url).href)) as {
+    register: (on: (name: string, ...rest: unknown[]) => unknown, options: Record<string, unknown>) => void;
+  };
+  const handlers: Caught[] = [];
+  register((name) => (name === 'session.compact' ? { catch: (handler: Caught) => void handlers.push(handler) } : undefined), {});
+  assert.equal(handlers.length, 1, 'one handler, on the compaction hook');
+  return handlers[0] as Caught;
+}
+
+type Compacted = { messages?: { role: string; text: string }[]; skip?: string } | undefined;
+type Next = ((e: unknown) => Promise<Compacted>) & { error: { kind: 'throw' | 'timeout'; message?: string; budget: number }; called: boolean };
+type Caught = ($: unknown, e: { trigger: string; agentId?: string; messages: readonly Message[] }, next: Next) => Promise<Compacted>;
+
+const CAUGHT_STORE = '/home/u/.claude/lossless-compaction';
+const SUMMARY = { role: 'user', text: 'This session is being continued from a previous conversation.', toolUses: [] };
+
+/** A conversation as Claude Code sends it: its blocks, and what it adds to the first message. */
+const asSent = (messages: readonly Message[], added: string) =>
+  messages.map((message, index) => ({
+    role: message.role,
+    content: [
+      ...(index === 0 ? [{ type: 'text', text: added }] : []),
+      ...(message.text === '' ? [] : [{ type: 'text', text: message.text }]),
+      ...message.toolUses.map((use) => ({ type: 'tool_use', id: use.tool_use_id, name: use.tool, input: use.input })),
+      ...(message.toolResults ?? []).map((result) => ({ type: 'tool_result', tool_use_id: result.tool_use_id, content: result.text })),
+    ],
+  }));
+
+/**
+ * A host for the handler: the store in memory, `mkdir` and `chmod` that succeed, no `mv` (a text is written in place),
+ * and what the plugin says. `home` unset leaves no place to keep anything in.
+ */
+function caughtHost(files: MemoryFiles, messages: readonly Message[], api: unknown, home: string | null = '/home/u') {
+  const said: string[] = [];
+  const run = async (argv: readonly string[]) => {
+    const program = String(argv[0]).slice(String(argv[0]).lastIndexOf('/') + 1);
+    if (program === 'mkdir') files.dirs.add(String(argv.at(-1)));
+    else if (program !== 'chmod') throw new Error(`${program} cannot be started here`);
+    return { exitCode: 0, stdout: '' };
+  };
+  const $ = {
+    ui: { log: (text: string) => void said.push(text), toast: () => undefined },
+    env: { get: async (name: string) => (name === 'HOME' ? (home ?? undefined) : undefined) },
+    settings: { read: async () => ({}) },
+    fs: {
+      read: (path: string) => files.read(path),
+      write: (path: string, text: string) => files.write(path, text),
+      stat: (path: string) => files.stat(path),
+      list: (path: string) => files.list(path),
+      exists: async (path: string) => files.files.has(path) || files.dirs.has(path),
+    },
+    process: { run },
+    session: { id: async () => 'session-1', messages: async (args?: { as?: string }) => (args?.as === 'api' ? api : messages) },
+  };
+  return { $, said };
+}
+
+/** A `next` as a handler is handed it: what the built-in summary comes to, why the hook failed, and whether it had called `next`. */
+function nextOf(answer: (e: unknown) => Promise<Compacted>, error: Next['error'], called = false): Next & { handed: unknown[] } {
+  const handed: unknown[] = [];
+  return Object.assign(async (e: unknown) => (handed.push(e), answer(e)), { error, called, handed });
+}
+
+test('a compaction hook that throws or runs out of time keeps the conversation as it was sent before the built-in summary, and says so (#102)', async () => {
+  forgetMove();
+  const caught = await compactionCatch();
+  const messages = conversation([sized('a.ts', 3000), sized('b.ts', 2500), sized('c.ts', 600)]);
+  const results = messages.flatMap((message) => message.toolResults ?? []).map((result) => result.text);
+
+  for (const error of [{ kind: 'throw', message: 'boom\n  at nextStep', budget: 1000 }, { kind: 'timeout', budget: 1000 }] as const) {
+    const files = new MemoryFiles();
+    const { $, said } = caughtHost(files, messages, asSent(messages, '<system-reminder>Attached by Claude Code: walrus</system-reminder>'));
+    const e = { trigger: 'auto', messages };
+    const next = nextOf(async () => ({ messages: [SUMMARY] }), error);
+    const answered = await caught($, e, next);
+
+    // The built-in summary ran once, on the conversation as it was handed in, and the tickets of what was kept follow it.
+    assert.deepEqual(next.handed, [e], error.kind);
+    assert.equal(answered?.messages?.length, 2, error.kind);
+    assert.deepEqual(answered?.messages?.[0], SUMMARY);
+    const kept = answered?.messages?.[1]?.text ?? '';
+    assert.ok(kept.startsWith(KEPT), error.kind);
+    // What the parts hold is the conversation as Claude Code sent it: what it added included, each result by its ticket.
+    const parts: string[] = [];
+    for (const line of kept.split('\n')) {
+      const part = readPartTicket(line);
+      if (part === null) continue;
+      const got = await recall(files, [CAUGHT_STORE], part.id);
+      assert.ok(!('error' in got), line);
+      parts.push(got.text);
+    }
+    const text = parts.join('');
+    assert.ok(text.includes('Fix the failing parser test.') && text.includes('walrus'), error.kind);
+    const tickets = text.split('\n').flatMap((line) => readTicket(line) ?? []);
+    const recalled = await Promise.all(tickets.map(async (ticket) => recall(files, [CAUGHT_STORE], ticket.id)));
+    for (const result of results) assert.ok(recalled.some((got) => !('error' in got) && got.text === result), `the result of ${result.slice(0, 4)} comes back`);
+    // Said first, what failed and that the summary runs in its place, then that the conversation was kept.
+    assert.equal(said[0], `${PLUGIN_NAME}: ${failedLine(error)}`);
+    assert.ok(said.includes(`${PLUGIN_NAME}: kept the conversation in ${parts.length} part${parts.length === 1 ? '' : 's'} before the built-in summary`), said.join(' | '));
+  }
+});
+
+test('a handler run after the hook had called the built-in summary puts the tickets after what that call came to (#102)', async () => {
+  forgetMove();
+  const caught = await compactionCatch();
+  const messages = conversation([sized('a.ts', 3000)]);
+  const { $, said } = caughtHost(new MemoryFiles(), messages, asSent(messages, ''));
+  // As Claude Code hands it: once the hook had called `next`, calling it again hands back what that call settled to.
+  const settled = { messages: [SUMMARY, { role: 'assistant', text: 'Picking up where we were.' }] };
+  const error = { kind: 'throw', message: 'after the summary', budget: 1000 } as const;
+  const next = nextOf(async () => settled, error, true);
+  const answered = await caught($, { trigger: 'manual', messages }, next);
+  assert.equal(next.handed.length, 1, 'asked once, for what the call came to');
+  assert.deepEqual(answered?.messages?.[0], SUMMARY);
+  assert.ok(answered?.messages?.[1]?.text.startsWith(KEPT), 'the tickets, right after the summary');
+  assert.deepEqual(answered?.messages?.[2], settled.messages[1]);
+  assert.equal(said[0], `${PLUGIN_NAME}: ${failedLine(error, true)}`);
+
+  // The summary the hook asked for had failed: it fails again here, before anything is written, and the handler is absent.
+  const none = new MemoryFiles();
+  const failed = caughtHost(none, messages, asSent(messages, ''));
+  const rejected = nextOf(async () => Promise.reject(new Error('prompt is too long')), error, true);
+  assert.equal(await caught(failed.$, { trigger: 'auto', messages }, rejected), undefined);
+  assert.equal(none.files.size, 0, 'nothing written');
+  assert.deepEqual(failed.said, [
+    `${PLUGIN_NAME}: ${failedLine(error, true)}`,
+    `${PLUGIN_NAME}: handing the conversation to the built-in summary failed as well: prompt is too long`,
+  ]);
+});
+
+test('a handler with no place to keep the conversation in says why and hands it over as it is; one whose hand-over fails as well is absent (#102)', async () => {
+  forgetMove();
+  const caught = await compactionCatch();
+  const messages = conversation([sized('a.ts', 3000)]);
+  const error = { kind: 'throw', message: 'boom', budget: 1000 } as const;
+
+  const nowhere = caughtHost(new MemoryFiles(), messages, asSent(messages, ''), null);
+  const next = nextOf(async () => ({ messages: [SUMMARY] }), error);
+  assert.deepEqual(await caught(nowhere.$, { trigger: 'auto', messages }, next), { messages: [SUMMARY] });
+  assert.equal(next.handed.length, 1);
+  assert.equal(nowhere.said[0], `${PLUGIN_NAME}: ${failedLine(error)}`);
+  assert.ok(nowhere.said[1]?.startsWith(`${PLUGIN_NAME}: nothing of the conversation is kept before the built-in summary: `), nowhere.said.join(' | '));
+
+  // The summary itself fails: nothing is answered, and what Claude Code makes of the failure stands.
+  const failing = caughtHost(new MemoryFiles(), messages, asSent(messages, ''));
+  const refused = nextOf(async () => Promise.reject(new Error('the summary could not be made')), error);
+  assert.equal(await caught(failing.$, { trigger: 'auto', messages }, refused), undefined);
+  assert.equal(failing.said.at(-1), `${PLUGIN_NAME}: handing the conversation to the built-in summary failed as well: the summary could not be made`);
+});
+
+test('a handler leaves a compaction computed ahead and a subagent\'s to Claude Code, touching nothing (#102)', async () => {
+  const caught = await compactionCatch();
+  const touched: string[] = [];
+  const $ = new Proxy({}, { get: (_, noun) => void touched.push(String(noun)) });
+  const next = nextOf(async () => ({ messages: [SUMMARY] }), { kind: 'throw', budget: 1000 });
+  assert.equal(await caught($, { trigger: 'precompute', messages: [] }, next), undefined);
+  assert.equal(await caught($, { trigger: 'auto', agentId: 'a1', messages: [] }, next), undefined);
+  assert.deepEqual(touched, []);
+  assert.equal(next.handed.length, 0);
+});
+
 test("every way a conversation reaches the built-in summary keeps it first: a subagent's too, through its own step (ADR 0026)", () => {
-  const handler = hooks.slice(hooks.indexOf("on('session.compact'"));
+  // The hook, and the handler of its failure (#102), each read on its own.
+  const handler = hooks.slice(hooks.indexOf("on('session.compact'"), hooks.indexOf('}).catch(async ($, e, next) => {'));
+  const caught = hooks.slice(hooks.indexOf('}).catch(async ($, e, next) => {'));
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
   assert.deepEqual([...handler.matchAll(/next\(e\)/g)].length, 0, 'nothing is handed straight on');
+  // The handler asks only for what the hook's own call came to, and hands over through summarizeKeeping otherwise.
+  assert.deepEqual([...caught.matchAll(/next\(e\)/g)].map((match) => caught.slice(caught.lastIndexOf('\n', match.index) + 1, caught.indexOf('\n', match.index)).trim()), [
+    'const settled = next.called ? await next(e) : undefined;',
+  ]);
+  assert.equal(caught.split('summarizeKeeping($, e, summarize, keep)').length - 1, 1, 'kept first, or said why not');
   assert.ok(handler.includes("if (before.step === 'subagent') return summarizeSubagent($, e, next, options);"), 'a subagent, through its own step');
   const subagent = hooks.slice(hooks.indexOf('async function summarizeSubagent('), hooks.indexOf('async function cutKeeping('));
   assert.ok(subagent.includes("return keepThenSummarize(storingFilesOf($), keep, sayIt, () => next(e), (why) => ({ skip: why }), 'summarize');"), 'kept first, and summarized where a write is refused');
@@ -328,9 +512,13 @@ test('a /compact left undone is decided in src/: by who asked, with what, what C
   // A skip is said once: as the reason Claude Code shows, with no line of the plugin's beside it, and nothing kept, cut or summarized.
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
   assert.ok(carrying.includes("case 'skip':\n      return { skip: step.why };"));
-  // Two skips in all: a compaction computed ahead, and a /compact left undone.
+  // Two skips in all: a compaction computed ahead, and a /compact left undone. A third is no compaction's: what the
+  // hook answers once Claude Code went on without it, which Claude Code does not read (#102).
   const handler = hooks.slice(hooks.indexOf("on('session.compact'"));
-  assert.equal(handler.match(/return \{ skip: /g)?.length, 1);
+  assert.equal(handler.match(/return \{ skip: /g)?.length, 2);
+  const aborted = handler.indexOf("if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };");
+  const attempted = handler.indexOf('const tried = await attempt($, e, options);');
+  assert.ok(attempted > 0 && aborted > attempted && aborted < handler.indexOf('say($,'), 'right after the attempt, before anything is said or handed on');
   assert.equal(carrying.match(/return \{ skip: /g)?.length, 1);
 });
 
@@ -507,6 +695,8 @@ test('every tool call is looked at for a ticket the conversation knows, and refu
   const calls: unknown[][] = [];
   register((name, ...rest) => {
     if (name === 'tool.call') calls.push(rest);
+    // What `on` returns, which the compaction hook's `.catch` is called on.
+    return { catch: () => undefined };
   }, {});
   assert.equal(typeof calls[0]?.[0], 'function', 'the first tool.call hook has no matcher');
   assert.ok(calls.slice(1).every((rest) => typeof rest[0] === 'object'), 'every other one names its tool');
@@ -569,6 +759,8 @@ test('what the guard counts as the conversation\'s is what the plugin put there:
   let guard: Call | undefined;
   register((name, ...rest) => {
     if (name === 'tool.call' && guard === undefined) guard = rest[0] as Call;
+    // What `on` returns, which the compaction hook's `.catch` is called on.
+    return { catch: () => undefined };
   }, {});
 
   const example = ticketText({ tool: 'Read', bytes: 10, id: 'e'.repeat(64) });

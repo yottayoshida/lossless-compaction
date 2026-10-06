@@ -441,3 +441,16 @@ test('a result holding half of a character is kept with U+FFFD in its place, eve
   assert.ok('text' in kept, JSON.stringify(kept));
   assert.equal((await partsOf(files, kept.text)).join(''), expected);
 });
+
+test("keeping a conversation of 4096 messages and six million characters takes well under the second Claude Code gives a hook's handler of a failure (#102)", async () => {
+  // Measured at 59 ms on the machine this was written on: the handler waits on the host's writes for free, and this is
+  // the rest, writes to memory included. Half the second, so that a slow machine does not fail it.
+  const calls = Array.from({ length: 2047 }, (_, at) => ({ tool: 'Bash', input: { command: `show ${at}` }, text: output(`r${at}`, 120) }));
+  const messages = conversation(calls);
+  assert.equal(messages.length, 4096);
+  const started = performance.now();
+  const kept = await keepConversation(new MemoryFiles(), DIR, messages);
+  const ms = performance.now() - started;
+  assert.ok('text' in kept);
+  assert.ok(ms < 500, `${Math.round(ms)} ms`);
+});

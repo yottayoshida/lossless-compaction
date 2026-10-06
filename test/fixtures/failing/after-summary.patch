@@ -1,0 +1,11 @@
+--- a/hooks/move-out.ts
++++ b/hooks/move-out.ts
+@@ -942,6 +942,8 @@
+     if (before.step === 'skip') return { skip: before.why };
+     if (before.step === 'subagent') return summarizeSubagent($, e, next, options);
+ 
++    await next(e);
++    throw new Error('thrown on purpose by bench/host.ts after the summary');
+     const tried = await attempt($, e, options);
+     // Claude Code went on without this hook meanwhile (out of its time, or interrupted), and what it answers now is
+     // not read: nothing more is said, written or handed on, after what its handler said.

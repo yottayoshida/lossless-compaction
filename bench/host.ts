@@ -1,7 +1,10 @@
 // Checks the working tree in the Claude Code you have, with no person watching:
 // that it registers recall, that a /compact moves results out and recall gives
 // one back as it was, that a conversation over what may stay is cut with no
-// summary and what was cut is kept (ADR 0019), and that a hook file Claude Code
+// summary and what was cut is kept (ADR 0019), that a compaction whose hook
+// throws, answers what Claude Code refuses, throws after the summary ran, or
+// waits past its time keeps the conversation before the summary and says so
+// (#102, on copies broken as test/fixtures/failing says), and that a hook file Claude Code
 // does not load leaves the plugin "enabled but not running", told at the first
 // message and holding a /compact. Nothing is set for the plugin to run: every
 // session is started without CLAUDE_CODE_ENABLE_FUNCTION_HOOKS, and one more with
@@ -10,9 +13,10 @@
 //
 //   npm run check:host
 //   node bench/host.ts --plugin-dir <a copy>     the running plugin's checks on another copy (the not-running
-//                                                 copy is always made from the working tree)
+//                                                 copy and the broken ones are always made from the working tree)
 //
-// Signs in as you do and spends some cents of Sonnet 5.5. The files it reads and
+// Signs in as you do and spends about 1.50 USD of Sonnet 5.5, about 0.90 of it on
+// the summaries the broken copies run. The files it reads and
 // the plugin's store are in a directory of its own; Claude Code keeps its record
 // of each session where it keeps every session's (`--resume` needs it), and what
 // hooks/notice.sh remembers (told, held) goes where it keeps the plugin's data,
@@ -20,10 +24,10 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { PART, RECALL_TOOL, idOf } from '../src/store.ts';
+import { PART, PLUGIN, RECALL_TOOL, idOf, readPartTicket } from '../src/store.ts';
 import { FUNCTION_HOOKS, argsOf, envOf } from './cc.ts';
 import { logFile } from './fixtures.ts';
 import { readLine } from './lib.ts';
@@ -58,6 +62,8 @@ export type Stream = {
   logs: string[];
   /** The text of the final result event. */
   result: string;
+  /** How many compactions the session made: Claude Code prints a boundary for each. */
+  boundaries: number;
 };
 
 const textOf = (content: unknown): string =>
@@ -68,7 +74,7 @@ const textOf = (content: unknown): string =>
       : '';
 
 export function streamOf(text: string): Stream {
-  const stream: Stream = { sessionId: '', version: '', tools: [], pluginPath: '', pluginCount: 0, hooks: [], calls: [], results: new Map(), logs: [], result: '' };
+  const stream: Stream = { sessionId: '', version: '', tools: [], pluginPath: '', pluginCount: 0, hooks: [], calls: [], results: new Map(), logs: [], result: '', boundaries: 0 };
   for (const line of text.split('\n')) {
     let event: Record<string, unknown>;
     try {
@@ -90,6 +96,8 @@ export function streamOf(text: string): Stream {
       stream.hooks.push({ event: String(event['hook_event'] ?? ''), exitCode: typeof code === 'number' ? code : null, stdout: String(event['stdout'] ?? '') });
     } else if (type === 'system' && subtype === 'ui_log') {
       stream.logs.push(String(event['text'] ?? ''));
+    } else if (type === 'system' && subtype === 'compact_boundary') {
+      stream.boundaries += 1;
     } else if (type === 'assistant' || type === 'user') {
       const content = (event['message'] as { content?: unknown } | undefined)?.content;
       for (const block of Array.isArray(content) ? content : []) {
@@ -178,6 +186,69 @@ export function judgeCut(cut: Stream, parts: readonly string[], first: string, l
   ];
 }
 
+/**
+ * How each copy of test/fixtures/failing breaks the compaction hook: how Claude Code tells the failure, and what of
+ * it the line repeats. `timeout` waits past the hook's ten seconds right after the compaction was tried.
+ */
+export const FAILING = [
+  { patch: 'throw', kind: 'throw', repeated: 'thrown on purpose by bench/host.ts' },
+  { patch: 'refused', kind: 'throw', repeated: '' },
+  { patch: 'after-summary', kind: 'throw', repeated: 'thrown on purpose by bench/host.ts after the summary' },
+  { patch: 'timeout', kind: 'timeout', repeated: '' },
+] as const;
+
+/** The ids of the parts whose tickets the conversation holds after its last compaction, read from Claude Code's record of the session. */
+export function namedAfterCompaction(transcript: string): string[] {
+  const rows = transcript.split('\n').flatMap((line): Record<string, unknown>[] => {
+    try {
+      return [JSON.parse(line) as Record<string, unknown>];
+    } catch {
+      return [];
+    }
+  });
+  const boundary = rows.findLastIndex((row) => row['subtype'] === 'compact_boundary');
+  if (boundary < 0) return [];
+  return rows
+    .slice(boundary + 1)
+    .filter((row) => row['type'] === 'user')
+    .flatMap((row) => textOf((row['message'] as { content?: unknown } | undefined)?.content).split('\n'))
+    .flatMap((line) => readPartTicket(line)?.id ?? []);
+}
+
+/**
+ * A compaction whose hook failed (#102): the line says so and nothing of the hook is said after it, the conversation
+ * is kept, the built-in summary runs once, and the conversation after it holds the tickets of parts in the copy's own
+ * store. `parts` are those of that store, `named` the parts the session's record names, `said` what the person said.
+ */
+export function judgeFailed(
+  label: string,
+  stream: Stream,
+  parts: readonly string[],
+  named: readonly { id: string; stored: boolean }[],
+  said: string,
+  failure: { kind: string; repeated: string },
+): Check[] {
+  const at = stream.logs.findIndex((line) => line.startsWith(`${PLUGIN}: the compaction stopped (${failure.kind}`));
+  const failed = stream.logs[at];
+  const kept = (line: string) => /^lossless-compaction: kept the conversation in \d+ parts? before the built-in summary$/.test(line);
+  // After the failure's line, the handler's one line saying it was kept and nothing else: a second such line is the hook's.
+  const after = at < 0 ? [] : stream.logs.slice(at + 1);
+  const handlers = after.findIndex(kept);
+  const late = after.filter((_, index) => index !== handlers);
+  const holding = parts.filter((part) => part.includes(said)).length;
+  return [
+    { name: `${label}: the failure is said`, ok: failed !== undefined && failed.includes(failure.repeated), detail: (failed ?? stream.logs.join(' | ')).slice(0, 200) || 'nothing said' },
+    { name: `${label}: nothing of the hook is said after it`, ok: at >= 0 && late.length === 0, detail: late.join(' | ').slice(0, 200) || 'nothing' },
+    { name: `${label}: the conversation is kept before the summary`, ok: stream.logs.some(kept) && holding > 0, detail: `${stream.logs.find(kept) ?? 'no line saying it was kept'}; ${parts.length} part${parts.length === 1 ? '' : 's'}, ${holding} holding what was said` },
+    { name: `${label}: one compaction`, ok: stream.boundaries === 1, detail: `${stream.boundaries} boundar${stream.boundaries === 1 ? 'y' : 'ies'}` },
+    {
+      name: `${label}: the conversation after it holds the tickets`,
+      ok: named.length > 0 && named.every((one) => one.stored),
+      detail: named.length === 0 ? 'no ticket of a part after the compaction' : `${named.length} named, ${named.filter((one) => one.stored).length} in the copy's store`,
+    },
+  ];
+}
+
 /** The session started with CLAUDE_CODE_ENABLE_FUNCTION_HOOKS at 0, and how a session started without it is written. */
 export const ZERO = 'variable-0';
 export const UNSET = 'unset';
@@ -224,20 +295,36 @@ async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'lossless-host-'));
   const work = join(dir, 'work');
   const store = join(dir, 'store');
-  const broken = join(dir, 'broken');
-  spawnSync('mkdir', ['-p', work, store, broken]);
+  spawnSync('mkdir', ['-p', work, store]);
   const names = Array.from({ length: FILES }, (_, i) => `f${i + 1}.txt`);
   names.forEach((name, i) => writeFileSync(join(work, name), logFile(300 + i, LINES)));
 
-  // A copy of what git keeps, with the hook file broken the way test/fixtures/validate says: Claude Code loads no hook from it.
+  // A copy of what git keeps, with the hook file changed as `patch` says.
   const list = spawnSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' });
-  const tar = spawnSync('sh', ['-c', `cd "${root}" && tar -cf - --null -T - | (cd "${broken}" && tar -xf -)`], { input: list.stdout });
-  const patched = spawnSync('patch', ['-p1', '-s', '-N', '-d', broken, '-i', join(root, 'test/fixtures/validate/pass-to-import.patch')]);
-  if (list.status !== 0 || tar.status !== 0 || patched.status !== 0) throw new Error('could not make the broken copy of the working tree');
+  if (list.status !== 0) throw new Error('could not list the working tree');
+  const copyWith = (name: string, patch: string): string => {
+    const copy = join(dir, name);
+    spawnSync('mkdir', ['-p', copy]);
+    const tar = spawnSync('sh', ['-c', `cd "${root}" && tar -cf - --null -T - | (cd "${copy}" && tar -xf -)`], { input: list.stdout });
+    const patched = spawnSync('patch', ['-p1', '-s', '-N', '-d', copy, '-i', join(root, patch)]);
+    if (tar.status !== 0 || patched.status !== 0) throw new Error(`could not make the copy of the working tree that ${patch} changes`);
+    return copy;
+  };
+  // Broken the way test/fixtures/validate says: Claude Code loads no hook from it.
+  const broken = copyWith('broken', 'test/fixtures/validate/pass-to-import.patch');
 
   const sessions: { label: string; stream: Stream; pluginPath: string; variable: string }[] = [];
-  const run = (label: string, pluginDir: string, prompt: string, resume?: string, env: Record<string, string> = {}, pluginOptions?: Record<string, unknown>): Stream => {
-    const args = argsOf({ out: '', cwd: work, model: MODEL, arm: 'plugin', pluginDir, storeDir: store, allowedTools: ['Read', 'ToolSearch', RECALL_TOOL], prompt, ...(resume ? { resume, fork: false } : {}), ...(pluginOptions ? { pluginOptions } : {}) });
+  // With `fork`, a copy of the session goes on and the session is left as it was.
+  const run = (
+    label: string,
+    pluginDir: string,
+    prompt: string,
+    resume?: string,
+    env: Record<string, string> = {},
+    pluginOptions?: Record<string, unknown>,
+    { fork = false, storeDir = store }: { fork?: boolean; storeDir?: string } = {},
+  ): Stream => {
+    const args = argsOf({ out: '', cwd: work, model: MODEL, arm: 'plugin', pluginDir, storeDir, allowedTools: ['Read', 'ToolSearch', RECALL_TOOL], prompt, ...(resume ? { resume, fork } : {}), ...(pluginOptions ? { pluginOptions } : {}) });
     const started = envOf({ env });
     const ran = spawnSync('claude', [...args, '--include-hook-events'], { cwd: work, env: started, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: LIMIT_MS });
     if (ran.error !== undefined) throw new Error(`claude could not be run, or ran past ${LIMIT_MS / 60000} minutes: ${ran.error.message}`);
@@ -255,6 +342,20 @@ async function main(): Promise<void> {
   const unmarked = { LOSSLESS_COMPACTION_RUNNING: '' };
   const said = `Read ${names.join(', ')} with the Read tool, one file per call, in that order. Then reply only: read.`;
   const first = run('first', plugin, said, undefined, unmarked);
+  // Before the session is compacted: each broken copy compacts a copy of it, into a store of its own (#102). What the
+  // conversation holds afterwards is read from Claude Code's record of the copy, wherever it keeps its projects.
+  const projects = join(process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude'), 'projects');
+  const recordOf = (sessionId: string): string => {
+    const found = readdirSync(projects).map((name) => join(projects, name, `${sessionId}.jsonl`)).find((path) => existsSync(path));
+    return found === undefined ? '' : readFileSync(found, 'utf8');
+  };
+  const failing = FAILING.map((failure) => {
+    const own = join(dir, `store-${failure.patch}`);
+    spawnSync('mkdir', ['-p', own]);
+    const stream = run(failure.patch, copyWith(failure.patch, `test/fixtures/failing/${failure.patch}.patch`), '/compact', first.sessionId, unmarked, undefined, { fork: true, storeDir: own });
+    const named = namedAfterCompaction(recordOf(stream.sessionId)).map((id) => ({ id, stored: existsSync(join(own, 'blobs', `${id}.txt`)) }));
+    return judgeFailed(failure.patch, stream, partsIn(own), named, said, failure);
+  });
   const compact = run('compact', plugin, '/compact', first.sessionId, unmarked);
   // A result that was moved out, chosen by its own text: the id is the SHA-256 of what was read.
   let chosen: { id: string; text: string } | undefined;
@@ -281,6 +382,7 @@ async function main(): Promise<void> {
     ...judgeSessions(sessions),
     ...judgeRunning(first, compact, recalled, chosen?.id ?? '-', chosen?.text ?? ''),
     ...judgeCut(cut, partsIn(store), said, asked),
+    ...failing.flat(),
     ...judgeNotRunning(notFirst, notCompact),
     ...judgeNothingToSet(sessions, zero),
   ];
