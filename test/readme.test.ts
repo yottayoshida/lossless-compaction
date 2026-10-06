@@ -140,14 +140,23 @@ test('the README names what the code names: the line that installs the plugin, t
   assert.ok(README.includes(`\`${PLUGIN}:\``), "the mark of the plugin's lines");
 });
 
-test('a version is not raised without coming to the README: the three files that name the version agree, and docs/development.md names it as the one the README was read against', () => {
+test('a version is not raised without coming to the README: the two files that name the version agree, the marketplace names none, and docs/development.md names it as the one the README was read against', () => {
   const versions = {
     'package.json': (JSON.parse(read('package.json')) as { version: string }).version,
     '.claude-plugin/plugin.json': (JSON.parse(read('.claude-plugin/plugin.json')) as { version: string }).version,
-    '.claude-plugin/marketplace.json': (JSON.parse(read('.claude-plugin/marketplace.json')) as { plugins: { version: string }[] }).plugins[0]?.version,
   };
   const version = versions['package.json'];
-  assert.deepEqual(Object.values(versions), [version, version, version], JSON.stringify(versions));
+  assert.deepEqual(Object.values(versions), [version, version], JSON.stringify(versions));
+  // Claude Code takes the version from plugin.json first and says nothing of another in the entry when it installs: one place holds it.
+  const entries = (JSON.parse(read('.claude-plugin/marketplace.json')) as { plugins: Record<string, unknown>[] }).plugins;
+  assert.ok(entries.every((entry) => !('version' in entry)), 'the marketplace entry names no version');
+  // docs/limits.md says where new installs come from as the entry says it: the tip of main while its source is
+  // "./", a release once it points at one (docs/development.md, "Releasing").
+  const limits = read('docs/limits.md').replace(/\s+/g, ' ');
+  const relative = typeof entries[0]?.['source'] === 'string';
+  for (const said of ['The marketplace points at the tip of `main`', 'can hold changes not yet released, under the last release\'s number']) {
+    assert.equal(limits.includes(said), relative, `docs/limits.md, where the entry is ${relative ? 'a path' : 'a release'}: ${said}`);
+  }
   const readAt = /^README read against version: `(\d+\.\d+\.\d+)`$/m.exec(read('docs/development.md'))?.[1];
   assert.equal(readAt, version, `the version is ${version} and the README was last read against ${readAt}: read it as docs/development.md says ("The README"), then name ${version} there`);
 });

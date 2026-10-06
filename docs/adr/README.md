@@ -74,3 +74,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0030](0030-what-claude-code-attached-is-kept-at-the-end.md): why what
   Claude Code attached to the messages as it sent them is kept at each
   compaction that rebuilds, and named by one message at the end.
+- [0031](0031-the-marketplace-points-at-a-release.md): why the marketplace
+  entry names no version, and why a release points it at the release's tag
+  in three steps, not at the tip of `main`.
