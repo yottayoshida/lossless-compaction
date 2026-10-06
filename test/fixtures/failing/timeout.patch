@@ -1,0 +1,10 @@
+--- a/hooks/move-out.ts
++++ b/hooks/move-out.ts
+@@ -943,6 +943,7 @@
+     if (before.step === 'subagent') return summarizeSubagent($, e, next, options);
+ 
+     const tried = await attempt($, e, options);
++    await $.clock.sleep(11_000, { signal: new AbortController().signal }); // past the hook's time, on purpose by bench/host.ts
+     // Claude Code went on without this hook meanwhile (out of its time, or interrupted), and what it answers now is
+     // not read: nothing more is said, written or handed on, after what its handler said.
+     if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };

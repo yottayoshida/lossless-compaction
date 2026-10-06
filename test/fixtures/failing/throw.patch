@@ -1,0 +1,10 @@
+--- a/hooks/move-out.ts
++++ b/hooks/move-out.ts
+@@ -951,6 +951,7 @@
+       say($, `built-in compaction: ${tried.why}`);
+       result = await summarizeKeeping($, e, next, tried.keep);
+     } else {
++      throw new Error('thrown on purpose by bench/host.ts');
+       const step = nextStep({
+         trigger: e.trigger,
+         instructions: e.instructions,

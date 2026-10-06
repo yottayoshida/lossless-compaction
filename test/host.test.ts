@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { FUNCTION_HOOKS } from '../bench/cc.ts';
-import { UNSET, ZERO, judgeCut, judgeNothingToSet, judgeNotRunning, judgeRunning, judgeSessions, partsIn, streamOf, type Stream } from '../bench/host.ts';
-import { PART, RECALL_TOOL, idOf } from '../src/store.ts';
+import { FAILING, UNSET, ZERO, judgeCut, judgeFailed, judgeNothingToSet, judgeNotRunning, judgeRunning, judgeSessions, namedAfterCompaction, partsIn, streamOf, type Stream } from '../bench/host.ts';
+import { failedLine } from '../src/flow.ts';
+import { KEPT } from '../src/keep.ts';
+import { PART, PLUGIN, RECALL_TOOL, idOf, partTicketText } from '../src/store.ts';
 
 // Cut from the streams of one `npm run check:host` on Claude Code 2.1.288: the events the checks read, nothing of the machine.
 const read = (label: string) => streamOf(readFileSync(new URL(`fixtures/host/${label}.jsonl`, import.meta.url), 'utf8'));
@@ -163,4 +167,58 @@ test('a stream is read whatever else it holds: lines that are not JSON, and even
   assert.deepEqual(stream.calls, [{ id: 't1', name: 'Read', input: { file_path: 'a' } }]);
   assert.equal(stream.results.get('t1'), 'one two');
   assert.equal(stream.result, 'done');
+});
+
+test('a compaction whose hook failed is told from its lines, its own store, its boundaries and its record, and each check fails on its own (#102)', () => {
+  const said = 'Read f1.txt with the Read tool. Then reply only: read.';
+  const thrown = FAILING.find((one) => one.patch === 'throw') as (typeof FAILING)[number];
+  const timedOut = FAILING.find((one) => one.patch === 'timeout') as (typeof FAILING)[number];
+  const kept = `${PLUGIN}: kept the conversation in 2 parts before the built-in summary`;
+  const base: Stream = {
+    ...streamOf(JSON.stringify({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual' } })),
+    logs: [`${PLUGIN}: moved 5 of 6 tool results out`, `${PLUGIN}: ${failedLine({ kind: 'throw', message: thrown.repeated })}`, kept],
+  };
+  assert.equal(base.boundaries, 1, 'a boundary is counted');
+  const parts = [`--- user\n${said}\n`, '--- assistant\nread\n'];
+  const named = [{ id: 'a'.repeat(64), stored: true }];
+  const failed = (stream: Stream, { held = parts, names = named, failure = thrown as { kind: string; repeated: string } } = {}) => failing(judgeFailed('throw', stream, held, names, said, failure));
+  assert.deepEqual(failed(base), [], 'a line before the failure is the hook\'s own, said before it failed');
+  assert.deepEqual(failed({ ...base, logs: base.logs.filter((line) => line !== base.logs[1]) }), ['throw: the failure is said', 'throw: nothing of the hook is said after it']);
+  assert.deepEqual(failed(base, { failure: { kind: 'throw', repeated: 'something else' } }), ['throw: the failure is said'], 'the line names the failure the copy was made for');
+  assert.deepEqual(failed(base, { failure: timedOut }), ['throw: the failure is said', 'throw: nothing of the hook is said after it'], 'and how Claude Code told it');
+  assert.deepEqual(failed({ ...base, logs: [...base.logs, `${PLUGIN}: moved 5 of 6 tool results out`] }), ['throw: nothing of the hook is said after it'], 'a hook that went on after its time');
+  assert.deepEqual(failed({ ...base, logs: [...base.logs, kept] }), ['throw: nothing of the hook is said after it'], 'and kept what it was handed as well');
+  assert.deepEqual(failed({ ...base, logs: base.logs.slice(0, 2) }), ['throw: the conversation is kept before the summary']);
+  assert.deepEqual(failed(base, { held: parts.slice(1) }), ['throw: the conversation is kept before the summary'], 'no part holds what was said');
+  assert.deepEqual(failed({ ...base, boundaries: 2 }), ['throw: one compaction'], 'a summary that ran again');
+  assert.deepEqual(failed({ ...base, boundaries: 0 }), ['throw: one compaction']);
+  assert.deepEqual(failed(base, { names: [] }), ['throw: the conversation after it holds the tickets'], 'what the handler answered was not taken');
+  assert.deepEqual(failed(base, { names: [...named, { id: 'b'.repeat(64), stored: false }] }), ['throw: the conversation after it holds the tickets']);
+});
+
+test("the parts a session's record names after its last compaction are read from the messages after its boundary (#102)", () => {
+  const [before, after] = ['c'.repeat(64), 'd'.repeat(64)];
+  const ticket = (id: string) => partTicketText({ part: 1, parts: 1, first: 1, last: 9, bytes: 5073, id });
+  const rows = [
+    { type: 'user', message: { content: `${KEPT}, in 1 part; recall a part by its id.\n${ticket(before)}` } },
+    { type: 'system', subtype: 'compact_boundary' },
+    { type: 'user', message: { content: 'This session is being continued from a previous conversation.' } },
+    { type: 'user', message: { content: [{ type: 'text', text: `${KEPT}, in 1 part; recall a part by its id.\n${ticket(after)}` }] } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: ticket(before) }] } },
+  ];
+  assert.deepEqual(namedAfterCompaction([...rows.map((row) => JSON.stringify(row)), 'not json'].join('\n')), [after]);
+  assert.deepEqual(namedAfterCompaction(JSON.stringify(rows[0])), [], 'no compaction, no part after it');
+});
+
+test('each copy test/fixtures/failing makes is of the hook file as it is: its patch applies, and to the compaction hook (#102)', () => {
+  const hook = readFileSync(new URL('../hooks/move-out.ts', import.meta.url), 'utf8');
+  for (const { patch } of FAILING) {
+    const copy = mkdtempSync(join(tmpdir(), `lossless-failing-${patch}-`));
+    mkdirSync(join(copy, 'hooks'));
+    writeFileSync(join(copy, 'hooks/move-out.ts'), hook);
+    const applied = spawnSync('patch', ['-p1', '-s', '-N', '-d', copy, '-i', fileURLToPath(new URL(`fixtures/failing/${patch}.patch`, import.meta.url))], { encoding: 'utf8' });
+    assert.equal(applied.status, 0, `${patch}: ${applied.stdout}${applied.stderr}`);
+    const changed = readFileSync(join(copy, 'hooks/move-out.ts'), 'utf8');
+    assert.ok(changed !== hook && changed.includes('on purpose by bench/host.ts'), patch);
+  }
 });

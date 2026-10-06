@@ -29,6 +29,26 @@ export function beforeTrying(e: { trigger: string | undefined; agentId: string |
   return { step: 'try' };
 }
 
+/** Why the compaction hook failed, as Claude Code tells the hook's handler: it threw or answered what was refused, or ran out of time. */
+export type Failure = { kind: string; message?: string | undefined };
+
+/** The most of what Claude Code says of a failure that a line repeats: it can hold the answer that was refused. */
+const FAILURE_CHARS = 200;
+
+/**
+ * The line said when the compaction hook failed and its handler hands the conversation to the built-in summary
+ * (#102); `called`, when the hook had asked for the summary already, which then is not asked for again. It says
+ * what failed and not whose doing it was: a summary that failed beneath the hook fails it too.
+ */
+export function failedLine(failure: Failure, called = false): string {
+  const said = [...(failure.message ?? '').replace(/\s+/g, ' ').trim()];
+  const message = said.length > FAILURE_CHARS ? `${said.slice(0, FAILURE_CHARS).join('')}…` : said.join('');
+  const what = `the compaction stopped (${failure.kind}${message === '' ? '' : `: ${message}`})`;
+  return called
+    ? `${what} after the built-in summary was asked for; what it came to stands, the conversation kept beside it where it can be`
+    : `${what}; the built-in summary runs in its place, the conversation kept first where it can be`;
+}
+
 /**
  * The built-in summary, the conversation kept first: of the conversation as it
  * was handed in (`given`), or of what moving results out left of it

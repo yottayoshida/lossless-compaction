@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { reportLine, tokensOf, undoneLine, type Count, type Report } from '../src/compact.ts';
 import { cutLine, decide } from '../src/cut.ts';
-import { NUMBER_SETTINGS, beforeTrying, configFrom, nextStep, settingNotes, settingOf, type Step, type Tried } from '../src/flow.ts';
+import { NUMBER_SETTINGS, beforeTrying, configFrom, failedLine, nextStep, settingNotes, settingOf, type Step, type Tried } from '../src/flow.ts';
 import { PLUGIN } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 
@@ -223,4 +223,18 @@ test('middles of long messages moved out are something moved out: handed back wh
   assert.deepEqual(nextStep(tried(WIDE, { report: { bodies: 1 }, enough: true })), { step: 'back', line: reportLine(report({ bodies: 1 })) });
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, bodies: 1 }, enough: true } as const;
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
+});
+
+test('the line of a compaction hook that failed says what failed, in one line of at most 200 characters of what Claude Code said, and that the summary runs in its place (#102)', () => {
+  const tail = 'the built-in summary runs in its place, the conversation kept first where it can be';
+  assert.equal(failedLine({ kind: 'timeout' }), `the compaction stopped (timeout); ${tail}`);
+  assert.equal(failedLine({ kind: 'throw', message: '  boom\n    at nextStep (src/flow.ts:1)\n' }), `the compaction stopped (throw: boom at nextStep (src/flow.ts:1)); ${tail}`);
+  // What was refused can be the whole answer: cut at 200 characters, never inside one.
+  const long = failedLine({ kind: 'throw', message: `${'x'.repeat(199)}😀${'y'.repeat(500)}` });
+  assert.equal(long, `the compaction stopped (throw: ${'x'.repeat(199)}😀…); ${tail}`);
+  // Once the hook had asked for the summary, the summary is not run again: what it came to stands.
+  assert.equal(
+    failedLine({ kind: 'throw', message: 'late' }, true),
+    'the compaction stopped (throw: late) after the built-in summary was asked for; what it came to stands, the conversation kept beside it where it can be',
+  );
 });

@@ -135,6 +135,42 @@ Not compacted · lossless-compaction: nothing to move out, 28425 of 167000 token
 Measured with `-p` on Claude Code 2.1.287 and 2.1.288, and in a terminal on
 2.1.288.
 
+When the plugin's own compaction fails (#102) — its hook throws, answers
+what Claude Code refuses, or outruns the ten seconds of its own time Claude
+Code gives a hook — Claude Code runs the hook's handler of a failure, which
+says what failed:
+
+```text
+lossless-compaction: the compaction stopped (throw: …); the built-in summary runs in its place, the conversation kept first where it can be
+```
+
+It then keeps the conversation as it was sent, as where the compaction
+could not be tried, and hands it to Claude Code's summary; the tickets of
+what was kept follow the summary ([what a summary replaces](#what-a-summary-replaces)),
+and a second line says it was kept. Where the hook had already asked for
+the summary, it is not asked for again: what it came to stands with the
+tickets after it, and a summary that failed is left failed, with nothing
+kept for it. Where Claude Code went on without the hook while it was
+trying the compaction, the hook says and hands on nothing more once the try
+is over; past that, within the little left of its work, it may still say a
+line of its own. The handler has a second of its own time, waits
+on the disk not counted; keeping 4,096 messages of six million characters
+took 59 ms in memory where it was written. Past that second nothing is
+kept and the second line is not said. A compaction computed ahead, which
+the hook skips before anything can fail, and a subagent's, which it hands
+straight on, are left to Claude Code.
+
+Measured with `-p` on Claude Code 2.1.291 by `npm run check:host`, on
+copies broken as `test/fixtures/failing/` says: a throw, an answer that is
+not a list, a throw after the summary was asked for, and ten seconds waited
+past the hook's time right after the compaction was tried. In each the
+conversation was kept in one part and compacted once, and held the ticket
+afterwards. Without the line that stops the hook once Claude Code has gone
+on, the copy that waited said it had moved results out after the handler's
+line. A hook held up by its own work, not by a wait, was not measured.
+`claude plugin validate --strict` of 2.1.287 and 2.1.288 accepts the hook
+file.
+
 How full it is afterwards is counted as what is in use less what goes (ADR
 0013). What Claude Code's breakdown says is not the conversation (the system
 prompt, the tools' definitions and the like) stays as it is. Of the

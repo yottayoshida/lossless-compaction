@@ -1,0 +1,11 @@
+--- a/hooks/move-out.ts
++++ b/hooks/move-out.ts
+@@ -629,7 +629,7 @@
+       return { skip: step.why };
+     case 'back':
+       say($, step.line);
+-      return { messages: outcome.messages };
++      return { messages: 'refused on purpose by bench/host.ts' } as never;
+     case 'cut': {
+       const cut = await cutKeeping($, tried, step.after, step.at, step.over);
+       // A part could not be written: handed over as `otherwise` says, where what could not be kept is said, or skipped (ADR 0008).
