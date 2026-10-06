@@ -100,7 +100,7 @@ test('every program the code runs is named in PRIVACY.md, and the code runs comm
 
 test('every place the plugin writes is named in PRIVACY.md', () => {
   const places = CODE.flatMap((path) => placesIn(code(path)));
-  assert.deepEqual([...new Set(places)].sort(), ['blobs', 'gc.json', 'index', 'roots', 'sentinel.jsonl', 'tmp', 'trash']);
+  assert.deepEqual([...new Set(places)].sort(), ['blobs', 'gc.json', 'index', 'roots', 'sentinel.jsonl', 'tmp', 'trash', 'witness']);
   for (const place of places) assert.ok(named(place.includes('.') ? place : `${place}/`), `PRIVACY.md does not name ${place}`);
   for (const dir of [PLUGIN, OLD_PLUGIN]) assert.ok(PRIVACY.includes(`~/.claude/${dir}/`), `PRIVACY.md does not name ~/.claude/${dir}/`);
   const data = dataFilesIn(code('hooks/notice.sh'));

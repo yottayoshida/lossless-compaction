@@ -16,6 +16,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - A number setting outside its range is taken at the nearest end of it, where it was replaced by its default without a word (#99). `targetPercent` set to 100 was used as 1, which since 0.7.1 is the other end of what was asked for: everything that may leave moved out at every compaction. That is said once, at the start of the session, as is a value left empty, which is taken at its default; each number setting's description names its range. A value that is not a number keeps Claude Code from loading the plugin, as before.
+- A clean-up could take every result of a conversation for unused, and remove it two weeks later with nothing said, were Claude Code to write its transcripts otherwise than its search reads them: compressed, renamed, with ids spelled another way, or inside the directory it keeps beside each (#100, ADR 0027). At each compaction of the main conversation, and when a session starts with tickets, the conversation's newest ticket is noted in `witness/`. Before anything moves, a clean-up looks for each in its conversation's own transcript: not there, or the conversation still there under its session id in another form, it stops, and says so. A noted ticket whose conversation is gone lets go. Conversations compacted before this version have none until resumed or compacted again. `PRIVACY.md` names the new file and what is read.
 
 ## [0.7.1] - 2026-10-05
 

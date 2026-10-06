@@ -222,7 +222,9 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   assert.ok(madePrivate > 0 && subagent.indexOf('await noteRootOf($, store, options);') > madePrivate, 'recorded once private');
   assert.ok(subagent.includes('await restoreFor($, store, ticketIds(messages), partIds(messages));'), 'put back first');
   assert.ok(!/\bnext\(/.test(carrying), 'no step is handed on but through summarizeKeeping, which keeps first');
-  assert.ok(handler.includes('return summarizeKeeping($, e, next, tried.keep);'), 'why the compaction did not run');
+  assert.ok(handler.includes('result = await summarizeKeeping($, e, next, tried.keep);'), 'why the compaction did not run');
+  // Whatever the step, the newest ticket of the conversation handed back, else of the one handed in, is noted after (ADR 0027).
+  assert.ok(handler.includes("const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;\n    await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);\n    return result;"), 'the witness, after, this compaction\'s tickets first');
   assert.ok(
     carrying.includes("return step.of === 'given'\n        ? summarizeKeeping($, e, next, { store, messages: e.messages as readonly Message[] })"),
     'nothing moved out: kept as handed in, where the step says so',
@@ -281,8 +283,8 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   const handler = hooks.slice(hooks.indexOf("on('session.compact'"));
   assert.ok(
     handler.includes(
-      'const step = nextStep({\n      trigger: e.trigger,\n      instructions: e.instructions,\n      outcome: tried.outcome,\n      inUse: tried.inUse,\n' +
-        '      given: tried.given,\n      maxAfterPercent: tried.maxAfterPercent,\n      count: tried.count,\n      keepTokens: tried.keepTokens,\n    });',
+      'const step = nextStep({\n        trigger: e.trigger,\n        instructions: e.instructions,\n        outcome: tried.outcome,\n        inUse: tried.inUse,\n' +
+        '        given: tried.given,\n        maxAfterPercent: tried.maxAfterPercent,\n        count: tried.count,\n        keepTokens: tried.keepTokens,\n      });',
     ),
   );
   // Handed back only where the step says so: as rebuilt, or cut. A part that could not be written goes on to the hand-over the step names.
@@ -312,7 +314,7 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
 test('a /compact left undone is decided in src/: by who asked, with what, what Claude Code says is in use, and what could have left (ADR 0015)', () => {
   // Whether it is left undone, and the line, are src/flow.ts's (test/flow.test.ts), from the figure of what was in use
   // and not the size a report estimates: the hook hands it `tried.inUse`.
-  assert.ok(hooks.includes('      inUse: tried.inUse,\n      given: tried.given,'));
+  assert.ok(hooks.includes('        inUse: tried.inUse,\n        given: tried.given,'));
   // What was in use is Claude Code's own figure, thinking included, made up from characters only when it gives none; the compaction is handed the same.
   assert.ok(hooks.includes("const given = typeof tokens === 'number' && tokens > 0;"));
   assert.ok(hooks.includes('const inUse = given ? tokens : Math.ceil(charsOf(messages) / CHARS_PER_TOKEN) + media.images * IMAGE_TOKENS;'));
@@ -461,7 +463,11 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   assert.ok(collecting.includes("if (tried !== null) await stoppedAs(filesOf($), tried.dir, tried.record, 'unexpected');"));
   // The words are said, and only said.
   assert.ok(collecting.includes('await stoppedAs(files, store.write, record, inTrash.kind);'));
-  assert.equal(collecting.split('stoppedAs(').length - 1, 6, 'five places it stops and the declaration');
+  // A conversation whose noted ticket the search did not find stops it too, after the search and before anything goes back (ADR 0027).
+  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, unseen.kind);'));
+  const witnessed = collecting.indexOf('const unseen = await checkWitnesses(');
+  assert.ok(witnessed > collecting.indexOf('const live = await liveIds(') && witnessed < collecting.indexOf('const inTrash = await putBackNamed('), 'looked at after the search, before the trash');
+  assert.equal(collecting.split('stoppedAs(').length - 1, 7, 'six places it stops and the declaration');
   assert.ok(!/noteStopped\([^)]*\.stop\b/.test(collecting));
 });
 

@@ -72,7 +72,7 @@ const failed = (error: unknown): NotMoved => ({ reason: 'write-failed', code: co
  * whole: the host's write cuts a file short when it fails (ADR 0008). Without
  * one, it is written in place.
  */
-async function put(files: Files, path: string, text: string, tmp: string): Promise<NotMoved | null> {
+export async function put(files: Files, path: string, text: string, tmp: string): Promise<NotMoved | null> {
   const mover = files.move !== undefined && (await files.move.available()) ? files.move : null;
   if (mover === null) {
     try {

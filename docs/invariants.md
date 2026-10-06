@@ -58,8 +58,11 @@ the transcripts that ends with an error, is cut short, or does not print the
 id it is known to hold; a place that cannot be listed; a project directory
 that is a link; every recorded place gone; a kept part that cannot be read;
 something named, by a transcript or by a part, that is in the trash and
-cannot be put back: each stops the clean-up before anything moves to the
-trash or is removed.
+cannot be put back; a conversation the plugin compacted with tickets that is
+still there under its session id, whose own transcript does not hold the
+newest ticket noted for it (ADR 0027): each stops the clean-up before
+anything moves to the trash or is removed. A noted ticket whose conversation
+is no longer there lets go of it.
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
@@ -67,6 +70,10 @@ trash or is removed.
 - `with every recorded place gone, nothing is collected: an empty set would name nothing in use`
 - `a collection stops when a kept part it is to follow cannot be read`
 - `where what is named cannot be put back from the trash, the collection is stopped before it counts what is named`
+- `a clean-up stops where a conversation compacted with tickets is still there and the search does not find the ticket noted for it: renamed, compressed, spelled otherwise, or moved inside its directory (ADR 0027)`
+- `with a witness noted, a transcript renamed keeps every result; with the conversation gone, the clean-up goes on as before (ADR 0027)`
+- `a conversation written otherwise from its start, or from some point on, stops the clean-up too: its newest ticket is its witness, wherever it was written (ADR 0027)`
+- `the witness of a compaction is a ticket it put in, where it put any, before what stays behind a cut; at a start the one noted stays while the conversation shows it (ADR 0027)`
 
 **I6. What a cut takes out is kept first, and a summary does not run on a
 refused write.** The messages a cut takes out are kept in parts before they

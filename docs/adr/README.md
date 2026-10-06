@@ -62,6 +62,9 @@ Why the plugin is built the way it is, one record a decision.
 - [0026](0026-a-subagents-conversation-is-kept-before-its-summary.md): why a
   subagent's conversation is kept before Claude Code summarizes it, and why
   its summary runs where the disk refuses the write.
+- [0027](0027-a-clean-up-first-finds-what-was-seen.md): why a clean-up first
+  looks for a ticket each compacted conversation was seen to hold, and stops
+  where its conversation is there but the search does not find it.
 - [0028](0028-a-key-in-the-environment-waits-for-a-choice.md): why a key in
   the environment is used only where the plugin's settings choose the
   provider, so that one kept for another tool sends nothing.

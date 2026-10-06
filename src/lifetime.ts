@@ -4,7 +4,8 @@
 // The conversations Claude Code can resume are its transcripts, one JSONL file
 // each under `<config>/projects/`; a fork, a rewound branch and a conversation
 // compacted before this version all keep the ids in them. So the plugin keeps
-// no list of its own: once a week it reads every 64-hex string out of the
+// no list of what is in use, only one ticket per compacted conversation to tell
+// a transcript it no longer reads (ADR 0027): once a week it reads every 64-hex string out of the
 // transcripts, and a result whose id is in none of them, and that is over a
 // day old, moves to `trash/<day>/`. Seven days later, still in none of them,
 // it is removed; found again, it is put back. `recall` and a compaction put
@@ -204,13 +205,19 @@ export async function listed(list: List, path: string): Promise<DirEntry[] | nul
  * layout other than the one measured records nothing and nothing is collected.
  */
 export async function rootFor(files: Files, list: List, configDir: string, sessionId: string): Promise<string | null> {
+  return (await transcriptOf(files, list, configDir, sessionId)) === null ? null : `${configDir}/projects`;
+}
+
+/** This session's transcript, `<config>/projects/<project>/<session>.jsonl`, where one directory holds it; else null. */
+async function transcriptOf(files: Files, list: List, configDir: string, sessionId: string): Promise<string | null> {
   if (!/^[0-9A-Za-z_-]{1,128}$/.test(sessionId)) return null;
   const root = `${configDir}/projects`;
   for (const entry of (await listed(list, root)) ?? []) {
     if (entry.kind !== 'dir' || entry.isLink) continue;
+    const path = `${root}/${entry.name}/${sessionId}.jsonl`;
     try {
-      const stat = await files.stat(`${root}/${entry.name}/${sessionId}.jsonl`);
-      if (stat.kind === 'file') return root;
+      const stat = await files.stat(path);
+      if (stat.kind === 'file') return path;
     } catch {
       // Not this one.
     }
@@ -224,7 +231,7 @@ export function idsIn(stdout: string, into: Set<string> = new Set()): Set<string
   return into;
 }
 
-const GREP = ['/usr/bin/grep', '/bin/grep'] as const;
+export const GREP = ['/usr/bin/grep', '/bin/grep'] as const;
 
 /**
  * Every id in the transcripts under `roots`, one search per project directory,

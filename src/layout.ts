@@ -25,6 +25,9 @@ export const rootPath = (dir: string, key: string) => `${rootsDir(dir)}/${key}.j
 /** Whether a file of `roots/` is a record of a place, by its name. */
 export const isRootName = (name: string) => name.endsWith('.json');
 export const gcFile = (dir: string) => `${dir}/gc.json`;
+/** One file for each conversation compacted with tickets: its newest, looked for in its transcript (ADR 0027). */
+export const witnessDir = (dir: string) => `${dir}/witness`;
+export const witnessPath = (dir: string, key: string) => `${witnessDir(dir)}/${key}.json`;
 
 /** Where the text of the result `id` is. */
 export const blobPath = (dir: string, id: string) => `${blobsDir(dir)}/${id}.txt`;

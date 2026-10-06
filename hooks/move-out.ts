@@ -46,6 +46,7 @@ import {
   type List,
   type StopKind,
 } from '../src/lifetime.ts';
+import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src/witness.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
 
 const FALLBACK_WINDOW = 200_000;
@@ -261,6 +262,37 @@ async function noteRootOf($: WithEnv & WithFiles & WithSettings & WithSession, s
   }
 }
 
+/**
+ * Notes the witness of this session's main conversation: the newest ticket it shows that the store holds (ADR 0027).
+ * A clean-up looks for it in the conversation's transcript before it moves anything. Nothing is noted where there is
+ * no ticket, or where results are kept is not this user's to tell, or cannot be made private.
+ */
+async function noteWitnessOf(
+  $: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess,
+  candidates: readonly string[],
+  options: PluginOptions,
+  keepStanding = false,
+): Promise<void> {
+  try {
+    if (candidates.length === 0) return;
+    const store = await storeOf($, options);
+    if (typeof store === 'string' || (await privateOf($, store)) !== null) return;
+    await noteWitness(storingFilesOf($), store.write, await $.session.id(), candidates, (id) => holds(filesOf($), store.read, id), Date.now(), { keepStanding });
+  } catch {
+    // None noted this time: the one noted before, if any, stands, and a later compaction tries again.
+  }
+}
+
+/** At the start of a session, the witness of a conversation resumed with tickets in it: looked for before the store is touched. */
+async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess, options: PluginOptions): Promise<void> {
+  try {
+    const messages = (await $.session.messages()) as readonly Message[];
+    if (Array.isArray(messages)) await noteWitnessOf($, witnessCandidates(messages), options, true);
+  } catch {
+    // As at a compaction: nothing noted this time.
+  }
+}
+
 /** Puts back from the trash what the conversation's tickets name, in every place results are read from. */
 async function restoreFor($: WithFiles & WithProcess, store: StoreDirs, ids: ReadonlySet<string>, parts: ReadonlySet<string> = ids): Promise<number> {
   try {
@@ -328,6 +360,14 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     if ('stop' in live) {
       say($, `moved-out results are kept, not cleaned up: ${live.stop}`);
       await stoppedAs(files, store.write, record, live.kind);
+      return;
+    }
+    // A conversation compacted with tickets that is still there, and whose noted ticket the search did not find, is
+    // read by the search no longer as it was written: nothing it names would be counted (ADR 0027).
+    const unseen = await checkWitnesses(files, list, execOf($), (path) => moverOf(runOf($), (one) => $.fs.stat(one)).remove(path), store.write, live.roots);
+    if (unseen !== null) {
+      say($, `moved-out results are kept, not cleaned up: ${unseen.stop}`);
+      await stoppedAs(files, store.write, record, unseen.kind);
       return;
     }
     // What is named and in the trash goes back first: a part there is not known for a part, and what only it names would not be counted.
@@ -684,6 +724,8 @@ export const register: Register = (on, options) => {
     }
     // Not waited for: reading every transcript can take a minute, and the session should not.
     void collectOnce($, options);
+    // Not waited for either: a resumed conversation's witness, read from its transcript.
+    void noteWitnessAtStart($, options);
     return next(e);
   });
 
@@ -872,20 +914,27 @@ export const register: Register = (on, options) => {
     if (before.step === 'subagent') return summarizeSubagent($, e, next, options);
 
     const tried = await attempt($, e, options);
+    let result: SessionCompactResult;
     if ('why' in tried) {
       say($, `built-in compaction: ${tried.why}`);
-      return summarizeKeeping($, e, next, tried.keep);
+      result = await summarizeKeeping($, e, next, tried.keep);
+    } else {
+      const step = nextStep({
+        trigger: e.trigger,
+        instructions: e.instructions,
+        outcome: tried.outcome,
+        inUse: tried.inUse,
+        given: tried.given,
+        maxAfterPercent: tried.maxAfterPercent,
+        count: tried.count,
+        keepTokens: tried.keepTokens,
+      });
+      result = await carryOut($, e, next, tried, step);
     }
-    const step = nextStep({
-      trigger: e.trigger,
-      instructions: e.instructions,
-      outcome: tried.outcome,
-      inUse: tried.inUse,
-      given: tried.given,
-      maxAfterPercent: tried.maxAfterPercent,
-      count: tried.count,
-      keepTokens: tried.keepTokens,
-    });
-    return carryOut($, e, next, tried, step);
+    // The newest ticket of the conversation handed back, this compaction's among them, else of the one handed in:
+    // what a clean-up looks for in its transcript before it moves anything (ADR 0027).
+    const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;
+    await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);
+    return result;
   });
 };
