@@ -128,7 +128,7 @@ test('a setting is read before the environment, and each key goes to its own pro
     key: 'from-setting',
     model: 'jev-latest',
   });
-  assert.deepEqual(providerFrom({}, env), { kind: 'typesafe', key: 'from-env-typesafe', model: 'jev-latest' });
+  assert.deepEqual(providerFrom({ provider: 'typesafe' }, env), { kind: 'typesafe', key: 'from-env-typesafe', model: 'jev-latest' });
   assert.deepEqual(providerFrom({ provider: 'cloudflare', cloudflareAccountId: account }, env), {
     kind: 'cloudflare',
     key: 'from-env-cloudflare',
@@ -138,6 +138,17 @@ test('a setting is read before the environment, and each key goes to its own pro
   assert.equal(providerFrom({}, { CLOUDFLARE_API_TOKEN: 'from-env-cloudflare' }), null);
   assert.equal(providerFrom({ provider: 'cloudflare', cloudflareAccountId: account }, { TYPESAFE_API_KEY: 'x' }), null);
   assert.equal(providerFrom({ apiKey: '   ' }, {}), null);
+});
+
+test('a key in the environment is used only where the plugin\'s own settings chose the provider (#103)', () => {
+  const account = 'a'.repeat(32);
+  const env = { TYPESAFE_API_KEY: 'from-env-typesafe', CLOUDFLARE_API_TOKEN: 'from-env-cloudflare' };
+
+  // Left on auto with no account id, as the settings arrive untouched: a key exported for another tool sends nothing.
+  assert.equal(providerFrom({}, env), null);
+  // `provider` set by hand, or an account id entered, is a choice made in the plugin's settings.
+  assert.deepEqual(providerFrom({ provider: 'typesafe' }, env), { kind: 'typesafe', key: 'from-env-typesafe', model: 'jev-latest' });
+  assert.deepEqual(providerFrom({ cloudflareAccountId: account }, env), { kind: 'cloudflare', key: 'from-env-cloudflare', accountId: account });
 });
 
 test("a secret in a call's input is blanked whether a quote stands before it or a field's name", () => {
@@ -178,7 +189,8 @@ test('left on auto, an account id in the settings chooses Cloudflare and none ch
     assert.deepEqual(providerFrom({ provider, apiKey: 'k', cloudflareAccountId: account }, {}), cloudflare);
     assert.deepEqual(providerFrom({ provider, cloudflareAccountId: account }, { CLOUDFLARE_API_TOKEN: 'k' }), cloudflare);
     assert.deepEqual(providerFrom({ provider, apiKey: 'k' }, {}), typesafe);
-    assert.deepEqual(providerFrom({ provider }, { TYPESAFE_API_KEY: 'k' }), typesafe);
+    // A key in the environment chooses nothing either: it may be there for another tool (#103).
+    assert.equal(providerFrom({ provider }, { TYPESAFE_API_KEY: 'k' }), null);
     // An account id in the environment chooses nothing: it is there for other tools.
     assert.deepEqual(providerFrom({ provider, apiKey: 'k' }, { CLOUDFLARE_ACCOUNT_ID: account }), typesafe);
     assert.equal(providerFrom({ provider }, { CLOUDFLARE_API_TOKEN: 'k', CLOUDFLARE_ACCOUNT_ID: account }), null);
@@ -239,6 +251,8 @@ test('what the manifest hands over when provider was left alone is read as auto,
     accountId: account,
   });
   assert.deepEqual(providerFrom({ provider: field?.default, apiKey: 'k' }, {}), { kind: 'typesafe', key: 'k', model: 'jev-latest' });
+  // From someone who opened nothing, with a key kept for another tool: nothing is sent (#103). A default that chose a provider would send it.
+  assert.equal(providerFrom({ provider: field?.default }, { TYPESAFE_API_KEY: 'k', CLOUDFLARE_API_TOKEN: 'k' }), null);
   // As a picker, a value outside the options would silently become the default instead of being refused (ADR 0009).
   assert.equal(field?.options, undefined);
   // No default of its own: an account id filled in for everyone would choose Cloudflare for everyone.

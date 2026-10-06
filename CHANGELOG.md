@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- A key in the environment (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only where the plugin's own settings choose the provider: `provider` set to `typesafe` or `cloudflare`, or a Cloudflare account id entered (#103, ADR 0028). Left on `auto` with no account id, as the settings are untouched, only a key set in the plugin's settings is used, so a `TYPESAFE_API_KEY` exported for another tool no longer registers `find` and sends excerpts at its first call. If that key is how you set `find` up, set `provider` to `typesafe` with `/plugin configure lossless-compaction@lossless-compaction` to have it again; nothing says so at the start of a session.
+
 ## [0.7.1] - 2026-10-05
 
 ### Added

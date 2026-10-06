@@ -68,7 +68,9 @@ It needs a Jev key: set it with
 `/plugin configure lossless-compaction@lossless-compaction` inside Claude
 Code. For Jev on Cloudflare Workers AI, enter the account id there as well:
 with `provider` left on `auto`, an account id entered there sends the key to
-Cloudflare, and none sends it to TypeSafe.
+Cloudflare, and none sends it to TypeSafe. A key in the environment
+(`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only once `provider` is
+set there to `typesafe` or `cloudflare`, or an account id is entered.
 
 With a key set, each call to `find` sends the provider:
 

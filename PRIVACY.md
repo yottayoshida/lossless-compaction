@@ -12,8 +12,12 @@ puts together some other way.
 ## In short
 
 - **The plugin itself sends nothing anywhere unless it has a key for
-  [Jev](https://typesafe.ai)**, set in its settings or in the environment
-  (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`). With a key set, each call to `find` sends the
+  [Jev](https://typesafe.ai)**, set in its settings or in the environment.
+  A key in the environment (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is
+  used only where the plugin's own settings choose the provider: `provider`
+  set to `typesafe` or `cloudflare`, or a Cloudflare account id entered. Left
+  on `auto` with no account id, nothing is sent without a key in the
+  plugin's settings. With a key set, each call to `find` sends the
   provider you chose what [Usage](docs/usage.md) lists. Nothing is ever sent
   to the maintainer: there is no telemetry, crash report or update check.
 - **What it keeps stays on your machine**, in plain files, while a
@@ -144,8 +148,8 @@ send and around a compaction. None of them connects to a network.
   `~/.claude/plugins/data/<plugin id>/`, unless given `--keep-data`, and does
   not remove where results are kept: delete that yourself.
 - Clear the key with `/plugin configure lossless-compaction@lossless-compaction`,
-  and unset `TYPESAFE_API_KEY` and `CLOUDFLARE_API_TOKEN` if your environment
-  has them: a key found there is used when none is set.
+  and there set `provider` back to `auto` and clear the account id: a key in
+  the environment is used while the settings choose the provider.
 
 ## Children
 

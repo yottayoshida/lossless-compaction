@@ -67,7 +67,8 @@ Measured on Claude Code 2.1.286 with a probe plugin:
 
 - Entering the account id next to the key is all Cloudflare takes.
 - Settings that hold `provider: cloudflare`, and TypeSafe users who set no
-  provider and no account id, behave as before.
+  provider and no account id, behave as before. (Amended by ADR 0028: those
+  whose key is in the environment set `provider` to `typesafe`.)
 - A TypeSafe key entered together with an account id goes to Cloudflare under
   `auto`. That includes settings from before this decision that hold a
   TypeSafe key, an account id and no `provider`: they asked TypeSafe, and
