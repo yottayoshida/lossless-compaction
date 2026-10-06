@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - A key in the environment (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only where the plugin's own settings choose the provider: `provider` set to `typesafe` or `cloudflare`, or a Cloudflare account id entered (#103, ADR 0028). Left on `auto` with no account id, as the settings are untouched, only a key set in the plugin's settings is used, so a `TYPESAFE_API_KEY` exported for another tool no longer registers `find` and sends excerpts at its first call. If that key is how you set `find` up, set `provider` to `typesafe` with `/plugin configure lossless-compaction@lossless-compaction` to have it again; nothing says so at the start of a session, and `/lossless-status` says it.
 
+### Fixed
+
+- A number setting outside its range is taken at the nearest end of it, where it was replaced by its default without a word (#99). `targetPercent` set to 100 was used as 1, which since 0.7.1 is the other end of what was asked for: everything that may leave moved out at every compaction. That is said once, at the start of the session, as is a value left empty, which is taken at its default; each number setting's description names its range. A value that is not a number keeps Claude Code from loading the plugin, as before.
+
 ## [0.7.1] - 2026-10-05
 
 ### Added

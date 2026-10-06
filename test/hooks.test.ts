@@ -571,3 +571,14 @@ test('a /compact is by hand, reaching into the newest calls, only when typed wit
   assert.ok(hooks.includes("byHand: e.trigger === 'manual' && (e.instructions ?? '').trim() === '',"));
   assert.equal(hooks.split('byHand:').length - 1, 1, 'set in one place');
 });
+
+test('a number setting not used as it was set is said at the start of a session, each line once a process and a setting changed anew, in the words src/flow.ts gives (#99)', () => {
+  const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
+  const telling = 'for (const line of settingNotes(options)) {\n      if (toldSettings.has(line)) continue;\n      toldSettings.add(line);\n      say($, line);\n    }';
+  assert.ok(start.includes(telling), 'said from settingNotes, each line once');
+  // Before anything there can fail and be said instead.
+  assert.ok(start.indexOf(telling) < start.indexOf('providerOf($, options)'), 'first');
+  // Kept by the process, not by the register: a reload with the setting changed says the new line.
+  assert.ok(hooks.includes('const toldSettings = new Set<string>();'));
+  assert.equal(hooks.split('toldSettings.add(').length - 1, 1);
+});

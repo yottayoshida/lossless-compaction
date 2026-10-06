@@ -690,6 +690,15 @@ which the quick start asked for before Claude Code 2.1.287, is ignored from that
 version on and can be removed. The plugin is not on npm; it installs from
 this repository.
 
+The four number settings each take a value in a range: `targetPercent` 1 to
+99, `keepTokens` 0 to 1,000,000, `minChars` 0 to 10,000,000 and
+`maxAfterPercent` 1 to 100. A number outside its range is taken as the
+nearest end of it, never as the setting's default, and the first session
+after says so in one line; so is a value left empty, which is taken at the
+default. A value that is not a number at all, such as `"40"` written in
+quotes, keeps Claude Code from loading the plugin: `/compact` is then
+Claude Code's own (measured on Claude Code 2.1.291).
+
 The key for `find` is set with
 `/plugin configure lossless-compaction@lossless-compaction`. `provider` is
 `auto` unless you change it: an account id entered there chooses Cloudflare
