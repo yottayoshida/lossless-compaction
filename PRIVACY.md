@@ -94,6 +94,9 @@ drive is no longer only on your machine.
   must print to count as finished.
 - `witness/`: for each conversation compacted with tickets, its session id,
   one id its transcript was seen to hold, and when.
+- `machines/`: for each machine the store is used from, a file named by that
+  machine's id (by a session's, where the machine has none), holding when it
+  first and last marked the store and the ids of its latest three sessions.
 - `trash/`: results no transcript names any more, for a week before removal.
 - `tmp/`: a write in progress; a process that stopped partway can leave one.
 
@@ -102,8 +105,12 @@ And in Claude Code's data directory for the plugin,
 `held`, the process ids and session ids of those whose `/compact` it held for
 that reason: about the newest fifty of each.
 
-`roots/`, `gc.json`, `sentinel.jsonl`, `told` and `held` stay until you
-remove them. A file in `witness/` stays while its conversation's transcript,
+And `~/.local/state/lossless-compaction/machine.json`, outside Claude Code's
+directory: this machine's id, a random one made the first time it is needed
+(ADR 0032). Nothing else is in it.
+
+`roots/`, `gc.json`, `sentinel.jsonl`, `machines/`, `told`, `held` and the
+machine's id stay until you remove them. A file in `witness/` stays while its conversation's transcript,
 or a file or folder of it other than those Claude Code keeps beside one, does,
 and goes at the clean-up after.
 
@@ -148,10 +155,11 @@ by the plugin.
 
 ## Commands it runs
 
-`mkdir`, `chmod`, `mv`, `rm`, `grep` and `sh`, from `/bin` or `/usr/bin`: on
-the files under where it keeps results and, for `mkdir`, the directory that
-is to hold them; `grep` on transcripts as above; and `sh` to read its own
-process id. Claude Code runs `hooks/notice.sh` with `sh` at each message you
+`mkdir`, `chmod`, `mv`, `ln`, `rm`, `grep` and `sh`, from `/bin` or
+`/usr/bin`: on the files under where it keeps results and, for `mkdir`, the
+directory that is to hold them; `ln` and `rm` on this machine's id under
+`~/.local/state/lossless-compaction/`, the first time it is made; `grep` on
+transcripts as above; and `sh` to read its own process id. Claude Code runs `hooks/notice.sh` with `sh` at each message you
 send and around a compaction. None of them connects to a network.
 
 ## How safe the files are
@@ -165,7 +173,7 @@ send and around a compaction. None of them connects to a network.
 
 - `/lossless-store` says where results are kept and how much.
 - Delete that directory, and `~/.claude/jev-lossless-compaction/` if it is
-  there. `recall` then finds nothing for the tickets left in a conversation.
+  there, and `~/.local/state/lossless-compaction/`. `recall` then finds nothing for the tickets left in a conversation.
 - `claude plugin uninstall lossless-compaction@lossless-compaction` removes
   `~/.claude/plugins/data/<plugin id>/`, unless given `--keep-data`, and does
   not remove where results are kept: delete that yourself.

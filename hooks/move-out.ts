@@ -49,6 +49,7 @@ import {
   type Unread,
 } from '../src/lifetime.ts';
 import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src/witness.ts';
+import { idIn, machineFileFrom, machineIdOf, markName, marksIn, noteMachine, readMarks, readableSessions, sharedWith, takeOffMarks, unreadMarks } from '../src/machine.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
 
 const FALLBACK_WINDOW = 200_000;
@@ -264,6 +265,44 @@ async function noteRootOf($: WithEnv & WithFiles & WithSettings & WithSession, s
   }
 }
 
+/** This machine's id once read or made in this process; not kept while it cannot be, so that a later session tries again. */
+let machine: string | undefined;
+
+/**
+ * This machine's id (ADR 0032), from a home directory no repository decided: the variables it is read from are
+ * checked as for the store. Null where it cannot be read or made.
+ */
+async function machineOf($: WithEnv & WithFiles & WithSettings & WithProcess, options: PluginOptions, make = true): Promise<string | null> {
+  if (machine !== undefined) return machine;
+  try {
+    const env = await envOf($);
+    const taints = await taintsOf($, env, options);
+    if (taints === null || placeTaints(taints, {}).length > 0) return null;
+    const path = machineFileFrom(env.HOME || env.USERPROFILE);
+    // What reports the store reads the id, and makes none.
+    const id = path === null ? null : make ? await machineIdOf(filesOf($), runOf($), path) : await idIn(filesOf($), path);
+    if (id !== null) machine = id;
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Marks the store as used by this session, on this machine: at each compaction, and at each session's start
+ * (ADR 0032). With no machine id, the mark is named by the session, so that a machine that cannot keep an id is
+ * still seen by the others.
+ */
+async function noteMachineOf($: WithEnv & WithFiles & WithSettings & WithProcess & WithSession, store: StoreDirs, options: PluginOptions): Promise<void> {
+  try {
+    const session = await $.session.id();
+    const name = markName(await machineOf($, options), session);
+    if (name !== null) await noteMachine(filesOf($), store.write, name, session, Date.now());
+  } catch {
+    // Not marked this time; the next session or compaction marks it.
+  }
+}
+
 /**
  * Notes the witness of this session's main conversation: the newest ticket it shows that the store holds (ADR 0027).
  * A clean-up looks for it in the conversation's transcript before it moves anything. Nothing is noted where there is
@@ -327,7 +366,7 @@ async function plainDirsOf($: WithFiles, store: StoreDirs): Promise<string[]> {
   return dirs;
 }
 
-async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess, options: PluginOptions): Promise<void> {
+async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess & WithSession, options: PluginOptions): Promise<void> {
   // Known once the try is noted: where, and over what, an unexpected stop is recorded.
   let tried: { dir: string; record: GcRecord } | null = null;
   // Claimed before anything is awaited, so that a second session.start right after (a /clear) does not say it
@@ -353,10 +392,31 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
         said = true;
       }
     }
+    // Each session marks the store as used from this machine, whether it collects or not (ADR 0032). What cannot be
+    // made private is said in the transcript: a session's start says it once, not with a notice.
+    const unsafe = await privateOf($, store, (text) => say($, text, false));
+    if (unsafe === null) await noteMachineOf($, store, options);
     if (whyNotNow(state, now) !== null) return;
-    if ((await privateOf($, store)) !== null) return;
+    if (unsafe !== null) return;
     const record = await noteTried(files, store.write, state, now);
     tried = { dir: store.write, record };
+    // A store used from another machine holds results only that machine's transcripts name: nothing moves (ADR 0032).
+    // Before the sentinel and the witnesses, which are of this machine's transcripts alone.
+    const marks = await marksIn(files, list, dirs);
+    const readable = marks === null ? null : await readableSessions(files, list, state.roots, marks);
+    const session = await $.session.id();
+    const self = markName(await machineOf($, options), session);
+    // The marks of other names whose transcripts are read here are taken off while those transcripts last.
+    if (marks !== null && readable !== null) {
+      const remove = (path: string) => moverOf(runOf($), (one) => $.fs.stat(one)).remove(path);
+      await takeOffMarks(remove, dirs, readMarks(marks, self, session, readable).map((mark) => mark.name));
+    }
+    const shared = sharedWith(marks, self, session, readable);
+    if (shared !== null) {
+      say($, `moved-out results are kept, not cleaned up: ${shared}`);
+      await stoppedAs(files, store.write, record, 'shared');
+      return;
+    }
     await writeSentinel(files, store.write);
     const live = await liveIds(files, list, execOf($), (path) => $.fs.exists(path), state.roots, sentinelOf(store.write));
     if ('stop' in live) {
@@ -462,6 +522,7 @@ async function placeOf(
   if (unsafe !== null) return { why: unsafe, unkept: 'the place to keep it in could not be made private' };
   // Before a summary can run: a kept conversation is named by this session's transcript, which a collection must read.
   await noteRootOf($, place, options);
+  await noteMachineOf($, place, options);
   // A ticket whose result a collection moved to the trash meanwhile is put back, so that it stays a ticket of this store.
   // What cannot be told or put back is answered as not stored: the place is ready all the same.
   try {
@@ -607,6 +668,7 @@ async function summarizeSubagent(
       // As before the main conversation's summary: the place its transcript is in is recorded, so that a clean-up
       // reads what names the parts kept here, and what it names that a clean-up moved to the trash comes back first.
       await noteRootOf($, store, options);
+      await noteMachineOf($, store, options);
       const messages = e.messages as readonly Message[];
       await restoreFor($, store, ticketIds(messages), partIds(messages));
       // Read with its blocks, so that an image is named where it stood; else as the hook was handed it.
@@ -796,7 +858,12 @@ export const register: Register = (on, options) => {
       for (const dir of store.read) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
       const gc = await stateIn(files, list, there);
       const set = typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
-      return { text: storeReport(counted, gc, now, set) };
+      const marks = await marksIn(files, list, there);
+      const session = await $.session.id();
+      const readable = marks === null ? null : await readableSessions(files, list, gc.roots, marks);
+      const self = markName(await machineOf($, options, false), session);
+      const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };
+      return { text: storeReport(counted, gc, now, set, machines) };
     } catch {
       // What an error says may name a path: it is not shown.
       return { text: 'the store could not be counted' };
