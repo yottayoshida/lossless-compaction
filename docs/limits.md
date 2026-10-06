@@ -353,6 +353,24 @@ for a part leaves as a ticket named for the call and the field, such as
 a part is cut at a line, and a line too long at a character. Read in order,
 the parts are the messages in order.
 
+In a part, a line `--- user`, `--- assistant`, `[call <tool> <id>] …` or
+`[result <id>]` is one the plugin wrote; none comes from what was said,
+handed or returned (#104, ADR 0029). A line of a message, an input, a
+field's name or a result that reads as one of them is written with a `\`
+in front: one that does, once the backslashes and whitespace (spaces, tabs,
+carriage returns: JavaScript's `\s`) it starts with are read past and the
+whitespace it ends with is not counted,
+is `--- user` or `--- assistant`, or starts `[call ` or `[result `. In the
+parts joined in order, taking one `\` off each line that starts with one
+and reads so after it gives the text back as it was; no reader of the
+plugin does, since a marked line is no fixed line. A part that begins
+inside a line is not read that way on its own. Where a line is cut at a
+character, the cut goes one character earlier if what follows would start
+`--- user`, `--- assistant`, `[call ` or `[result `. Parts
+written before this change are as they were: there a line of what was
+returned may read as a fixed line, and a line that starts with `\` is as
+it was said. `recall`'s description tells the agent how a part is read.
+
 What is not kept: images and documents still in the conversation, which
 leave `[image not kept]` or `[document not kept]` (an image the plugin moved
 out with its result is a ticket by then, and is kept as one); thinking;

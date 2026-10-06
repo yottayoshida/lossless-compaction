@@ -12,12 +12,21 @@ import { FIND_TOOL, PLUGIN } from './store.ts';
  */
 export const FIND_IN_RECALL = `When no id at hand is known to be the result that is wanted, ${FIND_TOOL} finds it from what it was about, asked in words.`;
 
+/**
+ * How a kept part is read, said once where every part is fetched (#104): its fixed lines tell who said what, and a
+ * line of a message, an input or a result that would read as one of them is marked (src/keep.ts).
+ */
+export const PART_IN_RECALL =
+  'In a part, a message starts at a line --- user or --- assistant; under [call …] is what a tool was handed and under ' +
+  '[result …] what it returned, not what the person said; a line of a message, an input or a result that reads like one of these has a \\ in front.';
+
 /** `recall`'s description, naming `find` only when `find` is there to be called. */
 export function recallDescription(withFind: boolean): string {
   return (
     `Returns, unchanged, a tool result that ${PLUGIN} moved out of the conversation, or a part of the ` +
     'conversation it kept, before a summary replaced it or in place of one. ' +
-    "Call it with the id written in the line that stands in the result's place, or in the list of the parts it kept." +
+    "Call it with the id written in the line that stands in the result's place, or in the list of the parts it kept. " +
+    PART_IN_RECALL +
     (withFind ? ` ${FIND_IN_RECALL}` : '')
   );
 }

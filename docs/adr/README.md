@@ -68,3 +68,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0028](0028-a-key-in-the-environment-waits-for-a-choice.md): why a key in
   the environment is used only where the plugin's settings choose the
   provider, so that one kept for another tool sends nothing.
+- [0029](0029-a-line-that-reads-as-a-fixed-line-is-marked.md): why a line of
+  what was said, handed or returned that reads as one of a part's fixed lines
+  is written with a backslash in front, and the readers stay as they were.

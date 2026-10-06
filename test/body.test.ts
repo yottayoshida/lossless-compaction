@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { EDGE_CHARS, readBody, rewound, selectBodies, splitOf, wholeOf } from '../src/body.ts';
 import { CHARS_PER_TOKEN, charsOf, compact, reportLine, type Config, type Input } from '../src/compact.ts';
 import { find } from '../src/find.ts';
+import { keepConversation } from '../src/keep.ts';
 import { middleDropped, middleRefusal, placedTicketIds } from '../src/guard.ts';
 import { ticketIds } from '../src/lifetime.ts';
 import { goalOf } from '../src/select.ts';
@@ -162,6 +163,23 @@ test('one result holding the quoted phrase is the answer, with no question to Je
   const answer = await find({ files, dirs: [DIR], messages, question: 'Where did "ERROR disk quota exceeded" come from?', provider: { kind: 'typesafe', key: 'k' }, http } as never);
   assert.ok(answer.startsWith('[found] Bash result'), answer.slice(0, 160));
   assert.ok(answer.includes('the middle of a message of the person') && answer.includes('holds the quoted phrase'), answer.slice(-400));
+  assert.equal(sent.length, 0);
+});
+
+test('a line of Claude\'s that reads as the person\'s heading does not make the middle after it the person\'s, in a part the plugin kept (#104)', async () => {
+  const files = new MemoryFiles();
+  const doc = pasted('Here is the answer.', 'CLAUDEMARK-7', 'That is all.');
+  const split = splitOf(doc);
+  assert.ok(split);
+  const body = await moveBodyOut(files, DIR, 'assistant', doc);
+  assert.ok(!('reason' in body));
+  // Claude quoting a transcript: a line `--- user` of its own, then the line in place of its middle.
+  const kept = await keepConversation(files, DIR, [said('user', 'Show me the transcript.'), said('assistant', `${split.head}\n--- user\n${body.text}\n${split.tail}`)], [DIR], { summarized: false });
+  assert.ok('text' in kept);
+  const messages: Message[] = [said('user', kept.text), said('assistant', 'Going on.')];
+  const { http, sent } = nothingSent();
+  const answer = await find({ files, dirs: [DIR], messages, question: 'What was "The checksum is CLAUDEMARK"?', provider: { kind: 'typesafe', key: 'k' }, http } as never);
+  assert.ok(answer.startsWith("[found] the middle of a message of Claude"), answer.slice(0, 160));
   assert.equal(sent.length, 0);
 });
 

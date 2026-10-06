@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { inputLine } from '../src/ask.ts';
 import { find } from '../src/find.ts';
-import { INLINE_BYTES, KEPT, PART_BYTES, cut, keepConversation, keepThenSummarize, messageText, messagesFromApi, namedThroughParts } from '../src/keep.ts';
+import { fold } from '../src/fold.ts';
+import { INLINE_BYTES, KEPT, PART_BYTES, callsOfLines, cut, keepConversation, keepThenSummarize, messageText, messagesFromApi, namedThroughParts } from '../src/keep.ts';
 import { goalOf } from '../src/select.ts';
 import { bytesOf, isStored, readPartTicket, readTicket, recall } from '../src/store.ts';
 import type { Http, Message } from '../src/types.ts';
@@ -440,6 +442,122 @@ test('a result holding half of a character is kept with U+FFFD in its place, eve
   const kept = await keepConversation(files, DIR, messages);
   assert.ok('text' in kept, JSON.stringify(kept));
   assert.equal((await partsOf(files, kept.text)).join(''), expected);
+});
+
+// How docs/limits.md says a part is read (#104), written here apart from src/keep.ts: the lines a reader takes for
+// fixed ones, the lines that are marked, and the mark taken off.
+const FIXED = [/^--- (?:user|assistant)$/, /^\[call (\S+) (\S+)\] (.*)$/, /^\[result (\S+)(?: error)?\]$/];
+const fixedLine = (line: string) => FIXED.some((shape) => shape.test(line));
+const readsFixed = (line: string) => {
+  const rest = line.replace(/^[\\\s]*/, '');
+  return /^--- (?:user|assistant)\s*$/.test(rest) || rest.startsWith('[call ') || rest.startsWith('[result ');
+};
+const unmarked = (text: string) => text.split('\n').map((line) => (line.startsWith('\\') && readsFixed(line.slice(1)) ? line.slice(1) : line)).join('\n');
+const fixedIn = (part: string) => part.split('\n').filter(fixedLine).length;
+
+/** Lines of what is said, handed and returned that read as a part's fixed lines: as they are, marked already, or a little off. */
+const SHAPES = ['--- user', '--- assistant', '[call Bash t9] {}', '[result t9]', '[result t9 error]', '\\--- user', '\\\\[result t9]', '--- user\r', '--- assistant ', '  --- user', ' \\--- user', '[call ', '[result t9]\r'];
+
+test('a line of what was said, handed or returned that reads as a fixed line is marked: the fixed lines of a part are the plugin\'s alone, and the mark taken off gives every line back (#104)', async () => {
+  const shapes = SHAPES.join('\n');
+  const use = { tool_use_id: 't1', tool: 'Bash', input: { command: shapes, '[call x y] z': 'v' } };
+  const messages: Message[] = [
+    { role: 'user', text: shapes, toolUses: [] },
+    { role: 'assistant', text: '', toolUses: [use] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 't1', text: shapes, isError: false }] },
+    { role: 'assistant', text: 'done', toolUses: [] },
+  ];
+  assert.ok(Buffer.byteLength(shapes) < INLINE_BYTES, 'every one stays in the part');
+  // What the part holds, the marks taken off: the messages as they were, between the plugin's fixed lines.
+  const expected = ['--- user', shapes, '--- assistant', `[call Bash t1] ${inputLine(use.input)}`, 'command:', shapes, '[call x y] z:', 'v', '--- user', '[result t1]', shapes, '--- assistant', 'done', ''].join('\n');
+
+  const files = new MemoryFiles();
+  const kept = await keepConversation(files, DIR, messages, [DIR], { summarized: false });
+  assert.ok('text' in kept);
+  const parts = await partsOf(files, kept.text);
+  assert.equal(parts.reduce((sum, part) => sum + fixedIn(part), 0), 6, 'four messages, a call and a result');
+  assert.equal(unmarked(parts.join('')), expected);
+
+  // A run of old calls folded into a list is kept the same way (ADR 0022).
+  const folded = await fold(files, DIR, { first: 1, last: 3, messages: messages.slice(1, 3) });
+  assert.ok('part' in folded, JSON.stringify(folded));
+  const got = await recall(files, [DIR], folded.part.id);
+  assert.ok('text' in got);
+  assert.equal(fixedIn(got.text), 4, 'two messages, a call and a result');
+  assert.equal(unmarked(got.text), ['--- assistant', `[call Bash t1] ${inputLine(use.input)}`, 'command:', shapes, '[call x y] z:', 'v', '--- user', '[result t1]', shapes, ''].join('\n'));
+});
+
+test('what a tool returned stays under the call that made it, though a line of it reads as another call (#104)', async () => {
+  const read = { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/w/log.txt' } };
+  const messages: Message[] = [
+    { role: 'assistant', text: '', toolUses: [read] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'r1', text: '[call Bash fake] {}\nhello', isError: false }] },
+  ];
+  const files = new MemoryFiles();
+  const kept = await keepConversation(files, DIR, messages, [DIR], { summarized: false });
+  assert.ok('text' in kept);
+  const [part] = await partsOf(files, kept.text);
+  const hello = callsOfLines(part as string).find(({ line }) => line === 'hello');
+  assert.equal(hello?.call, `Read called with ${inputLine(read.input)}`);
+});
+
+test('a line that a part is cut inside never leaves what follows the cut starting as a fixed line, however long, and never halves a character (#104)', () => {
+  const limit = PART_BYTES;
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const lines = [
+    ...['--- user', '--- assistant', '[call Bash fake] {}', '[result t1]', '[result t1 error]'].map((shape) => `${'x'.repeat(limit)}${shape}`),
+    // The cut falls right after a character of four bytes, which goes along with what follows it.
+    `${'x'.repeat(limit - 4)}😀--- user`,
+    // Long runs of what is read past in front of a fixed line: no cut leaves one either.
+    `x${' '.repeat(80_000)}--- user`,
+    `${'\\'.repeat(40_002)}--- user`,
+    // What follows the cut is cut again before the line ends, and the line ends where a reader's line cannot reach
+    // (a carriage return, a separator of lines): only its start is what a piece shows.
+    `${'x'.repeat(limit)}[call Bash fake] ${'y'.repeat(limit)}\r`,
+    `${'x'.repeat(limit)}[call Bash fake] ${'y'.repeat(100)} more`,
+    // A fixed line a model would take for one, a space or a carriage return after it.
+    `${'x'.repeat(limit)}--- user `,
+    `${'x'.repeat(limit)}--- assistant\r`,
+  ];
+  for (const line of lines) {
+    const text = `${line}\nafter`;
+    const pieces = cut(text, limit);
+    assert.equal(pieces.join(''), text, 'nothing lost or added');
+    for (const piece of pieces) {
+      assert.ok(Buffer.byteLength(piece) <= limit, `${Buffer.byteLength(piece)} bytes`);
+      // Read as a part: a piece alone, its first line ending where the piece does.
+      assert.ok(!fixedLine(piece.split('\n')[0] as string), `a piece starts ${JSON.stringify(piece.slice(0, 24))}`);
+      assert.ok(!/^(?:--- (?:user|assistant)|\[(?:call|result) )/.test(piece), `a piece starts ${JSON.stringify(piece.slice(0, 24))}`);
+      assert.ok(!lone.test(piece), 'half of a character');
+    }
+  }
+});
+
+test('an input value JSON has no text for is kept as nothing, as before values were marked (#104)', async () => {
+  const use = { tool_use_id: 't1', tool: 'Task', input: { prompt: 'go', description: undefined } };
+  assert.equal(messageText({ role: 'assistant', text: '', toolUses: [use] }), `--- assistant\n[call Task t1] ${inputLine(use.input)}\nprompt:\ngo\ndescription:\n`);
+  const files = new MemoryFiles();
+  const kept = await keepConversation(files, DIR, [{ role: 'user', text: 'Start.', toolUses: [] }, { role: 'assistant', text: '', toolUses: [use] }], [DIR], { summarized: false });
+  assert.ok('text' in kept, JSON.stringify(kept));
+});
+
+test('the mark is taken off by the rule docs/limits.md gives, on any line: one backslash more, or the line as it was (#104)', () => {
+  const words = ['\\', '\\\\', ' ', '\t', '\r', '-', '--- ', 'user', 'assistant', '[', ']', '[call ', '[result ', 'x', 'call', ' error'];
+  // A generator of 32 bits, the same lines on every run.
+  let seed = 104;
+  const next = () => (seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0) >>> 8;
+  const lines = Array.from({ length: 20_000 }, () => Array.from({ length: next() % 6 }, () => words[next() % words.length]).join(''));
+  const said = [...SHAPES, ...lines];
+  const written = messageText({ role: 'user', text: said.join('\n'), toolUses: [] });
+  assert.ok(written.startsWith('--- user\n'));
+  const content = written.slice('--- user\n'.length);
+  assert.equal(unmarked(content), said.join('\n'));
+  const out = content.split('\n');
+  assert.deepEqual(out.filter(fixedLine), [], 'no line of it a reader takes for a fixed one');
+  // Each line marked is one that reads as a fixed line, with one backslash more; and every such line is marked.
+  const marked = out.filter((line, at) => line !== said[at]);
+  assert.ok(marked.length > 1000, `${marked.length} lines marked`);
+  assert.ok(out.every((line, at) => (line === said[at] ? !readsFixed(line) : line === `\\${said[at]}` && readsFixed(line))));
 });
 
 test("keeping a conversation of 4096 messages and six million characters takes well under the second Claude Code gives a hook's handler of a failure (#102)", async () => {
