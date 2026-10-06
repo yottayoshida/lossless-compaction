@@ -101,6 +101,14 @@ export function taintsFrom(repo: RepoSettings, seen: Seen): Taint[] | null {
 const has = (taints: readonly Taint[], kind: Taint['kind'], names: readonly string[]) =>
   taints.filter((taint) => taint.kind === kind && names.includes(taint.name));
 
+/**
+ * The repository's values of the variables a default place is built from, whatever `storeDir` is: where they are set,
+ * the defaults are not read beside a `storeDir` of your own (#116).
+ */
+export function variableTaints(taints: readonly Taint[]): Taint[] {
+  return has(taints, 'env', PLACE_VARIABLES);
+}
+
 /** The repository's values that would decide where results are written. */
 export function placeTaints(taints: readonly Taint[], options: Seen['options']): Taint[] {
   const setting = has(taints, 'option', PLACE_OPTIONS);

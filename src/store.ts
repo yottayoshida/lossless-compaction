@@ -188,8 +188,56 @@ export function oldStoreDirFrom(env: Places): string | null {
   return defaultDirFrom(OLD_PLUGIN, env);
 }
 
-/** The directory results are written to, and the directories they are read from, the first being the one written to. */
-export type StoreDirs = { write: string; read: readonly string[] };
+/**
+ * The directory results are written to, and the directories they are read from, the first being the one written to.
+ * `owned`, where earlier places are read as well, is the places of the settings in use: those alone are cleaned up,
+ * made private and put back into from the trash (#116). Absent, they are all of `read`.
+ */
+export type StoreDirs = { write: string; read: readonly string[]; owned?: readonly string[] };
+
+/** The places the plugin cleans up, makes private and puts back into: those of the settings in use. */
+export const ownedOf = (store: StoreDirs): readonly string[] => store.owned ?? store.read;
+
+/**
+ * The places results were written to under these settings are kept, newest first, in the plugin's own store under the
+ * user's Claude Code directory, so that once `storeDir` changes the earlier ones are still read (#116). A place not found
+ * stays on the list, as one on a disk not mounted; the oldest goes past PLACES_KEPT.
+ */
+export const PLACES_KEY = 'places';
+export const PLACES_KEPT = 16;
+
+/** The list to keep once `write` is in use: it first, then the absolute paths the kept one held, each once. */
+export function placesAfter(kept: unknown, write: string): string[] {
+  const earlier = Array.isArray(kept) ? kept.filter((one): one is string => typeof one === 'string' && ABSOLUTE.test(one)) : [];
+  return [write, ...new Set(earlier.filter((one) => one !== write))].slice(0, PLACES_KEPT);
+}
+
+/**
+ * Notes `write` as the place in use and returns the places written to before it, newest first. Where the list cannot be
+ * read, none: it is neither read nor written over. Where it cannot be written, what was read is used.
+ */
+export async function notePlace(get: () => Promise<unknown>, set: (places: string[]) => Promise<void>, write: string): Promise<string[]> {
+  let kept: unknown;
+  try {
+    kept = await get();
+  } catch {
+    return [];
+  }
+  const places = placesAfter(kept, write);
+  if (JSON.stringify(kept) !== JSON.stringify(places)) await set(places).catch(() => undefined);
+  return places.slice(1);
+}
+
+/** The places used when `storeDir` is not set, under the current name and the old one. */
+export function defaultPlacesOf(env: Places): string[] {
+  return [storeDirFrom(undefined, env), oldStoreDirFrom(env)].filter((one): one is string => one !== null);
+}
+
+/** `store` with `earlier` read after its own places, which alone are `owned`. */
+export function withEarlier(store: StoreDirs, earlier: readonly string[]): StoreDirs {
+  const more = [...new Set(earlier)].filter((one) => !store.read.includes(one));
+  return more.length === 0 ? store : { write: store.write, read: [...store.read, ...more], owned: store.read };
+}
 
 /**
  * Results are read from two places and written to one. With a setting, that

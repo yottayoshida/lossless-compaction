@@ -927,9 +927,11 @@ adding it again from another one is refused, and with its `ref` edited in
 plugin install` said it was not found (measured on 2.1.291). It is removed
 and added again, and removing it removes the plugin's settings with it,
 `storeDir` among them (measured). Note them first and set them again when
-installing, with `--config storeDir=…`: with `storeDir` not set again, the
-store is looked for at its default place, and what was kept elsewhere comes
-back as not stored. Whether an older version reads a store a newer one wrote,
+installing, with `--config storeDir=…`: with `storeDir` not set again,
+results are written to the default place, and what was kept elsewhere is
+read only where that place is still on the list of earlier places (#116),
+which is kept apart from the settings; whether removing the plugin removes
+it was not checked. Whether an older version reads a store a newer one wrote,
 or whether its clean-up removes what the newer one keeps, was not checked.
 
 Coming from `jev-lossless-compaction` (0.3.0 and before), an installed copy
@@ -959,6 +961,14 @@ lossless-compaction: Results are kept in one place, set by storeDir:
   kept from: tool results 1 (42 B), kept conversations 1 (4.9 KB), lossless-compaction's own tools 0 (0 B), no readable entry 1 (22 B)
   trash: 3 (60 B) files, by day moved there: 2026-09-25 2 (58 B), 2026-10-01 1 (2 B)
   tmp/: 2 (35 B) files, 1 over a day old, left by a write that stopped; those can be removed by hand
+
+Read as well, never cleaned up: 2 places, written to before under your settings or the default ones beside storeDir (docs/limits.md, "The files"):
+
+/Users/you/.claude/lossless-compaction
+  results: 41 (612.0 KB); trash: empty
+
+/Users/you/.claude/jev-lossless-compaction
+  not there, or not a plain directory
 
 clean-up:
   last ended: 2026-09-21 03:40 UTC; last tried: 2026-10-03 02:40 UTC
@@ -1202,17 +1212,43 @@ Up to 0.3.0 the plugin was named `jev-lossless-compaction`, and the directory
 with it. Results are read from both places; while the old directory exists — a
 link to it counts — new results are written there too, whether or not the new
 directory exists, since that is where the results are. It is made mode 700
-like the new one. With `storeDir` set, the old directory is neither read nor
-closed: `chmod 700 ~/.claude/jev-lossless-compaction` if an earlier version
-made it. If the old directory is a link, writing is refused as
+like the new one. With `storeDir` set, the old directory is read, as an
+earlier place, and not closed: `chmod 700 ~/.claude/jev-lossless-compaction`
+if an earlier version made it. If the old directory is a link, writing is refused as
 before and the built-in compaction runs, which the compaction says; a plain
-file in its place is not written to. A `storeDir` setting is used alone.
+file in its place is not written to. With a `storeDir` setting, that place
+alone is written to.
 Settings are kept under the plugin's id, so a `storeDir` set under the old id
 has to be set again.
 
-`recall` and `find` look where results are kept now. After the setting or
-the variables above change, results kept elsewhere are not found until they
-change back.
+`recall` and `find` read every place results were written to under your
+settings since this version, and the default places when `storeDir` is set,
+the current one first: a ticket written before `storeDir` was set or changed
+comes back. Only the current place is cleaned up, and `/lossless-store`
+names the others (#116).
+
+- The places written to are noted, newest first, in the plugin's own store
+  under Claude Code's configuration directory
+  (`~/.claude/plugins/store/`), up to 16. One not found stays on the list,
+  as a place on a disk not mounted, and is read once it is there again.
+- An earlier place is only read: not cleaned up, not made private, nothing
+  put back from its trash. What another configuration still uses there is
+  left to it. A result in its trash is not found. To be rid of an earlier
+  place, see that no conversation you keep names its results, then remove
+  it by hand; it leaves the list once 16 newer places are on it.
+- The defaults are read beside a `storeDir` only where the repository's
+  settings did not set `HOME`, `USERPROFILE` or `CLAUDE_CONFIG_DIR` (ADR
+  0005).
+- Places written to before this version are not on the list: set
+  `storeDir` back to one and start a session with it once, and it is noted.
+- A place on a disk that does not answer, a network share gone away say,
+  is waited on wherever results are read, a compaction among them. To
+  forget the earlier places, remove the plugin's file under
+  `~/.claude/plugins/store/`.
+- Two sessions with different `storeDir` settings at once, as the
+  benchmark runs them, can each note its place over the other's: one earlier
+  place can drop off the list. With one `storeDir`, the same place is
+  noted.
 
 A part kept before a summary (see above) names the results it holds, which
 no transcript names: the ids a collection keeps are those the transcripts
