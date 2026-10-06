@@ -95,6 +95,9 @@ export class DiskFiles extends MemoryFiles {
   later: Promise<void> = Promise.resolve();
   readonly renamed: [string, string][] = [];
   readonly removed: string[] = [];
+  readonly renewed: string[] = [];
+  /** The time a renewed file is given. */
+  now: () => number = () => Date.now();
   #count = 0;
 
   constructor(moves: boolean, renameWorks = true) {
@@ -118,6 +121,11 @@ export class DiskFiles extends MemoryFiles {
         makeDir: async (path) => {
           if (!renameWorks) return;
           for (let cut = path.length; cut > 0; cut = path.lastIndexOf('/', cut - 1)) this.dirs.add(path.slice(0, cut));
+        },
+        // As `touch -c`: the time of a file that is there, and no file where there is none.
+        renew: async (path) => {
+          this.renewed.push(path);
+          if (this.files.has(path)) this.mtimes.set(path, this.now());
         },
       };
     }

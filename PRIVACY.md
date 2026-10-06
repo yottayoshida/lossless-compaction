@@ -102,7 +102,9 @@ drive is no longer only on your machine.
 - `machines/`: for each machine the store is used from, a file named by that
   machine's id (by a session's, where the machine has none), holding when it
   first and last marked the store and the ids of its latest three sessions.
-- `trash/`: results no transcript names any more, for a week before removal.
+- `trash/`: results no transcript names any more, for a week before removal,
+  and copies of results put back beside one in place, until a clean-up two
+  or more days on.
 - `tmp/`: a write in progress; a process that stopped partway can leave one.
 
 And in Claude Code's data directory for the plugin,
@@ -174,9 +176,10 @@ by the plugin.
 
 ## Commands it runs
 
-`mkdir`, `chmod`, `mv`, `ln`, `rm`, `grep` and `sh`, from `/bin` or
+`mkdir`, `chmod`, `mv`, `ln`, `rm`, `touch`, `grep` and `sh`, from `/bin` or
 `/usr/bin`: on the files under where it keeps results and, for `mkdir`, the
-directory that is to hold them; `mkdir`, `chmod` and `mv` on the new
+directory that is to hold them (`touch` renews the time of a result stored
+again, and makes no file); `mkdir`, `chmod` and `mv` on the new
 directory you give `/lossless-export`, and `sh` to resolve where it is
 (`cd` there and `pwd -P`, in the nearest directory of it that is there); `ln` and `rm` on this machine's id under
 `~/.local/state/lossless-compaction/`, the first time it is made; `grep` on

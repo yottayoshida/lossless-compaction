@@ -52,6 +52,9 @@ export function moverOf(start: Start<{ exitCode: number }>, stat: (path: string)
     makeDir: async (path) => void (await run('mkdir', ['-p', '--', path])),
     // What cannot be removed stays in tmp/.
     remove: async (path) => void (await run('rm', ['-f', '--', path])),
+    // A text stored again is new to the conversation that names it now: the clean-up counts its day from this time.
+    // No file is made, and a link put in its place meanwhile is not followed.
+    renew: async (path) => void (await run('touch', ['-c', '-h', '--', path])),
   };
 }
 
