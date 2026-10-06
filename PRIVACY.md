@@ -23,8 +23,8 @@ puts together some other way.
 - **What it keeps stays on your machine**, in plain files, while a
   conversation Claude Code can resume names it, and for one to three weeks
   after, longer while no session is started or the clean-up cannot run.
-- **What `recall` and `find` give back, and what `/lossless-store` prints,
-  goes into the conversation**, and Claude Code
+- **What `recall` and `find` give back, and what `/lossless-store` and
+  `/lossless-status` print, goes into the conversation**, and Claude Code
   sends the conversation to its model provider, as it sends everything else
   you and the agent say. That is Claude Code's, under its provider's terms,
   not the plugin's.
@@ -34,8 +34,9 @@ puts together some other way.
 - The conversation of the session it runs in, through Claude Code's plugin
   interface: at a compaction, when `recall` or `find` is called, when a
   tool is called (to refuse a tool call that hands on a ticket), when Claude
-  Code shows a file again after a summary, and each message you send (to tell
-  one sent again from a rewind). `hooks/notice.sh` is handed each message
+  Code shows a file again after a summary, each message you send (to tell
+  one sent again from a rewind), and when you type `/lossless-status` (to
+  count the tickets in it). `hooks/notice.sh` is handed each message
   too, and a `/compact`, and keeps of them only the session id below.
 - At a summary, up to 20 of the files the conversation read with `Read`, of
   256 KB or less each, as they are on disk now, to say which changed since.
@@ -53,6 +54,8 @@ puts together some other way.
   and `CLAUDE_PID` and `CLAUDE_PLUGIN_DATA`, which Claude Code sets. It sets
   one, `LOSSLESS_COMPACTION_RUNNING`, to its process id, in Claude Code's
   process and those that starts.
+- Claude Code's version, through its plugin interface, when you type
+  `/lossless-status`, which prints it.
 
 ## What it keeps, and where
 

@@ -702,7 +702,9 @@ nothing is said, as for any setup without a key. A key in the environment
 plugin's own settings choose the provider: `provider` set to `typesafe` or
 `cloudflare`, or a Cloudflare account id entered. Left on `auto` with no
 account id, nothing is sent without a key in the plugin's settings: a key
-exported for another tool does not start `find`, and nothing is said of it.
+exported for another tool does not start `find`, and nothing is said of it
+at the start of a session; `/lossless-status` says it is there and what
+would use it.
 Where the settings choose the provider and hold no key, the key of the
 provider chosen is read from the environment, unless a repository's settings
 set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or

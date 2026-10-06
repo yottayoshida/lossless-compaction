@@ -145,6 +145,16 @@ export type Environment = { TYPESAFE_API_KEY?: string; CLOUDFLARE_API_TOKEN?: st
 export const filled = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 
+/** The account id as the settings hold it. A value that is not text is there too, and is no id: '' stands for it, which is entered and never well formed. */
+function enteredId(id: unknown): string | undefined {
+  return typeof id === 'string' ? filled(id) : id === undefined || id === null ? undefined : '';
+}
+
+/** Whether the settings chose the provider, by `provider` or an account id: only then is a key in the environment used (ADR 0028). */
+export function choosesProvider(settings: Settings): boolean {
+  return (filled(settings.provider) ?? 'auto') !== 'auto' || enteredId(settings.cloudflareAccountId) !== undefined;
+}
+
 /**
  * Who is asked, or null when no key was given and nothing is to be sent.
  * A setting is read before the environment. The address is fixed per kind and
@@ -166,13 +176,10 @@ export function providerFrom(settings: Settings, env: Environment): Provider | n
   if (chosen !== 'auto' && chosen !== 'typesafe' && chosen !== 'cloudflare') {
     return { error: 'provider must be auto, typesafe or cloudflare' };
   }
-  // A value that is not text is there too, and is no id: '' stands for it, which is entered and never well formed.
-  const id = settings.cloudflareAccountId;
-  const entered = typeof id === 'string' ? filled(id) : id === undefined || id === null ? undefined : '';
+  const entered = enteredId(settings.cloudflareAccountId);
   const kind = chosen === 'auto' ? (entered === undefined ? 'typesafe' : 'cloudflare') : chosen;
   const set = filled(settings.apiKey);
-  const chosenHere = chosen !== 'auto' || entered !== undefined;
-  const key = set ?? (chosenHere ? filled(kind === 'typesafe' ? env.TYPESAFE_API_KEY : env.CLOUDFLARE_API_TOKEN) : undefined);
+  const key = set ?? (choosesProvider(settings) ? filled(kind === 'typesafe' ? env.TYPESAFE_API_KEY : env.CLOUDFLARE_API_TOKEN) : undefined);
   if (key === undefined) return null;
   if (!/^[\x21-\x7e]+$/.test(key)) return { error: 'the API key holds a character a key cannot have' };
   if (kind === 'typesafe') {
