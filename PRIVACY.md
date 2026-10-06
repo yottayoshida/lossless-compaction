@@ -46,6 +46,11 @@ puts together some other way.
   stopping before its end, with `grep`, for 64-character
   hexadecimal strings only: that is how the clean-up tells which kept results a
   conversation still names. Nothing else of a transcript is read or kept.
+  Besides, at each clean-up, the transcript of each conversation compacted
+  with tickets is searched with `grep` for the one id noted for it, and the
+  names of the files and directories in those places are looked at, for
+  that conversation's session id
+  ([ADR 0027](docs/adr/0027-a-clean-up-first-finds-what-was-seen.md)).
 - Your settings files (user, project and local), for the plugin's settings and
   to tell a value a repository put there from one you set.
 - The environment variables `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`,
@@ -80,6 +85,8 @@ drive is no longer only on your machine.
   tried, and the kind of its last stop.
 - `sentinel.jsonl`: one line of 64 zeros, which a search of the transcripts
   must print to count as finished.
+- `witness/`: for each conversation compacted with tickets, its session id,
+  one id its transcript was seen to hold, and when.
 - `trash/`: results no transcript names any more, for a week before removal.
 - `tmp/`: a write in progress; a process that stopped partway can leave one.
 
@@ -89,7 +96,9 @@ And in Claude Code's data directory for the plugin,
 that reason: about the newest fifty of each.
 
 `roots/`, `gc.json`, `sentinel.jsonl`, `told` and `held` stay until you
-remove them.
+remove them. A file in `witness/` stays while its conversation's transcript,
+or a file or folder of it other than those Claude Code keeps beside one, does,
+and goes at the clean-up after.
 
 The key for Jev is kept by Claude Code with the plugin's other settings, not
 by the plugin.

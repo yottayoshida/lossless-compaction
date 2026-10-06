@@ -860,6 +860,33 @@ too, so they are counted without the plugin keeping a list of its own.
   cannot be run, stop the collection before anything moves, and the line it
   prints says why. A transcript that is itself a link inside a project
   directory is not followed and not counted.
+- The search reads transcripts as Claude Code writes them now: files named
+  `*.jsonl`, an id spelled as 64 lowercase hexadecimal characters. Were it to
+  write them otherwise — from the start of a conversation or from some point
+  in it — the search would find none of those tickets. So at each compaction
+  of the main conversation, the newest ticket of the conversation handed
+  back is noted in `witness/` with the session id — one this compaction put
+  in, where it put any, as a cut puts its parts' in front of what stays; when
+  a session starts with tickets, the newest of the conversation, unless the
+  one noted before is still in it. Before anything moves, a clean-up looks for each noted
+  ticket in that conversation's own transcript, `<session>.jsonl`, with
+  `grep`. Not written there; no such file but another beginning with the
+  session id, or anything in its directory but `subagents/`, `tool-results/`,
+  `workflows/` and hidden files; a place that cannot be listed: the clean-up
+  stops, and its line says so. Where nothing of the conversation is left, the
+  noted ticket goes ([ADR 0027](adr/0027-a-clean-up-first-finds-what-was-seen.md)).
+  Not told apart from a conversation removed: transcripts moved whole out of
+  the recorded places, or kept under names that hold no session id. A
+  conversation compacted before this version has none noted until it is
+  resumed or compacted again. A ticket shown but never written to its
+  transcript — a compaction Claude Code could not write, or `--no-session-persistence`
+  on a resumed session — stops clean-ups until the conversation is resumed or
+  compacted again, or its transcript is gone; a clean-up that reads a
+  transcript before Claude Code has written the compaction just made stops
+  until the next try, a day later; and once a transcript is gone, a folder
+  Claude Code comes to keep beside it stops clean-ups until this page names
+  it. Nothing is lost while a clean-up stops: the line at the start of a
+  session says so after 14 days.
 - A collection stopped while moving leaves what it moved in the trash, where
   `recall` and the next collection put it back when it is named. What it
   reports is counted on disk afterwards.

@@ -35,7 +35,9 @@ Measured on Claude Code 2.1.286 (`claude -p`):
 1. The transcripts are the list of what is in use. Claude Code keeps them,
    removes them when a conversation can no longer be resumed, and they
    already hold every id of a fork, a rewound branch and an earlier version.
-   The plugin keeps no list of its own.
+   The plugin keeps no list of its own. (Added to by ADR 0027: one ticket per
+   compacted conversation is noted, so that a search that no longer reads a
+   conversation as it is written stops the clean-up.)
 2. Where transcripts are is recorded at a compaction, one file per place
    under the store's `roots/`, written once and never rewritten, so that
    sessions writing at once lose nothing and every configuration sharing a
