@@ -7,7 +7,8 @@
 // out (`compact()`); where that could not be tried, the built-in summary runs
 // on the conversation as it was, kept first. Once tried (`nextStep`): a `/compact`
 // by hand with nothing to move out and room left is left undone (ADR 0015);
-// a compaction that moved results out and did enough is handed back; else a
+// a compaction that moved results out and did enough is handed back, unless a
+// summary was asked for with instructions (ADR 0031); else a
 // cut in place of a summary where src/cut.ts says so (ADR 0019), falling back,
 // when a part cannot be written, to the built-in summary as below; else the
 // built-in summary, of the conversation as it was handed in when nothing was
@@ -83,6 +84,16 @@ export type Tried = {
   keepTokens: number;
 };
 
+/**
+ * Whether Claude Code's summary was asked for (ADR 0031): instructions that are more than spaces, given to a `/compact`
+ * typed by hand or to a compaction a plugin asked for. Not to an automatic one: a hook above this one can add
+ * instructions to every compaction, and each would then be summarized. One handed instructions still goes to the
+ * summary where too much is still in use, as before: src/cut.ts leaves any compaction with instructions to it.
+ */
+export function summaryAskedFor(tried: Pick<Tried, 'trigger' | 'instructions'>): boolean {
+  return (tried.trigger === 'manual' || tried.trigger === 'plugin') && (tried.instructions ?? '').trim() !== '';
+}
+
 export function nextStep(tried: Tried): Step {
   const { outcome } = tried;
   const { report } = outcome;
@@ -106,12 +117,18 @@ export function nextStep(tried: Tried): Step {
       ? { fixed: Math.round(tried.count.fixedTokens), first: Math.round(tokensOf([first], tried.count)) }
       : undefined;
   if (nothing && undone) return { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts)}` };
-  if (!nothing && outcome.enough) return { step: 'back', line: reportLine(report) };
-  // Nothing could be moved out, or too much is still in use: handed over, unless src/cut.ts keeps the oldest
-  // messages in place of a summary, down to the size moving results out aimed at (ADR 0019).
+  const asked = summaryAskedFor(tried);
+  if (!nothing && outcome.enough && !asked) return { step: 'back', line: reportLine(report) };
+  // Nothing could be moved out, too much is still in use, or a summary was asked for: handed over, unless src/cut.ts
+  // keeps the oldest messages in place of a summary, down to the size moving results out aimed at (ADR 0019). A summary
+  // asked for is given on what is left, whatever room was made (ADR 0031): src/cut.ts leaves one with instructions to it.
   const summarize: Summarize = nothing
     ? { step: 'summarize', line: `built-in compaction: nothing could be moved out (${reportLine(report)})`, of: 'given' }
-    : { step: 'summarize', line: `built-in compaction on what is left, too much is still in use: ${reportLine(report)}`, of: 'rebuilt' };
+    : {
+        step: 'summarize',
+        line: `built-in compaction on what is left, ${outcome.enough ? 'as it was asked for with instructions' : 'too much is still in use'}: ${reportLine(report)}`,
+        of: 'rebuilt',
+      };
   const decision = decide({
     messages: outcome.messages,
     tokens: report.tokensAfter,

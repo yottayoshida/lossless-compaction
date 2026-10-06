@@ -74,3 +74,7 @@ Why the plugin is built the way it is, one record a decision.
 - [0030](0030-what-claude-code-attached-is-kept-at-the-end.md): why what
   Claude Code attached to the messages as it sent them is kept at each
   compaction that rebuilds, and named by one message at the end.
+- [0031](0031-a-compact-given-instructions-is-summarized.md): why a
+  `/compact` given instructions, by hand or by a plugin, hands what is left
+  to Claude Code's summary whatever room moving out made, and an automatic
+  compaction does not.

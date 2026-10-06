@@ -12,8 +12,11 @@
   write that fails loses nothing: a result is ticketed only once all of it is
   written.
 - **Rules decide what leaves. On this path no summary is written, and
-  nothing is sent.** Where moving results out makes room, a compaction takes
-  the time of writing a few files. Results leave in this
+  nothing is sent,** but where `/compact` is given instructions, which ask
+  for Claude Code's summary of what is left
+  ([ADR 0031](adr/0031-a-compact-given-instructions-is-summarized.md)).
+  Where moving results out makes room and no summary was asked for, a
+  compaction takes the time of writing a few files. Results leave in this
   order until the conversation is estimated to be under the target size
   (`targetPercent`), which at 1, the default, is not reached in a window of
   200,000 ([how far](limits.md#how-far-a-compaction-goes)): those a later

@@ -56,6 +56,11 @@ Read: /work/notes.md -> 4 lines; what it returned then comes back with mcp__loss
 Edit: /work/notes.md -> written
 ```
 
+To have Claude Code's summary, give `/compact` instructions: what can leave
+is moved out, and what is left is summarized with them, the conversation
+kept first (ADR 0031). Any words will do, and they are what the summary is
+told to keep or stress. A `/compact` typed without them asks for none.
+
 In a session where the plugin is enabled and is not running, a line says so
 at the first message you send, naming what the plugin needs: Claude Code
 2.1.287 or later, and mods not turned off for you

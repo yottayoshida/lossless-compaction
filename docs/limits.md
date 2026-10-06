@@ -14,8 +14,11 @@ What the plugin does not do, and what a repository or a version can change.
   message stays. More is sent with each request than after a summary, and
   the agent knows what was cut by the list alone (ADR 0019).
 - **Claude Code's own summary still runs** when `/compact` is given
-  instructions and moving results, long inputs and old calls out did not
-  make room; when no cut
+  instructions, on what is left once results, long inputs and old calls
+  are moved out, whatever room that made: a `/compact` given instructions
+  moves out what it can, then runs Claude Code's summary with them on what
+  is left, once the conversation is kept; where the disk refuses the write,
+  nothing runs (ADR 0031, ADR 0008). It also runs when no cut
   between messages brings the conversation under `maxAfterPercent`, as with
   one very long message said last; when the plugin cannot count the
   conversation and its messages come to less than `keepTokens`; when the
@@ -85,8 +88,11 @@ Each of these in full, and the rest, below.
 Claude Code's built-in compaction runs instead when the conversation holds an
 image or a document outside a tool result, or any block of a kind the plugin
 does not know, has 4096 messages or more, or belongs to a subagent; when
-`/compact` was given instructions and nothing could be moved out, or too
-much is still in use afterwards; and when a conversation that is too full
+`/compact` was given instructions, typed or by a plugin, on what is left
+after moving out (ADR 0031; an automatic compaction handed instructions by
+another hook is handed back rebuilt where moving out made room, as one
+without them, and goes to the summary where too much is still in use, as
+before); and when a conversation that is too full
 cannot be cut ([below](#when-the-conversation-is-too-full)). An image in a tool result is moved out with the result: a line
 stands in its place, and the conversation is compacted by the plugin (see
 [images](#images)).

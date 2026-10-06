@@ -86,7 +86,8 @@ given, else 967,000 where a request of the session sent more than 200,000
 tokens, else 167,000. A compaction the record says was asked for is
 replayed as a `/compact` typed without instructions unless
 `--with-instructions` is given: the record does not tie the instructions to
-the compaction. It prints sizes and counts, how many results, inputs,
+the compaction. With it, what is left goes to the summary, as the hook hands
+a `/compact` given instructions (ADR 0031). It prints sizes and counts, how many results, inputs,
 middles and calls left and the target, nothing the conversation said; the store is held in memory, no model
 is called and nothing is sent. What is not the conversation is taken as the
 session's first request, so a size it prints is the plugin's count with that

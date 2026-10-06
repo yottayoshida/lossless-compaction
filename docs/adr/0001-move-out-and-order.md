@@ -48,7 +48,8 @@ is far larger than that.
    ADR 0003: there is nothing to fall back from; the order is rules'.) When
    too much is still in use after moving out, and a summary of what is left
    could change that, what is left is handed to Claude Code's built-in
-   compaction.
+   compaction. (Amended by ADR 0031: and when `/compact` is given
+   instructions, by hand or by a plugin, whatever room moving out made.)
 7. The plugin works once it is installed and given a key. It sends digests of
    the conversation to the Jev provider by default, and the README says so at
    the top.
