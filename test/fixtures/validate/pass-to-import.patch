@@ -15,6 +15,6 @@ index aa85fa8..cc84722 100644
    on('session.start', async ($, e, next) => {
      await markRunning($);
 +    await elsewhere($ as never, [], '');
-     let provider: Awaited<ReturnType<typeof providerOf>> | undefined;
-     try {
-       provider = await providerOf($, options);
+     // A number setting not used as it was set is said once a process, and again once set otherwise: the session
+     // that set it sees why.
+     for (const line of settingNotes(options)) {

@@ -106,17 +106,69 @@ export function nextStep(tried: Tried): Step {
   return { step: 'cut', after: decision.after, at: decision.at, over: decision.over, otherwise: summarize };
 }
 
-/** A number setting, or `fallback` where it is not a number between `min` and `max`. */
-function numberIn(value: unknown, fallback: number, min: number, max: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : fallback;
+/**
+ * The number settings: the range each is taken in and its default. `.claude-plugin/plugin.json` gives the same
+ * defaults and names the same ranges in its descriptions; a test holds the three together.
+ */
+export const NUMBER_SETTINGS = {
+  keepTokens: { min: 0, max: 1_000_000, fallback: 20_000, whole: true },
+  minChars: { min: 0, max: 10_000_000, fallback: 2000, whole: true },
+  targetPercent: { min: 1, max: 99, fallback: 1, whole: false },
+  maxAfterPercent: { min: 1, max: 100, fallback: 75, whole: false },
+} as const;
+
+export type NumberSetting = keyof typeof NUMBER_SETTINGS;
+
+/**
+ * How a number setting was read: as given; at the nearest end of its range, for a number outside it (ADR 0025,
+ * decision 3: a value someone set stays as they set it, never their default); at its default, where it is not set
+ * or left empty.
+ */
+export type SettingRead = { value: number; as: 'given' | 'nearest' | 'unset' | 'empty' | 'not a number' };
+
+/**
+ * A number, or null. Claude Code hands a number setting a number, or an empty value where it was left empty: any
+ * other value keeps it from loading the plugin at all (measured on Claude Code 2.1.291).
+ */
+function numberOf(value: unknown): number | null {
+  return typeof value === 'number' && !Number.isNaN(value) ? value : null;
+}
+
+export function settingOf(name: NumberSetting, value: unknown): SettingRead {
+  const { min, max, fallback, whole } = NUMBER_SETTINGS[name];
+  if (value === undefined) return { value: fallback, as: 'unset' };
+  const read = numberOf(value);
+  // Left empty is what Claude Code hands on; anything else that is no number keeps it from loading the plugin at all.
+  if (read === null) return { value: fallback, as: value === '' ? 'empty' : 'not a number' };
+  const kept = Math.min(max, Math.max(min, read));
+  return { value: whole ? Math.floor(kept) : kept, as: kept === read ? 'given' : 'nearest' };
 }
 
 /** The defaults are those `.claude-plugin/plugin.json` gives the settings; a test holds the two together. */
 export function configFrom(options: Record<string, unknown>): Omit<Config, 'store'> {
   return {
-    keepTokens: Math.floor(numberIn(options['keepTokens'], 20_000, 0, 1_000_000)),
-    minChars: Math.floor(numberIn(options['minChars'], 2000, 0, 10_000_000)),
-    targetPercent: numberIn(options['targetPercent'], 1, 1, 99),
-    maxAfterPercent: numberIn(options['maxAfterPercent'], 75, 1, 100),
+    keepTokens: settingOf('keepTokens', options['keepTokens']).value,
+    minChars: settingOf('minChars', options['minChars']).value,
+    targetPercent: settingOf('targetPercent', options['targetPercent']).value,
+    maxAfterPercent: settingOf('maxAfterPercent', options['maxAfterPercent']).value,
   };
+}
+
+/** What a setting was set to, for a line: a text quoted and cut short, a number as it is. */
+function shownSetting(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value.length > 40 ? `${value.slice(0, 40)}…` : value);
+  return typeof value === 'number' ? String(value) : `of type ${value === null ? 'null' : typeof value}`;
+}
+
+/** One line for each number setting not used as it was set: taken at the nearest end of its range, or at its default. */
+export function settingNotes(options: Record<string, unknown>): string[] {
+  const notes: string[] = [];
+  for (const name of Object.keys(NUMBER_SETTINGS) as NumberSetting[]) {
+    const read = settingOf(name, options[name]);
+    const { min, max } = NUMBER_SETTINGS[name];
+    if (read.as === 'nearest') notes.push(`${name} ${shownSetting(options[name])} is outside ${min}-${max}; ${read.value} is used`);
+    if (read.as === 'empty') notes.push(`${name} is empty; ${read.value}, the default, is used`);
+    if (read.as === 'not a number') notes.push(`${name} ${shownSetting(options[name])} is not a number; ${read.value}, the default, is used`);
+  }
+  return notes;
 }

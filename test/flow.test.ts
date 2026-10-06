@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 import { reportLine, tokensOf, undoneLine, type Count, type Report } from '../src/compact.ts';
 import { cutLine, decide } from '../src/cut.ts';
-import { beforeTrying, configFrom, nextStep, type Step, type Tried } from '../src/flow.ts';
+import { NUMBER_SETTINGS, beforeTrying, configFrom, nextStep, settingNotes, settingOf, type Step, type Tried } from '../src/flow.ts';
 import { PLUGIN } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 
@@ -156,14 +156,41 @@ test('a cut is made where src/cut.ts says, as it says: the first message with th
   }
 });
 
-test("the settings' defaults are those plugin.json gives them, and a value out of range is the default", () => {
-  const manifest = JSON.parse(readFileSync(new URL('../.claude-plugin/plugin.json', import.meta.url), 'utf8')) as { userConfig: Record<string, { default?: unknown }> };
+test("the settings' defaults and ranges are those plugin.json gives them, and a number out of range is taken at the nearest end, never the default", () => {
+  const manifest = JSON.parse(readFileSync(new URL('../.claude-plugin/plugin.json', import.meta.url), 'utf8')) as { userConfig: Record<string, { default?: unknown; description: string }> };
   const defaults = configFrom({});
   for (const [name, value] of Object.entries(defaults)) assert.equal(value, manifest.userConfig[name]?.default, name);
-  assert.deepEqual(configFrom({ keepTokens: -1, minChars: 'many', targetPercent: 100, maxAfterPercent: 0 }), defaults);
+  // Each description names the range the code takes, so a reader of the settings knows it.
+  for (const [name, { min, max }] of Object.entries(NUMBER_SETTINGS)) {
+    assert.ok(manifest.userConfig[name]?.description.includes(`From ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}; a number outside is taken as the nearest end`), name);
+  }
+  // Outside the range: the nearest end (ADR 0025, decision 3). 100 was 1 before, the other end of what was asked for.
+  assert.deepEqual(configFrom({ keepTokens: -1, minChars: 20_000_000, targetPercent: 100, maxAfterPercent: 0 }), { keepTokens: 0, minChars: 10_000_000, targetPercent: 99, maxAfterPercent: 1 });
+  assert.deepEqual(configFrom({ targetPercent: 99.5, keepTokens: 2_000_000 }), { ...defaults, targetPercent: 99, keepTokens: 1_000_000 });
+  // Claude Code hands a number, or an empty value where one was left empty: that is the default. Any other value keeps
+  // it from loading the plugin (measured on 2.1.291); were one handed over all the same, it would be the default too.
+  assert.deepEqual(configFrom({ minChars: '', keepTokens: '500', targetPercent: '40', maxAfterPercent: null }), defaults);
+  // Infinity, as JSON.parse reads 1e999, is outside the range like any number: the nearest end.
+  assert.deepEqual(configFrom({ targetPercent: Infinity, keepTokens: -Infinity }), { ...defaults, targetPercent: 99, keepTokens: 0 });
+  // Inside the range, as given; the ends as they are; whole numbers where the setting counts in whole ones.
   assert.deepEqual(configFrom({ keepTokens: 1500.7, minChars: 0, targetPercent: 2, maxAfterPercent: 100 }), { keepTokens: 1500, minChars: 0, targetPercent: 2, maxAfterPercent: 100 });
-  // The ends of each range are taken as they are.
   assert.deepEqual(configFrom({ targetPercent: 99, maxAfterPercent: 1 }), { ...defaults, targetPercent: 99, maxAfterPercent: 1 });
+});
+
+test('a number setting not used as it was set is said, in one line each; one used as set, or not set, is not', () => {
+  assert.deepEqual(settingNotes({}), []);
+  assert.deepEqual(settingNotes({ targetPercent: 40, keepTokens: 0, minChars: 2000 }), []);
+  assert.deepEqual(settingNotes({ targetPercent: 100, keepTokens: -1, minChars: 'many', maxAfterPercent: '' }), [
+    'keepTokens -1 is outside 0-1000000; 0 is used',
+    'minChars "many" is not a number; 2000, the default, is used',
+    'targetPercent 100 is outside 1-99; 99 is used',
+    'maxAfterPercent is empty; 75, the default, is used',
+  ]);
+  // What is said holds no more of a long text than its start.
+  const [line = ''] = settingNotes({ minChars: 'x'.repeat(500) });
+  assert.ok(line.startsWith('minChars "xxx') && line.length < 120, line);
+  assert.equal(settingOf('targetPercent', 100).as, 'nearest');
+  assert.equal(settingOf('targetPercent', undefined).as, 'unset');
 });
 
 test('long inputs moved out are something moved out: handed back when enough, and never a /compact left undone (ADR 0020)', () => {

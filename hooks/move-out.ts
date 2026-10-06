@@ -12,7 +12,7 @@ import { CHARS_PER_TOKEN, charsOf, compact, countFrom, windowFrom, type Config, 
 import { shownAgainNote } from '../src/changed.ts';
 import { cutLine, keepOldest } from '../src/cut.ts';
 import { find } from '../src/find.ts';
-import { beforeTrying, configFrom, nextStep, type Step } from '../src/flow.ts';
+import { beforeTrying, configFrom, nextStep, settingNotes, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
 import { guarded, longestIn, middleDropped, middleRefusal, placedTicketIds, refused } from '../src/guard.ts';
@@ -232,6 +232,9 @@ const noted = new Set<string>();
 
 /** That this process said the clean-up is late, or is looking now: said once, a /clear or a resume included (ADR 0016). */
 let toldLate = false;
+
+/** What this process said of the number settings it does not use as they were set: each line once, a changed setting anew. */
+const toldSettings = new Set<string>();
 
 /**
  * Records where this session's transcript is kept, so that a collection counts
@@ -604,6 +607,13 @@ export const register: Register = (on, options) => {
   findAtStart = undefined;
   on('session.start', async ($, e, next) => {
     await markRunning($);
+    // A number setting not used as it was set is said once a process, and again once set otherwise: the session
+    // that set it sees why.
+    for (const line of settingNotes(options)) {
+      if (toldSettings.has(line)) continue;
+      toldSettings.add(line);
+      say($, line);
+    }
     let provider: Awaited<ReturnType<typeof providerOf>> | undefined;
     try {
       provider = await providerOf($, options);
