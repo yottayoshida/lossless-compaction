@@ -1145,8 +1145,9 @@ less often, in made-up conversations asked right after the compaction
   were the size written on a ticket. In one session that compacts several
   times, Sonnet 5.5 was refused 8 times in three runs, each time an id that
   went wrong at the tenth character, where a pair of characters is written
-  twice over (`406e6e8` copied as `406e8`): 7 of those are taken now, and the
-  eighth was copied from Claude Code's summary while the id it stood for was
+  twice over (`406e6e8` copied as `406e8`): 7 of those are taken now; driven
+  again three times at each of 1 and 40, the same copy came twice in 33 calls
+  and was taken both times. The eighth of the 8 was copied from Claude Code's summary while the id it stood for was
   only in a part kept from the conversation: the refusal names the parts, the
   newest five, and whether that one was among them in that session was not
   measured ([the measurement](measurements.md#ids-copied-wrong-in-one-session-that-compacts-several-times)).

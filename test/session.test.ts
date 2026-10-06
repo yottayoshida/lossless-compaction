@@ -246,3 +246,47 @@ test('each call to recall a turn sent is recorded with the id handed and whether
   assert.ok(sessionReport(runs).includes('| Setting | Runs | \`recall\` calls | Refused |'));
   assert.equal(sessionReport([runOf('target-40', 1, [turnOf()])]), `${sessionTable([runOf('target-40', 1, [turnOf()])])}\n`);
 });
+
+const IDS_AT = fileURLToPath(new URL('../bench/results/2026-10-06-session-ids', import.meta.url));
+
+test('the session driven again for #107: its tables, the ids handed to recall, and every figure docs/measurements.md gives of them', () => {
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const measurements = readFileSync(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)), 'utf8');
+  const section = measurements.slice(measurements.indexOf('## Ids copied wrong in one session that compacts several times'), measurements.indexOf('## The six kinds of conversation, at 40 and at 1'));
+  const has = (phrase: string) => assert.ok(flat(section).includes(phrase), phrase);
+  const runs = sessionsUnder(IDS_AT);
+  // Three runs at 1 and three at 40, of this script, with Sonnet 5.5, on one state of the plugin's code; nothing of the machine.
+  assert.deepEqual(runs.map((run) => `${run.setting} ${run.run}`).sort(), ['target-1 1', 'target-1 2', 'target-1 3', 'target-40 1', 'target-40 2', 'target-40 3']);
+  assert.ok(runs.every((run) => run.version === SESSION_VERSION && run.model === 'claude-sonnet-5-5' && run.claudeCode === '2.1.291' && run.plugin === 'e1d108539619'));
+  has('(code `e1d108539619`) and Claude Code 2.1.291');
+  assert.ok(!/\/Users\/|\/home\/|\.cctmp/.test(JSON.stringify(runs)));
+  // The tables are these runs, in the file and in the document.
+  const report = sessionReport(runs);
+  assert.equal(report, readFileSync(`${IDS_AT}/report.md`, 'utf8'));
+  for (const row of report.trim().split('\n').filter((line) => line.startsWith('|'))) assert.ok(section.includes(row), row);
+
+  // Every call recorded, and every question asked and answered right.
+  const recalled = runs.flatMap((run) => run.turns.flatMap((turn) => (turn.recalled ?? []).map((one) => ({ ...one, run: `${run.setting} ${run.run}`, turn: turn.id }))));
+  assert.ok(runs.every((run) => run.turns.every((turn) => turn.recalled !== undefined)));
+  assert.equal(recalled.length, 33);
+  has('Of the 33 calls to `recall`');
+  assert.equal(recalled.filter((one) => one.refused).length, 0);
+  has('None was refused');
+  assert.equal(runs.reduce((total, run) => total + figuresOf(run).right, 0), 36);
+  has('36 of 36');
+  // The two that were no whole id: the same 62 characters as on 2026-10-05, at the same question, taken (not refused) and answered right.
+  const copied = recalled.filter((one) => !/^[0-9a-f]{64}$/.test(one.given));
+  const measured = JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/copied-ids.json', import.meta.url)), 'utf8')) as { meant: string; refused: { given: string }[] };
+  assert.deepEqual(copied.map((one) => [one.run, one.turn, one.given.length]), [['target-1 2', 'gone-4', 62], ['target-40 2', 'gone-4', 62]]);
+  assert.ok(copied.every((one) => measured.refused.some((then) => then.given === one.given) && one.given.startsWith(measured.meant.slice(0, 10)) && !one.refused));
+  for (const one of copied) {
+    const run = runs.find((each) => `${each.setting} ${each.run}` === one.run);
+    assert.equal(run?.turns.find((turn) => turn.id === 'gone-4')?.right, true, one.run);
+  }
+  has('The other 2, in the second run at 1 and the second run at 40, handed the same 62 characters as on 2026-10-05');
+  // The CHANGELOG and the limits say the same.
+  const changelog = flat(readFileSync(fileURLToPath(new URL('../CHANGELOG.md', import.meta.url)), 'utf8'));
+  assert.ok(changelog.includes('the same 62 characters were handed twice in 33 calls to `recall`, and taken both times'));
+  const limits = flat(readFileSync(fileURLToPath(new URL('../docs/limits.md', import.meta.url)), 'utf8'));
+  assert.ok(limits.includes('the same copy came twice in 33 calls and was taken both times'));
+});

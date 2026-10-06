@@ -2410,6 +2410,60 @@ compacts turns on what it fetches, which is why the cost by the
 twenty-fourth and the thirtieth log is given beside the total.
 The times are of five sessions run side by side, and are not compared.
 
+## Ids copied wrong in one session that compacts several times
+
+In the session above, the two answers the plugin's settings missed were ids
+`recall` refused. By the sessions' records, which are not published, it
+refused 8 ids in three of the ten runs, all of them the ticket of the first
+log removed, `6c7cc4406e6e8fb6…`, with `406e6e8` copied as `406e8`, ten
+characters in: that id cut short at 11 characters (twice), those 11 twice
+over on two lines (twice), the 62 characters left (three times), and 64
+characters made up past the tenth (once). `recall` then took an id by its
+first 16 characters; it now takes the one written in the conversation that
+shares the most characters with it from the first, 8 or more (#107). Put to
+it, each with the ids written in the conversation before it
+(`test/fixtures/copied-ids.json`), 7 of the 8 are taken for the id they were
+copied from, and none under the rule before. The eighth, under `hybrid`, was
+copied from Claude Code's summary while the id it stood for was only in a
+part kept from the conversation, which the agent read back by itself: a
+refusal now names the parts kept, the newest five.
+
+The session was driven again at 1 and at 40, three runs each, with Sonnet 5.5,
+on the plugin as changed (code `e1d108539619`) and Claude Code 2.1.291, on
+2026-10-06 (`bench/results/2026-10-06-session-ids/`). The benchmark now
+records each call to `recall`, the id it was handed and whether it was
+refused; the second table is of those calls.
+
+| Setting | Runs | Compactions | In use before each | Right after each | Read from the cache right after | Written to it right after | Sent per request | Right | Right after reading outside the work | `recall` calls | Cost by log 24, USD | Cost by log 30, USD | Cost, USD | Time, s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| target-40 | 3 | 5, 5, 5 | 170056, 170170, 170037 | 64634, 64708, 64617 | 4128, 4128, 4128 | 60504, 60578, 60487 | 101979, 101925, 101941 | 6/6, 6/6, 6/6 | 0, 0, 0 | 5, 5, 6 | 3.16, 3.02, 3.16 | 4.13, 4.00, 4.13 | 5.13, 5.01, 5.13 | 277, 489, 292 |
+| target-1 | 3 | 4, 4, 4 | 170405, 170631, 170349 | 26245, 26277, 26208 | 4128, 4128, 4128 | 22115, 22147, 22078 | 87936, 86384, 87667 | 6/6, 6/6, 6/6 | 0, 0, 0 | 5, 6, 6 | 2.36, 2.36, 2.45 | 3.19, 3.26, 3.27 | 4.06, 4.13, 4.13 | 251, 314, 282 |
+
+| Setting | Runs | `recall` calls | Refused | Refused, not 64 hexadecimal characters |
+| --- | --- | --- | --- | --- |
+| target-40 | 3 | 5, 5, 6 | 0, 0, 0 | 0, 0, 0 |
+| target-1 | 3 | 5, 6, 6 | 0, 0, 0 | 0, 0, 0 |
+
+- **The same copy came again, twice, and was taken both times.** Of the 33
+  calls to `recall`, 31 handed an id the session's store held (by the stores,
+  which are not published; each of the 31 is 64 hexadecimal characters). The other 2,
+  in the second run at 1 and the second run at 40, handed the same 62
+  characters as on 2026-10-05, `6c7cc4406e8fb60c…`; both were taken for the
+  id they were copied from, and the question was answered right in both.
+  None was refused, so no refusal named tickets here.
+- **Every question was answered right**, 36 of 36.
+- **The costs and the compactions are of this code**, which moves more out
+  at 1 than the 0.7.0 of the session above (`targetPercent` at 1 is the
+  default since, ADR 0025), and are not set beside its table.
+
+What this does not show: `hybrid`, where a copy came from the summary; a
+refusal and the tickets it names, which a real session showed once (`recall`
+handed six characters of an id answered with the one ticket of the
+conversation, its call and its id, and handed ten characters, gave the
+result back); the plugin before this change driven again the same day, so
+that the six runs say how often the copy came, not that it came less often;
+and Opus 5.5.
+
 ## The six kinds of conversation, at 40 and at 1
 
 The session above reads logs and little else: at 1 as at 40, moving results
