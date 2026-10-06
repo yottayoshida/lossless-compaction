@@ -6,13 +6,20 @@ What the plugin does not do, and what a repository or a version can change.
 
 - **A `/compact` with nothing to move out and room left does nothing** but
   say so: Claude Code shows it as not compacted, and `/compact` with
-  instructions summarizes (ADR 0015).
+  instructions summarizes (ADR 0015). A conversation of 1,536 entries or
+  more is cut for its length instead ([below](#when-the-conversation-is-too-long)).
 - **A conversation too full is cut, not summarized.** When moving results
   out is not enough, or nothing can be moved out and the compaction is
   automatic or more than `maxAfterPercent` is in use, the oldest messages
   are kept in parts, a list of them stands in their place, and the first
   message stays. More is sent with each request than after a summary, and
   the agent knows what was cut by the list alone (ADR 0019).
+- **A conversation near the 4096 entries Claude Code hands a plugin is cut
+  too.** At a compaction without instructions, one handed over with 1,536
+  or more is cut down to 1,024 messages, however much room is left: under
+  the plugin no summary starts the count over, and one that reaches 4096 is
+  summarized with what is older not kept
+  ([below](#when-the-conversation-is-too-long), ADR 0034).
 - **Claude Code's own summary still runs** when `/compact` is given
   instructions and moving results, long inputs and old calls out did not
   make room; when no cut
@@ -84,7 +91,8 @@ Each of these in full, and the rest, below.
 
 Claude Code's built-in compaction runs instead when the conversation holds an
 image or a document outside a tool result, or any block of a kind the plugin
-does not know, has 4096 messages or more, or belongs to a subagent; when
+does not know, has 4096 messages or more (one is cut well before that,
+[below](#when-the-conversation-is-too-long)), or belongs to a subagent; when
 `/compact` was given instructions and nothing could be moved out, or too
 much is still in use afterwards; and when a conversation that is too full
 cannot be cut ([below](#when-the-conversation-is-too-full)). An image in a tool result is moved out with the result: a line
@@ -322,6 +330,58 @@ lossless-compaction: no summary, messages 2-19 of 20 kept in 1 part: moved 0 of 
 Measured on Claude Code 2.1.288: with Sonnet 5.5 at a `/compact` by hand,
 and with Haiku 4.5 at one too and at compactions Claude Code started
 ([measurements](measurements.md#the-oldest-messages-kept-in-place-of-a-summary)).
+
+## When the conversation is too long
+
+Claude Code hands a plugin the newest 4096 entries of a conversation, and
+the plugin leaves one of 4096 or more to the summary, kept first, with what
+is older than the 4096 not kept
+([above](#when-the-built-in-compaction-runs-instead)). Moving results out
+leaves the messages where they were, and no summary starts the count over,
+so under the plugin it grows from one compaction to the next. How much it
+can grow by is what one window holds: from an empty start to the next
+compaction a conversation gathered 1,510 entries at the median and 2,045 at
+most, counted on one machine; after a compaction the plugin rebuilt, where
+more stayed in use, it grew by 10 to 1,228 where it grew
+(ADR 0034, [measurements](measurements.md#how-many-entries-a-conversation-holds-at-a-compaction)).
+
+At a compaction without instructions, a conversation that holds 1,536 of
+the 4,096 entries Claude Code hands a plugin is cut, its oldest messages
+kept in parts with no summary, down to 1,024 messages, however few of the
+newest `keepTokens` that leaves, so that compactions do not carry it to the
+4,096 at which the summary runs and older messages are not kept.
+
+- The entries are counted as the larger of the messages the plugin is
+  handed and the conversation as Claude Code sends it, before anything is
+  rebuilt. In a made-up session of 3,400 messages, a row of the record
+  each, Claude Code handed over 3,400, and after the cut 1,026: the 1,024
+  handed back and the two commands typed since. Whether it counts rows of
+  other kinds was not measured.
+- The 1,024 are the messages handed back, the list among them, and with
+  the message naming what Claude Code attached at the end where it added
+  any (ADR 0030), 1,025.
+- It is cut where moving results out was enough by size, and at a
+  `/compact` by hand that would otherwise be left undone. Past 1,536, each
+  compaction without instructions cuts it again.
+- The first message stays, a cut falls where a cut by size may, and the
+  list stands for what was cut, as [above](#when-the-conversation-is-too-full).
+  Where the conversation is too full as well, the cut that goes further is
+  taken; where it is too full and no cut brings it under the line with the
+  first message in front, the first message goes too, or the summary runs,
+  as above.
+- With instructions, the summary that was asked for runs, the conversation
+  kept first, and the count starts over.
+- Where no place to cut is left (one call waiting for its result through
+  all of it, say) or a part cannot be written, the compaction goes as it
+  would have.
+- `/lossless-status` says how many of the 4096 the conversation holds.
+- A conversation that gathers more than 2,560 entries between two
+  compactions, or 4096 before its first, still reaches 4096 and is
+  summarized, kept first. In a window of 1,000,000 the first takes fewer
+  than 377 tokens an entry on average (967,000 over 2,560) and the second
+  fewer than 236, less what every request carries besides the conversation
+  and what stayed in use; the most gathered counted, 2,045 entries, came to
+  about 470.
 
 ## What a summary replaces
 

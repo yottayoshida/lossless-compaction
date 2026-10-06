@@ -108,7 +108,9 @@ it.
 **I8. A conversation holding what a rebuilt message cannot carry is not
 rebuilt.** Where a conversation holds a block of a kind the plugin does not
 know, an image or a document outside a tool result, or as many messages as
-Claude Code shows a plugin at most, the plugin moves nothing out of it.
+Claude Code shows a plugin at most, the plugin moves nothing out of it. One
+is cut for its length well before that, where a compaction comes in time
+([limits](limits.md#when-the-conversation-is-too-long), ADR 0034).
 
 - `a conversation is rebuilt only when every block in it is of a kind a rebuilt message carries`
 - `a conversation of as many messages as the host shows at most is not rebuilt: older ones may be missing`

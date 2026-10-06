@@ -3,7 +3,8 @@ import { test } from 'node:test';
 
 import { changedLine, shownAgainNote } from '../src/changed.ts';
 import { compact, mayStay, reportLine, tokensOf, type Config, type Count, type Report } from '../src/compact.ts';
-import { cutLine, decide, keepOldest, type Asked, type Decision } from '../src/cut.ts';
+import { CUT_AT, CUT_TO, cutLine, decide, keepOldest, type Asked, type Decision } from '../src/cut.ts';
+import { nextStep } from '../src/flow.ts';
 import { ticketsIn } from '../src/find.ts';
 import { KEPT, KEPT_UNSUMMARIZED, keepConversation, messageText, namedThroughParts } from '../src/keep.ts';
 import { goalOf } from '../src/select.ts';
@@ -534,4 +535,109 @@ test('the oldest messages are cut though a result among them holds half of a cha
   const joined = (await partsOf(files, (cut.messages[1] as Message).text)).join('');
   const expected = messages.slice(1, 3).map((message) => `${messageText(message)}\n`).join('').replace(lone, String.fromCharCode(0xfffd));
   assert.equal(joined, expected);
+});
+
+// 800 short turns, 3,200 messages: about 50 tokens a turn, so the conversation fits in any window by its size.
+// Handed over with entries past CUT_AT, it is long; 3,500 is past it and short of 4096.
+const LONG = talk(800, 30);
+/** How many messages a cut hands back: those in front, the list, and what follows it. */
+const handed = (decision: Extract<Decision, { hand: 'back' }>, messages: readonly Message[]) => decision.after + 1 + messages.length - decision.at;
+
+test('a conversation holding CUT_AT of the entries Claude Code hands over is cut down to CUT_TO messages though it fits, the first staying, at a place a cut may fall (#115)', () => {
+  assert.equal(CUT_AT, 1536);
+  assert.equal(CUT_TO, 1024);
+  const fits = ask(LONG);
+  assert.ok(fits.tokens < 75_000, 'it fits by its size');
+  const cut = back(decide(ask(LONG, { entries: CUT_AT })));
+  assert.equal(cut.after, 1, 'the first message stays');
+  assert.ok(handed(cut, LONG) <= CUT_TO, `${handed(cut, LONG)} handed back`);
+  // The least that brings it there: the next place a cut may fall, nearer the start, would leave more than CUT_TO.
+  assert.ok(handed(cut, LONG) > CUT_TO - 4, `${handed(cut, LONG)} handed back`);
+  assert.ok(isSaid(LONG[cut.at] as Message) || answers(LONG[cut.at - 1] as Message), 'where the person speaks or right after results');
+  assert.ok(cut.tokensAfter < fits.tokens);
+  // Short of CUT_AT entries, a conversation that fits is handed back with nothing cut, as before.
+  assert.equal(back(decide(ask(LONG, { entries: CUT_AT - 1 }))).at, 0);
+  // Counted from what Claude Code handed over, the larger of its entries and the messages as sent: the rebuilt ones, fewer, do not decide.
+  assert.equal(back(decide(ask(LONG, { entries: 3_500 }))).at, cut.at);
+  // A summary that was asked for is given, as for a conversation too full (ADR 0019).
+  assert.deepEqual(decide(ask(LONG, { entries: 3_500, instructions: 'keep the plan' })), { hand: 'summary' });
+  // Where keepTokens would leave more than CUT_TO messages, fewer of the newest stay: as said, fewer, rather than a summary of all.
+  const keepingAll = back(decide(ask(LONG, { entries: 3_500, keepTokens: 1_000_000 })));
+  assert.ok(handed(keepingAll, LONG) <= CUT_TO, `${handed(keepingAll, LONG)} handed back with keepTokens at 1,000,000`);
+  // What moving results out left at CUT_TO or fewer is not cut for its length, however many entries were handed over.
+  assert.equal(back(decide(ask(LONG.slice(0, CUT_TO), { entries: 3_500 }))).at, 0);
+});
+
+test('too full as well as long: the cut that goes further is taken', () => {
+  // 3,200 messages that are over the line by their size: cut at least as far as the size alone would cut.
+  const heavy = talk(800, 1_000);
+  const bySize = back(decide(ask(heavy, { window: 200_000, cutTo: 75_000, maxAfterPercent: 50 })));
+  const both = back(decide(ask(heavy, { window: 200_000, cutTo: 75_000, maxAfterPercent: 50, entries: 3_500 })));
+  const byLength = back(decide(ask(heavy, { window: 10_000_000, cutTo: 10_000_000, entries: 3_500 })));
+  assert.equal(both.at, Math.max(bySize.at, byLength.at));
+});
+
+test('a long conversation whose results left and that fits is cut for its length all the same, and comes back from its parts (#115)', async () => {
+  // 775 turns, 3,100 messages, in a window of 1,000,000 with keepTokens at 20,000: each tenth turn reads a long file, which moves out.
+  const messages: Message[] = Array.from({ length: 775 }, (_, at) => turn(at + 1, 30, at % 10 === 0 ? 9_000 : 90)).flat();
+  const files = new MemoryFiles();
+  const tokens = Math.round(COUNT.fixedTokens + tokensOf(messages, COUNT));
+  const config: Config = { store: STORE, keepTokens: 20_000, minChars: 2000, targetPercent: 1, maxAfterPercent: 75 };
+  const outcome = await compact({ messages, tokens, count: COUNT, window: 1_000_000, goal: '' }, config, { files, now: () => 0 });
+  assert.ok(outcome.report.moved > 0 && outcome.enough, 'moving results out was enough by size');
+  const step = nextStep({
+    trigger: 'auto',
+    instructions: undefined,
+    outcome,
+    inUse: tokens,
+    given: true,
+    maxAfterPercent: 75,
+    count: COUNT,
+    keepTokens: 20_000,
+    entries: messages.length,
+  });
+  assert.equal(step.step, 'cut', JSON.stringify(step).slice(0, 200));
+  const { after, at } = step as Extract<typeof step, { step: 'cut' }>;
+  const kept = await keepOldest(files, STORE, { messages: outcome.messages, tokens: outcome.report.tokensAfter, count: COUNT }, after, at);
+  assert.ok('messages' in kept, JSON.stringify(kept));
+  assert.ok(kept.messages.length <= CUT_TO, `${kept.messages.length} handed back`);
+  assert.deepEqual(kept.messages[0], outcome.messages[0], 'the first message stays');
+  // What was cut comes back from the parts as it stood.
+  const parts = await partsOf(files, (kept.messages[1] as Message).text);
+  assert.equal(parts.join(''), outcome.messages.slice(after, at).map((message) => `${messageText(message)}\n`).join(''));
+});
+
+test("a cut for the conversation's length says so, with the entries Claude Code handed over (#115)", () => {
+  const report: Report = { results: 5, candidates: 5, moved: 0, inputs: 0, folded: 0, images: 0, charsBefore: 1000, charsAfter: 900, tokensAfter: 20_000, counted: true, window: 1_000_000, notMoved: {}, writeErrors: [], ms: 12 };
+  assert.equal(
+    cutLine(report, { first: 2, last: 1100, of: 3100, parts: 4, over: false, held: 3100 }),
+    `no summary, messages 2-1100 of 3100 kept in 4 parts for its length, 3100 of the 4096 entries Claude Code hands a plugin: ${reportLine(report)}`,
+  );
+  // A cut for its size says nothing of entries, as before.
+  assert.ok(!cutLine(report, { first: 2, last: 1100, of: 3100, parts: 4, over: false }).includes('entries'));
+});
+
+test('too full as well as long, what cannot be handed back under the line by size is not handed back by length: the first message is cut too, or the summary runs (#115, ADR 0019)', () => {
+  // The first message is too large to stay in front: cut with the rest, never handed back over the line.
+  const opening: Message[] = [{ role: 'user', text: `go ${prose(280_000)}`, toolUses: [] }, { role: 'assistant', text: 'ok', toolUses: [] }];
+  const big = [...opening, ...LONG].slice(0, 1_600);
+  const cut = back(decide(ask(big, { entries: 1_600 })));
+  assert.equal(cut.after, 0, 'the first message goes with the rest');
+  assert.equal(cut.over, false);
+  assert.ok(cut.tokensAfter <= 75_000);
+  // The newest message alone is over the line: no cut helps, by size or by length, and the summary runs as before.
+  const newest: Message = { role: 'user', text: `now ${prose(250_000)}`, toolUses: [] };
+  const last = [...LONG.slice(0, 1_599), newest];
+  assert.deepEqual(decide(ask(last, { entries: 1_600 })), { hand: 'summary' });
+});
+
+test('come for its length alone, a long conversation is cut to CUT_TO and no further, whether its size was counted or not (#115)', () => {
+  for (const count of [COUNT, undefined]) {
+    const cut = back(decide(ask(LONG, { count, entries: 3_500, bySize: false, window: 1_000_000, cutTo: 10_000, keepTokens: 20_000 })));
+    assert.equal(cut.length, true);
+    assert.ok(handed(cut, LONG) <= CUT_TO && handed(cut, LONG) > CUT_TO - 4, `${handed(cut, LONG)} handed back, count ${count === undefined ? 'none' : 'given'}`);
+  }
+  // Asked by size as well, where the size was not counted: down to cutTo, as before (ADR 0019).
+  const bySize = back(decide(ask(LONG, { count: undefined, entries: 3_500, window: 1_000_000, cutTo: 10_000, keepTokens: 2_000 })));
+  assert.ok(handed(bySize, LONG) < CUT_TO - 4);
 });

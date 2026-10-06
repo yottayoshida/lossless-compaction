@@ -8,6 +8,8 @@
   kept and no summary runs. What 0007 decided for every other hand-over
   stands, and so does
   [0015](0015-a-compact-with-nothing-to-move-and-room-left-is-not-summarized.md).
+- Extended by [0034](0034-a-conversation-near-what-claude-code-hands-over-is-cut.md):
+  a conversation is cut for its length as well.
 
 ## Context
 

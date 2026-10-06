@@ -478,13 +478,15 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   assert.ok(
     handler.includes(
       'const step = nextStep({\n        trigger: e.trigger,\n        instructions: e.instructions,\n        outcome: tried.outcome,\n        inUse: tried.inUse,\n' +
-        '        given: tried.given,\n        maxAfterPercent: tried.maxAfterPercent,\n        count: tried.count,\n        keepTokens: tried.keepTokens,\n      });',
+        '        given: tried.given,\n        maxAfterPercent: tried.maxAfterPercent,\n        count: tried.count,\n        keepTokens: tried.keepTokens,\n        entries: tried.entries,\n      });',
     ),
   );
   // Handed back only where the step says so: as rebuilt, or cut. A part that could not be written goes on to the hand-over the step names.
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
   assert.ok(carrying.includes("case 'back':\n      say($, step.line);\n      return { messages: outcome.messages };"), 'the rebuilt messages, no handle');
-  assert.ok(carrying.includes('const cut = await cutKeeping($, tried, step.after, step.at, step.over);'), 'cut where the step says');
+  assert.ok(carrying.includes('const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);'), 'cut where the step says, its length named where it was cut for it (ADR 0034)');
+  // What Claude Code handed over is counted before anything is rebuilt: the larger of the messages and the conversation as sent.
+  assert.ok(hooks.includes('entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),'), 'the entries, as Claude Code handed them over');
   assert.ok(carrying.includes('return cut ?? carryOut($, e, next, tried, step.otherwise);'), 'or, when nothing could be cut, what the step says instead');
   // What is cut is what the compaction rebuilt, never the messages the hook was handed, which carry Claude Code's handles.
   const keeping = hooks.slice(hooks.indexOf('async function cutKeeping('), hooks.indexOf('async function carryOut('));
@@ -502,7 +504,7 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   // What `find` says of itself speaks of parts kept either way, and its sentences stand apart as they did.
   assert.ok(hooks.includes("moved out of this conversation and the parts of it that were ` +\n          'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about;"));
   // The line names the messages kept by their place in the conversation: from behind what stays in front, up to the cut.
-  assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over }));'));
+  assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));'));
 });
 
 test('a /compact left undone is decided in src/: by who asked, with what, what Claude Code says is in use, and what could have left (ADR 0015)', () => {
@@ -529,6 +531,9 @@ test('a /compact left undone is decided in src/: by who asked, with what, what C
   const kept = handler.indexOf("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);");
   const abortedAgain = handler.indexOf(abort, aborted + 1);
   assert.ok(kept > 0 && abortedAgain > kept && abortedAgain < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'and right after what was attached is kept');
+  // A `/compact` by hand that would have been left undone, cut for its length, is left undone where what was attached cannot be kept (ADR 0034).
+  const undone = handler.indexOf("if ('why' in ready && step.step === 'cut' && step.otherwise.step === 'skip') {\n        say($, `not cut for its length: ${ready.why}`);\n        result = { skip: step.otherwise.why };");
+  assert.ok(undone > abortedAgain && undone < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'before what was attached sends it to the summary');
   assert.equal(carrying.match(/return \{ skip: /g)?.length, 1);
 });
 

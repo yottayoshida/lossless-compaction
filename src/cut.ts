@@ -6,7 +6,7 @@
 import { MAX_PATH_CHARS, NAMED, changedLines, readChangedLine } from './changed.ts';
 import { mayStay, reportLine, tokensOf, type Count, type Report } from './compact.ts';
 import { PART_BYTES, keepConversation, messageText } from './keep.ts';
-import { HOST_TEXT } from './select.ts';
+import { HOST_SHOWS, HOST_TEXT } from './select.ts';
 import { PLUGIN, bytesOf, partTicketText, type NotMoved, type StoreDirs } from './store.ts';
 import type { Files, Message } from './types.ts';
 
@@ -30,16 +30,40 @@ export type Asked = {
   keepTokens: number;
   /** What `/compact` was given to summarize by. */
   instructions: string | undefined;
+  /**
+   * How many entries Claude Code handed over: the larger of the messages the hook was given and the conversation as it
+   * is sent, counted before anything was rebuilt. A conversation of CUT_AT or more is cut for its length (ADR 0034).
+   */
+  entries?: number | undefined;
+  /**
+   * False where the compaction comes here for the conversation's length alone: moving results out was enough, or a
+   * `/compact` by hand would be left undone. No cut by size is then looked for.
+   */
+  bySize?: boolean;
 };
+
+/**
+ * Claude Code hands a plugin the newest HOST_SHOWS entries of a conversation, and one that reaches them is left to its
+ * summary with what is older not kept (src/select.ts). Under the plugin no summary starts the count over, so it grows
+ * from one compaction to the next by about what one window holds, since what is in use goes down and the messages stay:
+ * one that holds CUT_AT entries is cut down to CUT_TO messages, whatever its size, so that what is not cut and what a
+ * window adds to it stay short of HOST_SHOWS (ADR 0034). Measured on one machine, a conversation gathered up to 2,045
+ * entries from an empty start to its next compaction.
+ */
+export const CUT_AT = (HOST_SHOWS * 3) / 8;
+export const CUT_TO = HOST_SHOWS / 4;
+
+/** Whether a conversation is cut for its length: CUT_AT entries handed over or more, and more than CUT_TO messages rebuilt. */
+export const isLong = (entries: number | undefined, messages: number): boolean => (entries ?? 0) >= CUT_AT && messages > CUT_TO;
 
 export type Decision =
   /**
    * Hand the conversation back with the messages from `after` up to `at` kept in parts: `after` is
    * 1 where the first message stays in front of them, else 0. With `at` 0 nothing is cut, and it is
    * handed back as it was rebuilt. `over` when it is still over what may stay and a summary would
-   * not change that.
+   * not change that. `length` when it is cut as far as it is for its length, not its size.
    */
-  | { hand: 'back'; after: 0 | 1; at: number; tokensAfter: number; over: boolean }
+  | { hand: 'back'; after: 0 | 1; at: number; tokensAfter: number; over: boolean; length?: true }
   /** Leave it to the built-in summary, the conversation kept first, as before. */
   | { hand: 'summary' };
 
@@ -91,10 +115,14 @@ export function decide(asked: Asked): Decision {
   const { messages, count } = asked;
   const line = mayStay(asked.window, asked.maxAfterPercent);
   const tooFull = asked.tokens > line;
+  const long = isLong(asked.entries, messages.length);
   // Rebuilt, it is under the line with nothing cut: the thinking is gone, and what Claude Code added. That can be
   // told only where sizes are counted from what stays. Where they are not, `tokens` is what was in use before, or
   // made up from characters, and the compaction was still asked for: it is cut down to `cutTo` all the same.
-  if (!tooFull && count !== undefined) return { hand: 'back', after: 0, at: 0, tokensAfter: Math.round(asked.tokens), over: false };
+  const fits = !tooFull && count !== undefined;
+  const asIs: Decision = { hand: 'back', after: 0, at: 0, tokensAfter: Math.round(asked.tokens), over: false };
+  if (fits && !long) return asIs;
+  const sizeAsked = asked.bySize !== false && !fits;
 
   const sizes = messages.map((message) => tokensOf([message], count));
   const total = sizes.reduce((sum, size) => sum + size, 0);
@@ -103,34 +131,44 @@ export function decide(asked: Asked): Decision {
   const answered = new Set(messages.flatMap((message) => (message.toolResults ?? []).map((result) => result.tool_use_id)));
   const goal = Math.min(line, asked.cutTo);
 
-  /** The cut that leaves the first `after` messages in front, or null when none can be handed back. */
-  const cutAfter = (after: 0 | 1): Decision | null => {
+  /**
+   * Each message after the first `after`, as a place a cut may end in front of: what the messages cut there come to,
+   * whether a cut may fall there (where the person starts to speak, or right after results came back, with no call
+   * still waiting for its result), and what the list standing for them comes to.
+   */
+  function* placesFrom(after: 0 | 1): Generator<{ at: number; gone: number; may: boolean; list: number }> {
     // Calls whose result is further on. A call that never got one is waited for by nothing.
     const open = new Set<string>();
-    // What stays in front is not among the newest messages that `keepTokens` leaves alone.
-    let stays = total - sizes.slice(0, after).reduce((sum, size) => sum + size, 0);
     let gone = 0;
     let bytes = 0;
     // Whether a message that names changed files is among those cut: the list then names them again (`keepOldest`).
     let named = false;
-    type Place = { at: number; size: number; left: number };
-    // The cut that leaves `keepTokens`, and one past it, taken only where the first leaves the conversation over the line.
-    let found: Place | null = null;
-    let beyond: Place | null = null;
     for (let at = after + 1; at < messages.length; at += 1) {
       const before = messages[at - 1] as Message;
       gone += sizes[at - 1] as number;
-      stays -= sizes[at - 1] as number;
       bytes += bytesOf(messageText(before)) + 1;
       named ||= namesChanged(before);
       for (const use of before.toolUses) if (answered.has(use.tool_use_id)) open.add(use.tool_use_id);
       for (const result of before.toolResults ?? []) open.delete(result.tool_use_id);
-      // What stays only gets smaller from here on. Past `keepTokens`, a place is looked for only where the conversation is over the line.
-      const past = stays < asked.keepTokens;
-      if (past && !tooFull) break;
-      if (open.size > 0 || !(said(messages[at] as Message) || answers(before))) continue;
+      const may = open.size === 0 && (said(messages[at] as Message) || answers(before));
       // Two parts in a row hold more than PART_BYTES between them, so there are at most this many, and a first line.
-      const list = lineTokens * (2 + Math.floor((2 * bytes) / PART_BYTES)) + (named ? namedTokens : 0);
+      yield { at, gone, may, list: lineTokens * (2 + Math.floor((2 * bytes) / PART_BYTES)) + (named ? namedTokens : 0) };
+    }
+  }
+
+  /** The cut that leaves the first `after` messages in front, or null when none can be handed back. */
+  const cutAfter = (after: 0 | 1): Decision | null => {
+    // What stays in front is not among the newest messages that `keepTokens` leaves alone.
+    const front = sizes.slice(0, after).reduce((sum, size) => sum + size, 0);
+    type Place = { at: number; size: number; left: number };
+    // The cut that leaves `keepTokens`, and one past it, taken only where the first leaves the conversation over the line.
+    let found: Place | null = null;
+    let beyond: Place | null = null;
+    for (const { at, gone, may, list } of placesFrom(after)) {
+      // What stays only gets smaller from here on. Past `keepTokens`, a place is looked for only where the conversation is over the line.
+      const past = total - front - gone < asked.keepTokens;
+      if (past && !tooFull) break;
+      if (!may) continue;
       const here = { at, size: asked.tokens - gone + list, left: total - gone + list };
       if (past) {
         if (here.size > line) continue;
@@ -149,8 +187,34 @@ export function decide(asked: Asked): Decision {
     return beyond === null ? null : back(beyond, false);
   };
 
+  /**
+   * The nearest place a cut may fall at that hands back CUT_TO messages or fewer, those in front and the list among
+   * them: keepTokens does not hold it back, since fewer of the newest messages as they were said is better than a
+   * summary of all of them (as above). Null where none is left, as when one turn holds more than CUT_TO messages.
+   */
+  const lengthAfter = (after: 0 | 1): { at: number; size: number } | null => {
+    const least = messages.length - (CUT_TO - after - 1);
+    for (const { at, gone, may, list } of placesFrom(after)) if (at >= least && may) return { at, size: asked.tokens - gone + list };
+    return null;
+  };
+
+  /**
+   * The cut by size where one is asked for, by length where the conversation is long: the one that goes further. Too
+   * full, with no cut by size from `after`, there is none by length either: what it hands back is over the line, with
+   * the first message in front or with nothing that a cut can take (0019 decisions 4 and 8).
+   */
+  const cutAt = (after: 0 | 1): Decision | null => {
+    const bySize = sizeAsked ? cutAfter(after) : null;
+    if (sizeAsked && tooFull && bySize === null) return null;
+    const byLength = long ? lengthAfter(after) : null;
+    if (byLength === null) return bySize;
+    if (bySize !== null && bySize.hand === 'back' && bySize.at >= byLength.at) return bySize;
+    return { hand: 'back', after, at: byLength.at, tokensAfter: Math.round(byLength.size), over: byLength.size > line, length: true };
+  };
+
   const first = messages[0];
-  return (first !== undefined && said(first) ? cutAfter(1) : null) ?? cutAfter(0) ?? { hand: 'summary' };
+  // Long, fitting, and with no place to cut at: handed back as it was rebuilt, as a conversation that fits is.
+  return (first !== undefined && said(first) ? cutAt(1) : null) ?? cutAt(0) ?? (fits ? asIs : { hand: 'summary' });
 }
 
 /** A conversation with its oldest messages kept, and what it is estimated to come to. */
@@ -194,12 +258,14 @@ export async function keepOldest(
 /**
  * The line a compaction shows when no summary ran in place of one. `report` is the compaction's own, with
  * the sizes of what was handed back; `cut` names the messages kept, by their place in the conversation, and
- * is absent when the conversation fitted as it was rebuilt.
+ * is absent when the conversation fitted as it was rebuilt. `held` is how many entries Claude Code handed over, where
+ * the conversation was cut as far as it was for its length (ADR 0034).
  */
-export function cutLine(report: Report, cut: { first: number; last: number; of: number; parts: number; over: boolean } | null): string {
+export function cutLine(report: Report, cut: { first: number; last: number; of: number; parts: number; over: boolean; held?: number } | null): string {
   if (cut === null) return `no summary, nothing to cut: ${reportLine(report)}`;
+  const long = cut.held === undefined ? '' : ` for its length, ${cut.held} of the ${HOST_SHOWS} entries Claude Code hands a plugin`;
   return (
-    `no summary, messages ${cut.first}-${cut.last} of ${cut.of} kept in ${cut.parts} part${cut.parts === 1 ? '' : 's'}: ${reportLine(report)}` +
+    `no summary, messages ${cut.first}-${cut.last} of ${cut.of} kept in ${cut.parts} part${cut.parts === 1 ? '' : 's'}${long}: ${reportLine(report)}` +
     (cut.over ? '; still over what may stay in use, which a summary would not change' : '')
   );
 }

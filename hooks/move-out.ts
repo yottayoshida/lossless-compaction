@@ -441,6 +441,8 @@ type Tried = {
   asSent: readonly Message[];
   /** The message naming what Claude Code attached as it sent the messages, at the end of what is handed back (#105). */
   attached?: Message;
+  /** How many entries Claude Code handed over: the larger of the messages the hook was given and the conversation as sent (ADR 0034). */
+  entries: number;
 };
 
 /**
@@ -540,6 +542,7 @@ async function attempt(
       keepTokens: config.keepTokens,
       api,
       asSent,
+      entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),
     };
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
@@ -631,6 +634,7 @@ async function cutKeeping(
   after: number,
   at: number,
   over: boolean,
+  held?: number,
 ): Promise<SessionCompactResult | null> {
   const { outcome } = tried;
   const started = Date.now();
@@ -638,7 +642,7 @@ async function cutKeeping(
     const cut = await keepOldest(storingFilesOf($), tried.store, { messages: outcome.messages, tokens: outcome.report.tokensAfter, count: tried.count }, after, at);
     if ('failed' in cut) return null;
     const report = { ...outcome.report, charsAfter: charsOf(cut.messages), tokensAfter: cut.tokensAfter, ms: outcome.report.ms + (Date.now() - started) };
-    say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over }));
+    say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));
     return { messages: cut.messages };
   } catch {
     return null;
@@ -661,7 +665,7 @@ async function carryOut(
       say($, step.line);
       return { messages: outcome.messages };
     case 'cut': {
-      const cut = await cutKeeping($, tried, step.after, step.at, step.over);
+      const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);
       // A part could not be written: handed over as `otherwise` says, where what could not be kept is said, or skipped (ADR 0008).
       return cut ?? carryOut($, e, next, tried, step.otherwise);
     }
@@ -1000,13 +1004,19 @@ export const register: Register = (on, options) => {
         maxAfterPercent: tried.maxAfterPercent,
         count: tried.count,
         keepTokens: tried.keepTokens,
+        entries: tried.entries,
       });
       // What Claude Code attached as it sent the messages is kept wherever the conversation is rebuilt or summarized
       // (#105); a compaction left undone leaves the conversation, and what came with it, as it was.
       const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);
       // As after the attempt: keeping what was attached is written, and Claude Code may have gone on meanwhile.
       if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
-      if ('why' in ready) {
+      // A `/compact` by hand that would have been left undone, cut for its length (ADR 0034), is left undone where what
+      // was attached cannot be kept: no summary was asked for.
+      if ('why' in ready && step.step === 'cut' && step.otherwise.step === 'skip') {
+        say($, `not cut for its length: ${ready.why}`);
+        result = { skip: step.otherwise.why };
+      } else if ('why' in ready) {
         say($, `built-in compaction: ${ready.why}`);
         result = await summarizeKeeping($, e, next, ready.keep);
       } else {
