@@ -83,3 +83,7 @@ Why the plugin is built the way it is, one record a decision.
 - [0033](0033-an-entry-that-does-not-read-is-read-through-its-text.md): why
   a stored thing whose entry does not read, over a text that does, is read as
   a kept part's by the clean-up rather than stopping it.
+- [0034](0034-a-conversation-near-what-claude-code-hands-over-is-cut.md): why a
+  conversation Claude Code handed over with three eighths of the 4096
+  entries it hands a plugin is cut down to a quarter, at a compaction
+  without instructions, though its size fits.

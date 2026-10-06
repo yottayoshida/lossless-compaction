@@ -14,7 +14,7 @@
 // moved out, or of what is left when something was.
 
 import { leftUndone, reportLine, tokensOf, undoneLine, type Config, type Count, type Outcome } from './compact.ts';
-import { cutLine, decide } from './cut.ts';
+import { cutLine, decide, isLong } from './cut.ts';
 import { PLUGIN } from './store.ts';
 
 /** What the hook does before trying anything: skip the compaction, keep a subagent's and hand it to the summary, or try. */
@@ -67,7 +67,7 @@ export type Summarize = { step: 'summarize'; line: string; of: 'given' | 'rebuil
 export type Step =
   | { step: 'skip'; why: string }
   | { step: 'back'; line: string }
-  | { step: 'cut'; after: 0 | 1; at: number; over: boolean; otherwise: Summarize }
+  | { step: 'cut'; after: 0 | 1; at: number; over: boolean; otherwise: Exclude<Step, { step: 'cut' }>; held?: number }
   | Summarize;
 
 /** What a compaction came to and what it was measured with: what `nextStep` decides from. */
@@ -81,6 +81,8 @@ export type Tried = {
   maxAfterPercent: number;
   count: Count | undefined;
   keepTokens: number;
+  /** How many entries Claude Code handed over, see `Asked.entries` in src/cut.ts. */
+  entries?: number | undefined;
 };
 
 export function nextStep(tried: Tried): Step {
@@ -105,8 +107,17 @@ export function nextStep(tried: Tried): Step {
     tried.given && tried.count !== undefined && first !== undefined
       ? { fixed: Math.round(tried.count.fixedTokens), first: Math.round(tokensOf([first], tried.count)) }
       : undefined;
-  if (nothing && undone) return { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts)}` };
-  if (!nothing && outcome.enough) return { step: 'back', line: reportLine(report) };
+  // Long: a compaction without instructions is cut for its length whatever else it came to, where what was rebuilt still
+  // holds more than CUT_TO messages (`isLong`, ADR 0034). Looked at first, since moving results out leaves the messages where they were;
+  // where no cut can be made or written, the compaction goes as it would have gone.
+  const long = (tried.instructions ?? '').trim() === '' && isLong(tried.entries, outcome.messages.length);
+  const before: Exclude<Step, { step: 'cut' } | Summarize> | null =
+    nothing && undone
+      ? { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts)}` }
+      : !nothing && outcome.enough
+        ? { step: 'back', line: reportLine(report) }
+        : null;
+  if (before !== null && !long) return before;
   // Nothing could be moved out, or too much is still in use: handed over, unless src/cut.ts keeps the oldest
   // messages in place of a summary, down to the size moving results out aimed at (ADR 0019).
   const summarize: Summarize = nothing
@@ -121,10 +132,12 @@ export function nextStep(tried: Tried): Step {
     cutTo: outcome.target,
     keepTokens: tried.keepTokens,
     instructions: tried.instructions,
+    entries: tried.entries,
+    bySize: before === null,
   });
-  if (decision.hand !== 'back') return summarize;
-  if (decision.at === 0) return { step: 'back', line: cutLine(report, null) };
-  return { step: 'cut', after: decision.after, at: decision.at, over: decision.over, otherwise: summarize };
+  if (decision.hand !== 'back') return before ?? summarize;
+  if (decision.at === 0) return before ?? { step: 'back', line: cutLine(report, null) };
+  return { step: 'cut', after: decision.after, at: decision.at, over: decision.over, otherwise: before ?? summarize, ...(decision.length ? { held: tried.entries ?? 0 } : {}) };
 }
 
 /**

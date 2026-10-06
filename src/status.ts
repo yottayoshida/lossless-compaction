@@ -9,7 +9,9 @@
 // environment it is told only which key variables are there.
 
 import { choosesProvider, filled, type Provider } from './ask.ts';
+import { CUT_AT } from './cut.ts';
 import { configFrom } from './flow.ts';
+import { HOST_SHOWS } from './select.ts';
 import { ticketIds } from './lifetime.ts';
 import type { Message } from './types.ts';
 
@@ -130,6 +132,10 @@ export function statusReport(input: StatusInput): string {
   lines.push(`storeDir: ${filled(input.options['storeDir']) === undefined ? 'the default' : 'set'}; /lossless-store says where results are kept and how much, or why none can be`);
   // Told by their shape: of results, inputs, parts, folded calls and the middles of messages, each id once.
   const held = ticketIds(input.messages).size;
-  lines.push(`this conversation: ${held} ${held === 1 ? 'ticket' : 'tickets'} of what was moved out`);
+  // How near the conversation is to what Claude Code hands a plugin: cut for its length from CUT_AT on (ADR 0034).
+  lines.push(
+    `this conversation: ${held} ${held === 1 ? 'ticket' : 'tickets'} of what was moved out, in ${input.messages.length} of the ${HOST_SHOWS} entries Claude Code hands a plugin` +
+      (input.messages.length >= CUT_AT ? '; a compaction without instructions cuts it for its length where it can' : ''),
+  );
   return lines.join('\n');
 }
