@@ -101,16 +101,47 @@ const ROLE_LINE = /^--- (?:user|assistant)$/;
 const CALL_LINE = /^\[call (\S+) (\S+)\] (.*)$/;
 const RESULT_LINE = /^\[result (\S+)(?: error)?\]$/;
 
-/** One message as it is kept: every text, input value and result as it was, between fixed lines. */
+/**
+ * Whether what follows a cut inside a line starts as a fixed line would: the piece it begins may end before the
+ * line does, so its start is all a reader may see of it. Every fixed line starts so, and nothing does with any
+ * character in front of it.
+ */
+const STARTS_FIXED = /^(?:--- (?:user|assistant)|\[(?:call|result) )/;
+/** As much of what follows a cut as STARTS_FIXED reads. */
+const LONGEST_START = '--- assistant'.length;
+
+/**
+ * A line of what was said, handed or returned that reads as a fixed line: to a reader, or to a model, which a line
+ * ending in a carriage return or a space, or led by spaces, takes for one as well. Read past any backslashes in
+ * front, so that a line holding one more of them is the same answer: that is what makes a mark taken off give the
+ * line back as it was (docs/limits.md, #104).
+ */
+const READS_FIXED = /^[\\\s]*(?:--- (?:user|assistant)\s*$|\[(?:call|result) )/;
+
+/** Text from outside a part's fixed lines, each line of it that reads as one marked with a backslash in front. */
+function marked(text: string): string {
+  // Every line that reads as a fixed line holds one of these; nearly no text does, and it is left whole.
+  if (!text.includes('--- ') && !text.includes('[call ') && !text.includes('[result ')) return text;
+  return text
+    .split('\n')
+    .map((line) => (READS_FIXED.test(line) ? `\\${line}` : line))
+    .join('\n');
+}
+
+/**
+ * One message as it is kept: every text, input value and result as it was, between fixed lines; a line of them that
+ * reads as a fixed line has a backslash in front, so that the fixed lines are the plugin's alone (#104).
+ */
 export function messageText(message: Message): string {
   const lines = [roleLine(message.role)];
-  if (message.text !== '') lines.push(message.text);
+  if (message.text !== '') lines.push(marked(message.text));
   for (const use of message.toolUses) {
     lines.push(callLine(use));
-    for (const [name, value] of Object.entries(use.input)) lines.push(`${name}:`, valueText(value));
+    // A value JSON has no text for (undefined) is written as nothing, as it was before values were marked.
+    for (const [name, value] of Object.entries(use.input)) lines.push(marked(`${name}:`), marked(valueText(value) ?? ''));
   }
   for (const result of message.toolResults ?? []) {
-    lines.push(resultLine(result), result.text);
+    lines.push(resultLine(result), marked(result.text));
   }
   return lines.join('\n');
 }
@@ -145,7 +176,11 @@ function utf8Bytes(character: string): number {
   return point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
 }
 
-/** Cuts `text` into pieces of at most `limit` bytes, at a line where it can and never inside a character. */
+/**
+ * Cuts `text` into pieces of at most `limit` bytes, at a line where it can and never inside a character. Where a
+ * line is cut, what follows the cut never starts as a fixed line does, which a piece that begins a part would show
+ * (#104): the cut goes one character earlier, and a fixed line with any character in front of it is none.
+ */
 export function cut(text: string, limit: number): string[] {
   const pieces: string[] = [];
   let piece = '';
@@ -170,11 +205,26 @@ export function cut(text: string, limit: number): string[] {
       size = bytes;
       return;
     }
-    for (const character of withBreak) {
+    // The last character of the piece, so that a cut can go back by one without halving a pair.
+    let last = '';
+    for (let at = 0; at < withBreak.length; ) {
+      const character = String.fromCodePoint(withBreak.codePointAt(at) ?? 0);
       const b = utf8Bytes(character);
-      if (size + b > limit) flush();
+      if (size + b > limit) {
+        let carried = '';
+        // A limit too small to take the two characters is no part's: there the cut stays where it was.
+        if (last !== '' && utf8Bytes(last) + b <= limit && STARTS_FIXED.test(line.slice(at, at + LONGEST_START))) {
+          piece = piece.slice(0, -last.length);
+          carried = last;
+        }
+        flush();
+        piece = carried;
+        size = bytesOf(carried);
+      }
       piece += character;
       size += b;
+      last = character;
+      at += character.length;
     }
   });
   flush();
