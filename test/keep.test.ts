@@ -582,3 +582,40 @@ test('keeping a conversation of 4096 messages and six million characters takes n
   const large = Math.min(await time(whole), await time(whole));
   assert.ok(large < small * 6, `${Math.round(large)} ms for 4096 messages, ${Math.round(small)} ms for 1024`);
 });
+
+test('a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed, an entry of another shape (#114)', async () => {
+  const files = new MemoryFiles();
+  const ids: string[] = [];
+  for (const seed of ['a', 'b', 'c', 'd']) {
+    const text = await kept(files, conversation([{ tool: 'Bash', input: { command: seed }, text: output(seed, 40) }]));
+    ids.push(readPartTicket(partLines(text)[0] ?? '')?.id as string);
+  }
+  const [missing, changed, shapeless, sound] = ids as [string, string, string, string];
+  files.files.delete(`${DIR}/blobs/${missing}.txt`);
+  files.files.set(`${DIR}/blobs/${changed}.txt`, 'not what was stored');
+  files.files.set(`${DIR}/index/${shapeless}.json`, '{}');
+  const named = await namedThroughParts(files, [DIR], new Set(ids));
+  assert.ok('stop' in named);
+  assert.equal(named.kind, 'part');
+  const byId = (x: { id: string }, y: { id: string }) => x.id.localeCompare(y.id);
+  assert.deepEqual(
+    [...(named.unread ?? [])].sort(byId),
+    [
+      { id: missing, why: 'text-missing' },
+      { id: changed, why: 'text-changed' },
+      { id: shapeless, why: 'entry' },
+    ].sort(byId),
+  );
+  assert.match(named.stop, /^3 stored things it follows could not be read or put back, [0-9a-f]{64} among them; \/lossless-store says how to go on$/);
+  // One alone is named in the line.
+  const only = await namedThroughParts(files, [DIR], new Set([changed]));
+  assert.ok('stop' in only);
+  assert.equal(only.stop, `${changed}: its text has changed on disk; /lossless-store says how to go on`);
+  // An entry of the shape every version writes, of a tool's result, is not a part and is not opened; an id with
+  // neither entry nor text is not stored here. Neither stops it, and a part that reads is followed.
+  files.files.set(`${DIR}/index/${shapeless}.json`, JSON.stringify({ bytes: 40, tool: 'Bash' }));
+  files.files.delete(`${DIR}/index/${missing}.json`);
+  const goes = await namedThroughParts(files, [DIR], new Set([missing, shapeless, sound]));
+  assert.ok(!('stop' in goes));
+  assert.ok(goes.size > 3, 'what the sound part names is counted');
+});

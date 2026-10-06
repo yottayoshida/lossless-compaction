@@ -440,14 +440,15 @@ test('where what is named cannot be put back from the trash, the collection is s
   // A mv that moves nothing: the part named stays in the trash, and nothing may be collected against what it would have named.
   const stuck = await putBackNamed(files, list(files), commands(files, { mvExit: 1 }).exec, [DIR], new Set([outer]));
   assert.deepEqual(stuck, new Set([result, inner, outer]));
-  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), stuck as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  const trashSaid = (id: string) => ({ stop: `${id}: it is named and could not be put back from the trash; /lossless-store says how to go on`, kind: 'move', unread: [{ id, why: 'in-trash' }] });
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), stuck as Set<string>), trashSaid(outer));
   // The part named comes back and the part it names does not: stopped at the inner one, which only the outer names.
   const moved = commands(files).exec;
   const onlyOuter: Exec = async (argv, timeoutMs) => (argv.some((arg) => arg.includes(inner) || arg.includes(result as string)) ? { exitCode: 1, stdout: '', truncated: false } : moved(argv, timeoutMs));
   const half = await putBackNamed(files, list(files), onlyOuter, [DIR], new Set([outer]));
   assert.deepEqual(half, new Set([result, inner]));
   assert.ok(files.files.has(`${DIR}/index/${outer}.json`));
-  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), half as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), half as Set<string>), trashSaid(inner));
   // A trash that cannot be listed stops it too.
   const unlisted = async (path: string) => {
     if (path.includes('/trash/')) throw new Error('EACCES');

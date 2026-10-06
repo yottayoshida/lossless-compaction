@@ -9,8 +9,10 @@
 import { inputLine } from './ask.ts';
 import { changedLines } from './changed.ts';
 import type { Attached } from './attached.ts';
-import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, recall, type NotMoved } from './store.ts';
-import type { Stop } from './lifetime.ts';
+import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, idOf, isPart, moveOut, partTicketText, readTicket, type NotMoved } from './store.ts';
+import { look } from './blobs.ts';
+import { blobPath, entryPath } from './layout.ts';
+import { UNREAD_MAX, type Stop, type Unread } from './lifetime.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
 /**
@@ -388,22 +390,69 @@ const ID = /[0-9a-f]{64}/g;
 export async function namedThroughParts(files: Files, dirs: readonly string[], live: ReadonlySet<string>, inTrash: ReadonlySet<string> = new Set()): Promise<Set<string> | Stop> {
   const named = new Set(live);
   const queue = [...live];
+  // Each one that cannot be followed is kept, and the rest are still followed: one try names all of them (#114).
+  const unread: Unread[] = [];
   for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
     // Named, in the trash and not in place: it may be a part, and with its entry there it cannot be told. What it
     // names would go uncounted, so nothing is collected until it is back.
-    if (inTrash.has(id) && !(await holds(files, dirs, id))) return { stop: 'what is named could not be put back from the trash', kind: 'move' };
+    if (inTrash.has(id) && !(await holds(files, dirs, id))) {
+      unread.push({ id, why: 'in-trash' });
+      continue;
+    }
     const part = await isPart(files, dirs, id);
-    if (part === null) return { stop: `the entry of ${id} could not be read`, kind: 'part' };
+    if (part === null) {
+      unread.push({ id, why: 'entry' });
+      continue;
+    }
     if (!part) continue;
-    const got = await recall(files, dirs, id);
-    if ('error' in got) return { stop: `a kept part, ${id}, could not be read: ${got.error}`, kind: 'part' };
-    for (const inner of got.text.match(ID) ?? []) {
+    const text = await storedText(files, dirs, id);
+    if (!text.ok) {
+      unread.push({ id, why: text.why });
+      continue;
+    }
+    for (const inner of text.text.match(ID) ?? []) {
       if (named.has(inner)) continue;
       named.add(inner);
       queue.push(inner);
     }
   }
-  return named;
+  return unread.length === 0 ? named : unreadStop(unread);
+}
+
+/** What makes a stored thing's text not to be followed, as a stop names it. */
+const UNREAD_SAID: Record<Unread['why'], string> = {
+  entry: 'its entry could not be read',
+  'text-missing': 'its text is not there',
+  'text-changed': 'its text has changed on disk',
+  'text-unreadable': 'its text could not be read',
+  'in-trash': 'it is named and could not be put back from the trash',
+};
+
+/** The stop for what could not be followed: every one of them kept, up to `UNREAD_MAX`, the first named in the line. */
+function unreadStop(unread: readonly Unread[]): Stop {
+  const [first] = unread as [Unread];
+  const what = unread.length === 1 ? `${first.id}: ${UNREAD_SAID[first.why]}` : `${unread.length} stored things it follows could not be read or put back, ${first.id} among them`;
+  const kind = unread.some((one) => one.why !== 'in-trash') ? 'part' : 'move';
+  const more = unread.length - UNREAD_MAX;
+  return { stop: `${what}; /lossless-store says how to go on`, kind, unread: unread.slice(0, UNREAD_MAX), ...(more > 0 ? { more } : {}) };
+}
+
+/**
+ * The text stored under `id` in the first of `dirs` that holds its entry, as `recall` reads it, or why not: no text
+ * there, one that does not read, one whose hash is no longer its name.
+ */
+async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string } | { ok: false; why: Unread['why'] }> {
+  for (const dir of dirs) {
+    if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
+    let text: string;
+    try {
+      text = await files.read(blobPath(dir, id));
+    } catch {
+      return { ok: false, why: 'text-unreadable' };
+    }
+    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };
+  }
+  return { ok: false, why: 'text-missing' };
 }
 
 /** What to keep before a summary, or why nothing can be. */

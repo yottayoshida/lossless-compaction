@@ -21,6 +21,7 @@ was.
 
 - `a result that does not read back as it was written stays in the conversation`
 - `a result that cannot be stored stays in the conversation and is counted`
+- `an entry that does not read back as it was written is not relied on, and the result stays where it is: no ticket for what recall cannot find (I1)`
 - `a value that cannot be stored stays in its call, as it was, and is counted`
 - `the second round of a /compact by hand tries no middle the first tried: one that could not be written is counted once`
 - `a run that cannot be stored stays where it stood, and is counted`
@@ -62,13 +63,17 @@ cannot be put back; a conversation the plugin compacted with tickets that is
 still there under its session id, whose own transcript does not hold the
 newest ticket noted for it (ADR 0027): each stops the clean-up before
 anything moves to the trash or is removed. A noted ticket whose conversation
-is no longer there lets go of it.
+is no longer there lets go of it. A stop by what it follows — a kept part, or something named
+in the trash — names every one it reaches in that try, with why, and
+`/lossless-store` says how the clean-up goes on for each (#114).
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
 - `a project directory that is a link stops it all: a search does not follow it`
 - `with every recorded place gone, nothing is collected: an empty set would name nothing in use`
 - `a collection stops when a kept part it is to follow cannot be read`
+- `a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed, an entry of another shape (#114)`
+- `a stop by what the clean-up follows is recorded with each id and why, read back as such, and /lossless-store says how to go on for each (#114)`
 - `where what is named cannot be put back from the trash, the collection is stopped before it counts what is named`
 - `a clean-up stops where a conversation compacted with tickets is still there and the search does not find the ticket noted for it: renamed, compressed, spelled otherwise, or moved inside its directory (ADR 0027)`
 - `with a witness noted, a transcript renamed keeps every result; with the conversation gone, the clean-up goes on as before (ADR 0027)`

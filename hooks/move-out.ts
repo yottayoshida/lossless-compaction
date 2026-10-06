@@ -46,6 +46,7 @@ import {
   type GcRecord,
   type List,
   type StopKind,
+  type Unread,
 } from '../src/lifetime.ts';
 import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src/witness.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
@@ -382,7 +383,7 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     const named = await namedThroughParts(files, dirs, live.ids, inTrash);
     if ('stop' in named) {
       say($, `moved-out results are kept, not cleaned up: ${named.stop}`);
-      await stoppedAs(files, store.write, record, named.kind);
+      await stoppedAs(files, store.write, record, named.kind, named.unread, named.more);
       return;
     }
     // One try, one stop: the first, should more than one place stop.
@@ -407,9 +408,9 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
 }
 
 /** Records the kind of a stop; failing to changes nothing else (ADR 0016). */
-async function stoppedAs(files: Files, dir: string, record: GcRecord, kind: StopKind): Promise<void> {
+async function stoppedAs(files: Files, dir: string, record: GcRecord, kind: StopKind, unread: readonly Unread[] = [], more = 0): Promise<void> {
   try {
-    await noteStopped(files, dir, record, kind, Date.now());
+    await noteStopped(files, dir, record, kind, Date.now(), unread, more);
   } catch {
     // The stop was said; it is not recorded this time.
   }

@@ -660,7 +660,8 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes('const record = await noteTried(files, store.write, state, now);'));
   assert.ok(collecting.includes('await stoppedAs(files, store.write, record, live.kind);'));
-  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, named.kind);'));
+  // What stopped it, one stored thing each, is recorded with it (#114).
+  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, named.kind, named.unread, named.more);'));
   assert.ok(collecting.includes('stopped ??= done.kind;'));
   assert.ok(collecting.includes('if (stopped === null) await noteRun(files, store.write, now);\n    else await stoppedAs(files, store.write, record, stopped);'));
   assert.ok(collecting.includes("if (tried !== null) await stoppedAs(filesOf($), tried.dir, tried.record, 'unexpected');"));

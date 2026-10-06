@@ -881,6 +881,9 @@ name](#moving-from-the-old-name).
 Files are plain text under `~/.claude/lossless-compaction/`, or under
 `CLAUDE_CONFIG_DIR` when that is set. A secret in a tool result stays there
 until no conversation holds it any more, as below, or until you delete it.
+A result deleted by hand is deleted with both its files, `blobs/<id>.txt`
+and `index/<id>.json`: the entry of a kept part left without its text, while
+a conversation still names the part, stops the clean-up (#114).
 
 `/lossless-store` says how much is kept, by what it was kept from, in the
 trash and left in `tmp/`, and when the clean-up last ended and last tried,
@@ -910,10 +913,17 @@ clean-up:
 - Its answer is a command's output: Claude Code shows it as it is, and keeps
   it in the conversation as it keeps any command's output, so the model
   reads it with the next request (measured). It holds the places results
-  are read from, counts, times and the kind of the last stop. It is not a
-  tool: the agent is not offered it.
-- A clean-up that stops records only the kind of stop in `gc.json`, never
-  the words it is said in, which name directories of other repositories. A
+  are read from, counts, times and the kind of the last stop. Where kept
+  parts, or things named in the trash, stopped it, it names each by its id
+  with why and how the clean-up goes on: a text not there, removed by hand
+  or not yet written by a sync; a text changed; an entry that does not read;
+  one in the trash that could not be put back. It is not a tool: the agent
+  is not offered it.
+- A clean-up that stops records the kind of stop in `gc.json`, and the ids
+  and causes of the stored things that stopped it, every one it reaches in
+  that try, up to twenty with a count of the rest; one behind a part that
+  does not read is reached once that part is mended. Never the words it is
+  said in, which name directories of other repositories. A
   try is counted when it starts, so one a short session cut off is counted
   too; one that ends clears both.
 - It reads, and changes nothing. There is still no limit and nothing deletes

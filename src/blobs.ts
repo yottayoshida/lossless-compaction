@@ -163,8 +163,9 @@ export async function store(files: Files, dir: string, tool: string, text: strin
   const blob = await writeOnce(files, blobPath(dir, id), text, tmp, () => true);
   if (blob) return blob;
   const entry = await writeOnce(files, entryPath(dir, id), JSON.stringify({ bytes, tool }), tmp, notJson);
-  // An entry written for another tool that returned the same text differs, and that is fine.
-  if (entry && entry.reason !== 'differs') return entry;
+  // An entry written for another tool that returned the same text differs, and that is fine; one that does not read,
+  // never placed or written in place other than it was, is not.
+  if (entry && (entry.reason !== 'differs' || (await storedAs(files, [dir], id)) === null)) return entry;
   return { bytes, id };
 }
 

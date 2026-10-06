@@ -272,7 +272,9 @@ export async function isPart(files: Files, dirs: readonly string[], id: string):
     if ((await look(files, entryPath(dir, id))) !== 'file') continue;
     try {
       const entry: unknown = JSON.parse(await files.read(entryPath(dir, id)));
-      return typeof entry === 'object' && entry !== null && (entry as { tool?: unknown }).tool === PART;
+      // Every version writes `{bytes, tool}`: an entry of another shape is not read as saying "not a part" (#114).
+      const tool = typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? (entry as { tool?: unknown }).tool : undefined;
+      return typeof tool === 'string' ? tool === PART : null;
     } catch {
       return null;
     }
