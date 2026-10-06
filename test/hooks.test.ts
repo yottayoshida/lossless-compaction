@@ -611,7 +611,12 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   // What an error says may name a path: it is not shown.
   assert.ok(!handler.includes('error.message'));
   assert.ok(handler.includes('const gc = await stateIn(files, list, there);'));
-  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set) };'));
+  // The machines it is used from, read from the same places, and this machine's id (ADR 0032).
+  assert.ok(handler.includes('const readable = marks === null ? null : await readableSessions(files, list, gc.roots, marks);'));
+  // It reads this machine's id and makes none.
+  assert.ok(handler.includes('const self = markName(await machineOf($, options, false), session);'));
+  assert.ok(handler.includes('const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };'));
+  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set, machines) };'));
   // What answers it reads nothing itself: no recall, no read of a file.
   assert.ok(!/recall\(|\$\.fs\.read\(|files\.read\(/.test(handler));
 });
@@ -671,7 +676,24 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   assert.ok(collecting.includes('await stoppedAs(files, store.write, record, unseen.kind);'));
   const witnessed = collecting.indexOf('const unseen = await checkWitnesses(');
   assert.ok(witnessed > collecting.indexOf('const live = await liveIds(') && witnessed < collecting.indexOf('const inTrash = await putBackNamed('), 'looked at after the search, before the trash');
-  assert.equal(collecting.split('stoppedAs(').length - 1, 7, 'six places it stops and the declaration');
+  // Another machine's mark stops it after the try is noted and before anything of this machine's transcripts is read (ADR 0032).
+  assert.ok(collecting.includes("await stoppedAs(files, store.write, record, 'shared');"));
+  const shared = collecting.indexOf('const shared = sharedWith(marks, self, session, readable);');
+  // The marks of other names whose transcripts are read here are taken off first, from the places the clean-up reads.
+  const taken = collecting.indexOf('await takeOffMarks(remove, dirs, readMarks(marks, self, session, readable).map((mark) => mark.name));');
+  assert.ok(taken > 0 && taken < shared, 'taken off before the marks left are looked at');
+  assert.ok(collecting.includes('const readable = marks === null ? null : await readableSessions(files, list, state.roots, marks);'), "this machine's transcripts are where the sessions of the marks are looked for");
+  assert.ok(shared > collecting.indexOf('const record = await noteTried(') && shared < collecting.indexOf('await writeSentinel('), 'after the try is noted, before the sentinel');
+  // Each session marks the store, whether it collects or not, once the store is private.
+  const marked = collecting.indexOf('if (unsafe === null) await noteMachineOf($, store, options);');
+  assert.ok(marked > 0 && marked < collecting.indexOf('if (whyNotNow(state, now) !== null) return;'), 'marked before the week is looked at');
+  // And at each compaction, of the main conversation and a subagent's, once its place is recorded.
+  const attempting = hooks.slice(hooks.indexOf('async function placeOf('), hooks.indexOf('async function placeOf(') + 2500);
+  assert.ok(attempting.includes('await noteRootOf($, place, options);\n  await noteMachineOf($, place, options);'), 'at a compaction');
+  assert.ok(hooks.includes('await noteRootOf($, store, options);\n      await noteMachineOf($, store, options);'), "at a subagent's compaction");
+  // A mark is named by the session where the machine has no id.
+  assert.ok(hooks.includes('const name = markName(await machineOf($, options), session);'));
+  assert.equal(collecting.split('stoppedAs(').length - 1, 8, 'seven places it stops and the declaration');
   assert.ok(!/noteStopped\([^)]*\.stop\b/.test(collecting));
 });
 

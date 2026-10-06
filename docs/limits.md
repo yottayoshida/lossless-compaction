@@ -904,6 +904,9 @@ clean-up:
   last ended: 2026-09-21 03:40 UTC; last tried: 2026-10-03 02:40 UTC
   tried since it last ended: 2; last stopped 2026-10-03 02:42 UTC: the transcripts could not be read to the end
   next: one was tried less than a day ago
+
+machines the store is used from:
+  this one, 3f9a…: first 2026-09-30 08:12 UTC, last 2026-10-03 02:40 UTC
 ```
 
 - It counts what the host lists of the directories, with sizes and times,
@@ -1067,6 +1070,31 @@ too, so they are counted without the plugin keeping a list of its own.
   a `CLAUDE_CONFIG_DIR` that shares a `storeDir` and has not compacted since
   — is not counted. Resuming it can find a result gone. Starting a session
   and compacting once under each configuration records its place.
+- A store is not to be shared between machines: a clean-up reads this
+  machine's transcripts only. Each session marks the store, at its start and
+  at each compaction, in `machines/<name>.json`: named by its machine's id,
+  made once in `~/.local/state/lossless-compaction/machine.json`, or by the
+  session where no id can be kept there; with the ids of the machine's latest
+  three sessions. A clean-up stops before anything moves where a mark holds
+  no session whose transcript it finds in the places recorded, and is not of
+  the session at hand — another machine using the store through a synced
+  folder, a network drive, or a `storeDir` set alike — and where the marks
+  cannot be listed ([ADR 0032](adr/0032-a-store-used-from-another-machine-is-not-cleaned-up.md)).
+  `/lossless-store` lists the marks, says whose transcripts are not read
+  here, and how to go on: remove the mark of a machine that no longer uses
+  the store; the clean-up runs at its next try, a day after the last. A mark
+  of another name whose sessions' transcripts are read here is taken off at
+  the clean-up, while those transcripts last: a container made again over
+  the same transcripts, a devcontainer that keeps `~/.claude`, which has a
+  new id; a session's own mark where no id could be kept. One still in use
+  marks the store again at its next session. Where Claude Code removed those
+  transcripts before a clean-up ran here — no session for longer than its
+  `cleanupPeriodDays` — the mark stops it until removed by hand. A machine
+  that runs an earlier version, or has not started a session since this one,
+  leaves no mark: until it does, what only its transcripts name can go as
+  before. Two machines holding one id, copied with a home directory, are not
+  told apart; nor is one whose transcript of a latest session was copied
+  here, which is taken for this machine's.
 - Any 64-hex string counts, a git object id or another hash as well; that
   keeps more, never less.
 - The trash and the removal run `mkdir`, `mv` and `rm` from `/bin` or

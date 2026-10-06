@@ -77,6 +77,9 @@ Why the plugin is built the way it is, one record a decision.
 - [0031](0031-the-marketplace-points-at-a-release.md): why the marketplace
   entry names no version, and why a release points it at the release's tag
   in three steps, not at the tip of `main`.
+- [0032](0032-a-store-used-from-another-machine-is-not-cleaned-up.md): why a
+  store marked as used from another machine is not cleaned up, and why each
+  machine's id is kept outside Claude Code's directory.
 - [0033](0033-an-entry-that-does-not-read-is-read-through-its-text.md): why
   a stored thing whose entry does not read, over a text that does, is read as
   a kept part's by the clean-up rather than stopping it.

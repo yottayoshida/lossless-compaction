@@ -611,7 +611,7 @@ test('what the record of the clean-up holds is read as a count and a kind of the
   assert.equal((await stateIn(files, list(files), [DIR, OLD])).tries, 0);
   await write(OLD, { lastRun: NOW + DAY, tried: NOW + 2 * DAY, tries: 3, stopped: null });
   assert.equal((await stateIn(files, list(files), [DIR, OLD])).tries, 3, 'the same end in both: the more');
-  assert.deepEqual([...STOP_KINDS].sort(), ['move', 'part', 'place', 'too-many', 'trash', 'unexpected', 'unread']);
+  assert.deepEqual([...STOP_KINDS].sort(), ['move', 'part', 'place', 'shared', 'too-many', 'trash', 'unexpected', 'unread']);
 });
 
 test("a stop is not recorded over what another session wrote since this try started: its end, or its own try, stands", async () => {

@@ -7,6 +7,7 @@
 
 import { DATE, DAY, blobIdOf, blobsDir, entryIdOf, entryPath, indexDir, tmpDir, trashDayDir, trashDir, trashedIdOf } from './layout.ts';
 import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind, type Unread } from './lifetime.ts';
+import type { Mark } from './machine.ts';
 import { PART, PLUGIN, isOwnTool } from './store.ts';
 import type { DirEntry, Files } from './types.ts';
 
@@ -105,6 +106,7 @@ export const STOP_SAID: Record<StopKind, string> = {
   part: 'a stored thing it follows, a kept part of a conversation or what one names, could not be read',
   trash: 'the trash could not be listed, made or emptied',
   move: 'results could not be moved to or from the trash',
+  shared: 'the store is used from another machine whose transcripts this one cannot read, or the machines that use it could not be listed',
   unexpected: 'an error the clean-up does not name',
 };
 
@@ -124,7 +126,13 @@ const tallyText = (one: Tally) => `${one.count} (${sizeText(one.bytes)})`;
  * setting, so no other place is read. Claude Code puts the plugin's name in
  * front of it, so it does not.
  */
-export function storeReport(counted: readonly Counted[], gc: GcState, now: number, setByStoreDir: boolean): string {
+export function storeReport(
+  counted: readonly Counted[],
+  gc: GcState,
+  now: number,
+  setByStoreDir: boolean,
+  machines: { marks: readonly Mark[] | null; self: string | null; unread: readonly string[] | null } | null = null,
+): string {
   const lines: string[] = [`Results are kept in ${counted.length === 1 ? 'one place' : `${counted.length} places`}${setByStoreDir ? ', set by storeDir' : ''}:`];
   for (const one of counted) {
     lines.push('', one.dir);
@@ -159,8 +167,32 @@ export function storeReport(counted: readonly Counted[], gc: GcState, now: numbe
   } else {
     lines.push(`  next: ${why?.text ?? 'tried when a session starts, once the place results are kept in is made private'}`);
   }
+  if (machines !== null) lines.push('', ...machinesText(machines.marks, machines.self, machines.unread));
   lines.push('', 'Results are plain text on this machine (docs/limits.md, "The files").');
   return lines.join('\n');
+}
+
+/**
+ * The machines a store is used from, this one first, whether their transcripts are read here, and how a clean-up
+ * stopped by one whose are not goes on (ADR 0032).
+ */
+function machinesText(marks: readonly Mark[] | null, self: string | null, unread: readonly string[] | null): string[] {
+  const lines = ['machines the store is used from:'];
+  if (marks === null) return [...lines, '  their marks could not be listed'];
+  const seen = (mark: Mark) => `first ${mark.first > 0 ? timeText(mark.first) : 'not known'}, last ${mark.last > 0 ? timeText(mark.last) : 'not known'}`;
+  const own = marks.find((mark) => mark.name === self);
+  if (self !== null) lines.push(`  this one, ${self}: ${own === undefined ? 'not marked yet' : seen(own)}`);
+  const others = marks.filter((mark) => mark.name !== self).sort((a, b) => b.last - a.last);
+  for (const mark of others) {
+    const read = unread === null ? 'whether its transcripts are read here is not known' : unread.includes(mark.name) ? 'its transcripts are not read here' : 'its transcripts are read here';
+    lines.push(`  ${mark.name}: ${seen(mark)}; ${read}`);
+  }
+  if (unread !== null && unread.length > 0) {
+    lines.push(
+      '  The clean-up does not run while a machine whose transcripts are not read here marks the store. One that no longer uses it is taken off by removing machines/<its name>.json in each place results are kept in that has it; the clean-up then runs at its next try.',
+    );
+  }
+  return lines;
 }
 
 /** How long without a clean-up that ended before a session says so: two of its weeks, so that one missed is not said (ADR 0016). */

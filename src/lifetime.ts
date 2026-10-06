@@ -40,7 +40,7 @@ export type List = (path: string) => Promise<DirEntry[]>;
  * (ADR 0016). The words a stop is said in name directories of other
  * repositories, and are only shown.
  */
-export const STOP_KINDS = ['unread', 'too-many', 'place', 'part', 'trash', 'move', 'unexpected'] as const;
+export const STOP_KINDS = ['unread', 'too-many', 'place', 'part', 'trash', 'move', 'shared', 'unexpected'] as const;
 export type StopKind = (typeof STOP_KINDS)[number];
 /** Why one stored thing a clean-up follows stopped it (#114): kept with its id, so that it can be named and gone past. */
 export const UNREAD_WHYS = ['text-missing', 'text-changed', 'text-unreadable', 'in-trash'] as const;

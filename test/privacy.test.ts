@@ -91,7 +91,7 @@ test('the plugin sends only through the one call the host gives it, which only f
 
 test('every program the code runs is named in PRIVACY.md, and the code runs commands through the host in one place', () => {
   const programs = new Set(CODE.flatMap((path) => programsIn(code(path))));
-  assert.deepEqual([...programs].sort(), ['chmod', 'grep', 'mkdir', 'mv', 'rm', 'sh']);
+  assert.deepEqual([...programs].sort(), ['chmod', 'grep', 'ln', 'mkdir', 'mv', 'rm', 'sh']);
   for (const program of programs) assert.ok(named(program), `PRIVACY.md does not name ${program}, which the code runs`);
   // Every command goes through the hook's two runners; a third would run what the shapes above do not see.
   const runners = CODE.flatMap((path) => [...code(path).matchAll(/\$\.process\.run\(/g)].map(() => path));
@@ -100,9 +100,13 @@ test('every program the code runs is named in PRIVACY.md, and the code runs comm
 
 test('every place the plugin writes is named in PRIVACY.md', () => {
   const places = CODE.flatMap((path) => placesIn(code(path)));
-  assert.deepEqual([...new Set(places)].sort(), ['blobs', 'gc.json', 'index', 'roots', 'sentinel.jsonl', 'tmp', 'trash', 'witness']);
-  for (const place of places) assert.ok(named(place.includes('.') ? place : `${place}/`), `PRIVACY.md does not name ${place}`);
+  // `.local` is this machine's id, under the home directory rather than the store (ADR 0032), named in full below.
+  assert.deepEqual([...new Set(places)].sort(), ['.local', 'blobs', 'gc.json', 'index', 'machines', 'roots', 'sentinel.jsonl', 'tmp', 'trash', 'witness']);
+  for (const place of places.filter((one) => one !== '.local')) assert.ok(named(place.includes('.') ? place : `${place}/`), `PRIVACY.md does not name ${place}`);
   for (const dir of [PLUGIN, OLD_PLUGIN]) assert.ok(PRIVACY.includes(`~/.claude/${dir}/`), `PRIVACY.md does not name ~/.claude/${dir}/`);
+  const machine = /`\$\{dir\}\/(\.local\/[\w./-]+)`/.exec(code('src/machine.ts'))?.[1];
+  assert.equal(machine, '.local/state/lossless-compaction/machine.json');
+  assert.ok(PRIVACY.includes(`~/${machine}`), `PRIVACY.md does not name ~/${machine}`);
   const data = dataFilesIn(code('hooks/notice.sh'));
   assert.deepEqual([...new Set(data)].sort(), ['held', 'told']);
   for (const file of data) assert.ok(named(file), `PRIVACY.md does not name ${file}, which hooks/notice.sh writes`);

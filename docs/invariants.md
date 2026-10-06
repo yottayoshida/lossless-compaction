@@ -61,9 +61,11 @@ that is a link; every recorded place gone; a kept part that cannot be read;
 something named, by a transcript or by a part, that is in the trash and
 cannot be put back; a conversation the plugin compacted with tickets that is
 still there under its session id, whose own transcript does not hold the
-newest ticket noted for it (ADR 0027): each stops the clean-up before
-anything moves to the trash or is removed. A noted ticket whose conversation
-is no longer there lets go of it. A stop by what it follows — a kept part, or something named
+newest ticket noted for it (ADR 0027); a store marked by a session of
+another machine whose transcript this one cannot read, or whose marks
+cannot be listed (ADR 0032): each stops the clean-up before anything moves
+to the trash or is removed. A noted ticket whose conversation is no longer
+there lets go of it. A stop by what it follows — a kept part, or something named
 in the trash — names every one it reaches in that try, with why, and
 `/lossless-store` says how the clean-up goes on for each (#114). An entry
 that does not read, over a text that is the one stored under its id, does
@@ -83,6 +85,8 @@ not stop it: the text is read as a part's, which keeps more, never less
 - `with a witness noted, a transcript renamed keeps every result; with the conversation gone, the clean-up goes on as before (ADR 0027)`
 - `a conversation written otherwise from its start, or from some point on, stops the clean-up too: its newest ticket is its witness, wherever it was written (ADR 0027)`
 - `the witness of a compaction is a ticket it put in, where it put any, before what stays behind a cut; at a start the one noted stays while the conversation shows it (ADR 0027)`
+- `a mark none of whose sessions has a transcript here keeps a clean-up from running; this session's, and a container's made again over the same transcripts, do not (ADR 0032)`
+- `a machine's id is made once and read after; two sessions making it together keep one, whichever linked first (ADR 0032)`
 
 **I6. What a cut takes out is kept first, and a summary does not run on a
 refused write.** The messages a cut takes out are kept in parts before they
@@ -154,6 +158,14 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   what only they name goes to the trash; from there it comes back within the
   week, and is gone after it
   ([how long results are kept](limits.md#how-long-results-are-kept)).
+- **A machine that has not marked the store.** A session marks a store at
+  its start and at each compaction, from this version on, by its machine's id
+  or, with none, by its own. A machine that runs an earlier version, or has
+  not started a session since, leaves no mark: until it does, a clean-up on
+  another machine moves what only its transcripts name, as before. Two
+  machines that hold one id, copied with a home directory, mark the store as
+  one, and are not told apart; nor is a machine one of whose latest sessions'
+  transcripts was copied here, which is taken for this one (ADR 0032).
 - **A result written again within its first day of a new use.** The day is
   counted from the file's time, which storing the same text again does not
   change: such a result can go to the trash before a transcript names it, and
