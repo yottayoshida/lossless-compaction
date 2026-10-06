@@ -35,7 +35,18 @@ with no activity for 60 days. A patch that no longer applies to the hook file
 fails the check: make it again.
 
 What `validate` does not see is held by `npm test` (the tool name a
-`tool.call` hook matches, below). `typecheck:hooks` is not run in CI.
+`tool.call` hook matches, below).
+
+CI fails when `hooks/move-out.ts` does not type-check against the
+declarations of the Claude Code version `ci.yml` names. `npm run
+typecheck:hooks` (`test/typecheck-hooks.sh`) checks the working tree and a
+copy of it, which must pass, and a copy with each patch under
+`test/fixtures/typecheck/` applied, which must fail where Claude Code's `$` is
+handed to a shape the hook file states of it (`WithUi`, `WithFiles`, …): a
+shape Claude Code's `$` no longer satisfies fails there. A return the hook
+file states as `void` or `unknown` is not compared: whatever Claude Code
+returns satisfies it. The weekly workflow runs it with the newest Claude
+Code.
 
 To try a change, load the working tree as a plugin for one session:
 
@@ -44,8 +55,19 @@ claude --plugin-dir .
 ```
 
 `typecheck:hooks` reads `.claude-plugin/types/claude-code/index.d.ts`, which
-is not in the repository. Claude Code writes it, from the version you have,
-the first time it loads the plugin as above.
+is not in the repository: Claude Code writes it beside the plugin each time
+it loads it from a folder, as above, and names its version on the first
+line. In a fresh clone, `npm ci` and then `npm run typecheck:hooks` is
+enough. Where the file is missing or of another version than the `claude` on
+your `PATH` (or the command in `CLAUDE`), the script starts that Claude Code
+once, for at most a minute, to write it: with only `HOME` and `PATH` of your
+environment, a configuration directory of its own, none of your settings,
+and its updater and traffic other than to a model turned off, so it stops at
+"Not logged in" before any model is asked, and keeps nothing of the session.
+Settings an organization manages are read all the same; if they give Claude
+Code a key, that start sends the one-letter prompt `x`. A type check that
+fails inside `index.d.ts` itself may be a file written partway, or one your
+TypeScript cannot read: delete `.claude-plugin/types/` and run it again.
 
 Run `npm run validate` after a change to `src/` or `hooks/` as well, before CI does. When the hook
 file or anything it imports does not parse, Claude Code still lists the plugin
