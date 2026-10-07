@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { changedLine, shownAgainNote } from '../src/changed.ts';
-import { compact, mayStay, reportLine, tokensOf, type Config, type Count, type Report } from '../src/compact.ts';
-import { CUT_AT, CUT_TO, cutLine, decide, keepOldest, type Asked, type Decision } from '../src/cut.ts';
+import { compact, mayStay, noticeLine, reportLine, tokensOf, type Config, type Count, type Report } from '../src/compact.ts';
+import { CUT_AT, CUT_TO, cutLine, cutNotice, decide, keepOldest, type Asked, type Decision } from '../src/cut.ts';
 import { nextStep } from '../src/flow.ts';
 import { ticketsIn } from '../src/find.ts';
 import { KEPT, KEPT_UNSUMMARIZED, keepConversation, messageText, namedThroughParts } from '../src/keep.ts';
@@ -495,10 +495,18 @@ test('the line says no summary ran, which messages were kept and in how many par
   const report: Report = { results: 612, candidates: 30, moved: 23, inputs: 0, folded: 0, images: 0, charsBefore: 3_000_000, charsAfter: 2_400_000, tokensAfter: 483_027, counted: true, window: 967_000, notMoved: {}, writeErrors: [], ms: 140 };
   assert.equal(
     cutLine(report, { first: 2, last: 526, of: 1306, parts: 12, over: false }),
-    'no summary, messages 2-526 of 1306 kept in 12 parts: moved 23 of 612 tool results out (3000000 -> 2400000 chars, about 483027 of 967000 tokens in use) in 140 ms',
+    'no summary, messages 2-526 of 1306 kept in 12 parts: moved out 23 of 612 tool results; about 483,027 tokens in use after, of the 967,000 at which Claude Code compacts on its own; 140 ms',
   );
   assert.equal(cutLine(report, { first: 1, last: 2, of: 9, parts: 1, over: true }), `no summary, messages 1-2 of 9 kept in 1 part: ${reportLine(report)}; still over what may stay in use, which a summary would not change`);
   assert.equal(cutLine(report, null), `no summary, nothing to cut: ${reportLine(report)}`);
+  // The notice says it short, from the same report, so that it gives the line's sizes (#141).
+  assert.equal(cutNotice(report, { first: 2, last: 526, of: 1306, parts: 12, over: false }), 'no summary: messages 2-526 of 1306 kept in 12 parts · ~483k of 967k tokens, where Claude Code compacts · 140 ms');
+  assert.equal(
+    cutNotice(report, { first: 1, last: 2, of: 9, parts: 1, over: true }),
+    'no summary: messages 1-2 of 9 kept in 1 part · ~483k of 967k tokens, where Claude Code compacts · 140 ms · still over what may stay in use',
+  );
+  assert.equal(cutNotice(report, null), noticeLine(report));
+  assert.equal(cutNotice({ ...report, counted: false }, { first: 2, last: 526, of: 1306, parts: 12, over: false }), 'no summary: messages 2-526 of 1306 kept in 12 parts · 140 ms');
 });
 
 test('a part kept in place of a summary has a ticket that speaks of none, and both wordings are read', () => {
@@ -615,6 +623,10 @@ test("a cut for the conversation's length says so, with the entries Claude Code 
   );
   // A cut for its size says nothing of entries, as before.
   assert.ok(!cutLine(report, { first: 2, last: 1100, of: 3100, parts: 4, over: false }).includes('entries'));
+  assert.equal(
+    cutNotice(report, { first: 2, last: 1100, of: 3100, parts: 4, over: false, held: 3100 }),
+    'no summary: messages 2-1100 of 3100 kept in 4 parts, for its length · ~20k of 1.0M tokens, where Claude Code compacts · 12 ms',
+  );
 });
 
 test('too full as well as long, what cannot be handed back under the line by size is not handed back by length: the first message is cut too, or the summary runs (#115, ADR 0019)', () => {

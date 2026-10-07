@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { CHARS_PER_TOKEN, charsOf, compact, countFrom, leftUndone, reportLine, thinkingOf, undoneLine, weigh, weightOf, windowFrom, type Config, type Host, type Input } from '../src/compact.ts';
-import { moveOut, readInputTicket, readTicket, recall, ticketText } from '../src/store.ts';
+import { CHARS_PER_TOKEN, REASONS, charsOf, compact, countFrom, leftUndone, noticeLine, reportLine, rounded, thinkingOf, undoneLine, weigh, weightOf, windowFrom, type Config, type Host, type Input, type Report, type WindowOf } from '../src/compact.ts';
+import { moveOut, readInputTicket, readTicket, recall, ticketText, whyNotStored } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles, conversation, output, sized, type Call } from './helpers.ts';
 
@@ -350,15 +350,19 @@ test('a digit weighs as two characters and a character that is not ASCII as thre
   assert.equal(charsOf(messages), 2 + 2 + JSON.stringify({ n: 7 }).length + 7);
 });
 
-test('what a compaction measures against is where Claude Code compacts on its own, else the window', () => {
-  assert.equal(windowFrom({ window: 200_000, breakdown: { autoCompactThreshold: 68_000 } }, 1), 68_000);
-  // Auto-compaction is off, or no breakdown came back.
-  assert.equal(windowFrom({ window: 200_000, breakdown: {} }, 1), 200_000);
-  assert.equal(windowFrom({ window: 200_000 }, 1), 200_000);
+test('what a compaction measures against is where Claude Code compacts on its own, else the window, and where it came from is told apart (#141)', () => {
+  assert.deepEqual(windowFrom({ window: 200_000, breakdown: { autoCompactThreshold: 68_000 } }, 1), { size: 68_000, of: 'auto' });
+  // Off where Claude Code says so: its declarations give no size then.
+  assert.deepEqual(windowFrom({ window: 200_000, breakdown: { isAutoCompactEnabled: false } }, 1), { size: 200_000, of: 'off' });
+  // No breakdown came back, or one with no size and nothing said of automatic compaction: nothing is known of it, and
+  // the line says nothing of it.
+  assert.deepEqual(windowFrom({ window: 200_000 }, 1), { size: 200_000, of: 'window' });
+  assert.deepEqual(windowFrom({ window: 200_000, breakdown: {} }, 1), { size: 200_000, of: 'window' });
+  assert.deepEqual(windowFrom({ window: 200_000, breakdown: { isAutoCompactEnabled: true, autoCompactThreshold: 0 } }, 1), { size: 200_000, of: 'window' });
   // Nothing that can be measured against.
-  assert.equal(windowFrom({ window: 0, breakdown: { autoCompactThreshold: Number.NaN } }, 150_000), 150_000);
-  assert.equal(windowFrom({ window: '200000' }, 150_000), 150_000);
-  assert.equal(windowFrom(undefined, 150_000), 150_000);
+  assert.deepEqual(windowFrom({ window: 0, breakdown: { autoCompactThreshold: Number.NaN } }, 150_000), { size: 150_000, of: 'assumed' });
+  assert.deepEqual(windowFrom({ window: '200000' }, 150_000), { size: 150_000, of: 'assumed' });
+  assert.deepEqual(windowFrom(undefined, 150_000), { size: 150_000, of: 'assumed' });
 });
 
 test('every message comes back without a handle, every call stays, and both sides of a call hold the ticket', async () => {
@@ -564,8 +568,15 @@ test('the line names a size of the context only when it was counted from what st
   const { count: _count, ...input } = withThinking(10_000, 30_000, 68_000);
   const guessed = await compact(input, CONFIG, hostWith(new MemoryFiles()).host);
 
-  assert.match(reportLine(counted.report), new RegExp(`chars, about ${counted.report.tokensAfter} of 68000 tokens in use\\) in `));
-  assert.match(reportLine(guessed.report), /^moved 11 of 12 tool results out \(\d+ -> \d+ chars\) in \d+ ms$/);
+  // Counted: in tokens, before as Claude Code gave it and after as counted, and no characters (#141).
+  const fig = (n: number | undefined) => (n ?? NaN).toLocaleString('en-US');
+  assert.equal(counted.report.tokensBefore, withThinking(10_000, 30_000, 68_000).tokens);
+  assert.match(
+    reportLine(counted.report),
+    new RegExp(`^moved out 11 of 12 tool results; about ${fig(counted.report.tokensBefore)} tokens in use before, about ${fig(counted.report.tokensAfter)} after, of the 68,000 at which Claude Code compacts on its own; \\d+ ms$`),
+  );
+  assert.equal(guessed.report.tokensBefore, undefined);
+  assert.match(reportLine(guessed.report), /^moved out 11 of 12 tool results; the conversation from [\d,]+ to [\d,]+ characters; \d+ ms$/);
 });
 
 /**
@@ -747,7 +758,7 @@ test('when the thinking is not one to count with, the size is not counted and th
   const { report } = await compact(input, CONFIG, hostWith(new MemoryFiles()).host);
 
   assert.equal(report.counted, false);
-  assert.match(reportLine(report), /^moved \d+ of 12 tool results out \(\d+ -> \d+ chars\) in \d+ ms$/);
+  assert.match(reportLine(report), /^moved out \d+ of 12 tool results; the conversation from [\d,]+ to [\d,]+ characters; \d+ ms$/);
 });
 
 test('a conversation that is mostly tickets already is counted at what it comes to when compacted again (#37)', async () => {
@@ -800,10 +811,90 @@ test('a /compact run by hand with nothing to move out and room left is left undo
 test('the line a /compact left undone shows names what is in use only when Claude Code gave the figure (ADR 0015)', () => {
   assert.equal(
     undoneLine(28_546, 167_000),
-    "nothing to move out, 28546 of 167000 tokens in use: the conversation is left as it is. /compact with instructions runs Claude Code's summary",
+    "nothing to move out, 28,546 tokens in use, of the 167,000 at which Claude Code compacts on its own: the conversation is left as it is. /compact with instructions runs Claude Code's summary",
+  );
+  assert.equal(
+    undoneLine(28_546, 1_000_000, { fixed: 4_607, first: 49 }, 'off'),
+    "nothing to move out, 28,546 tokens in use, of the model's 1,000,000-token window (automatic compaction is off): the conversation is left as it is; of what is in use, 4,607 are sent with every request (the system prompt, tools, memory and the like), 49 the first message and 23,890 the rest. /compact with instructions runs Claude Code's summary",
   );
   // Made up from characters, a figure holds no system prompt and no tools: none is shown.
   assert.equal(undoneLine(null, 167_000), "nothing to move out: the conversation is left as it is. /compact with instructions runs Claude Code's summary");
+});
+
+/** A compaction's report as the tests of its line take it: six of twenty-one results out, counted, at where Claude Code compacts. */
+const SAID: Report = {
+  results: 21,
+  candidates: 9,
+  moved: 6,
+  inputs: 0,
+  folded: 0,
+  images: 0,
+  charsBefore: 844_544,
+  charsAfter: 548_237,
+  tokensBefore: 160_412,
+  tokensAfter: 52_357,
+  counted: true,
+  window: 167_000,
+  notMoved: {},
+  writeErrors: [],
+  ms: 61,
+};
+
+test('the line names what each of its figures counts and, in words, why any result stayed, and the notice says it short: each kind, word for word (#141)', () => {
+  const { tokensBefore: _before, ...uncounted } = SAID;
+  assert.equal(
+    reportLine(SAID),
+    'moved out 6 of 21 tool results; about 160,412 tokens in use before, about 52,357 after, of the 167,000 at which Claude Code compacts on its own; 61 ms',
+  );
+  assert.equal(noticeLine(SAID), 'moved out 6 of 21 tool results · ~52k of 167k tokens, where Claude Code compacts · 61 ms');
+  // What the size is measured against, as far as Claude Code said where it came from.
+  const of = (windowOf: WindowOf, window: number) => ({ ...SAID, window, windowOf });
+  assert.equal(
+    reportLine(of('off', 1_000_000)),
+    "moved out 6 of 21 tool results; about 160,412 tokens in use before, about 52,357 after, of the model's 1,000,000-token window (automatic compaction is off); 61 ms",
+  );
+  assert.equal(noticeLine(of('off', 1_000_000)), "moved out 6 of 21 tool results · ~52k of the model's 1.0M-token window · 61 ms");
+  assert.equal(reportLine(of('window', 1_000_000)), "moved out 6 of 21 tool results; about 160,412 tokens in use before, about 52,357 after, of the model's 1,000,000-token window; 61 ms");
+  assert.equal(
+    reportLine(of('assumed', 200_000)),
+    'moved out 6 of 21 tool results; about 160,412 tokens in use before, about 52,357 after, of an assumed 200,000-token window (Claude Code gave none); 61 ms',
+  );
+  assert.equal(noticeLine(of('assumed', 200_000)), 'moved out 6 of 21 tool results · ~52k of an assumed 200k-token window · 61 ms');
+  // Not counted: the conversation in characters alone, and the notice names no size.
+  const guessed = { ...uncounted, counted: false };
+  assert.equal(reportLine(guessed), 'moved out 6 of 21 tool results; the conversation from 844,544 to 548,237 characters; 61 ms');
+  assert.equal(noticeLine(guessed), 'moved out 6 of 21 tool results · 61 ms');
+  // Handed over as it was: what was in use, and what the plugin counts of it less the thinking, which is no size it came to.
+  assert.equal(
+    reportLine({ ...SAID, moved: 0 }, 'given'),
+    'moved out 0 of 21 tool results; about 160,412 tokens in use, about 52,357 less the thinking, images and what Claude Code attached, of the 167,000 at which Claude Code compacts on its own; 61 ms',
+  );
+  assert.equal(reportLine({ ...guessed, moved: 0 }, 'given'), 'moved out 0 of 21 tool results; 61 ms');
+  // All else a compaction moves out, the newest turns reached into, and a time of seconds.
+  const all = { ...SAID, images: 2, inputs: 2, bodies: 1, folded: 3, recent: 3, ms: 1500 };
+  assert.equal(
+    reportLine(all),
+    'moved out 6 of 21 tool results, 2 images with them and 2 tool inputs, the middle of 1 long message, 3 old tool calls folded into lists; about 160,412 tokens in use before, about 52,357 after, of the 167,000 at which Claude Code compacts on its own; 1.5 s; 3 of these from the newest turns',
+  );
+  // Results that stayed, by reason in words, with what the host said of a write that failed.
+  const stayed = { ...SAID, notMoved: { 'too-large': 1, 'write-failed': 2 }, writeErrors: ['ENOSPC'] };
+  assert.ok(reportLine(stayed).endsWith('; 61 ms; 3 left in place: 1 too large to keep (over about 4 MB), 2 could not be written (ENOSPC)'), reportLine(stayed));
+  assert.equal(noticeLine(stayed), 'moved out 6 of 21 tool results · ~52k of 167k tokens, where Claude Code compacts · 61 ms · 3 left in place, see the transcript');
+  // Rounded for a notice: no thousand thousands.
+  assert.deepEqual([950, 1_000, 52_357, 999_499, 999_600, 1_000_000, 967_000].map(rounded), ['950', '1k', '52k', '999k', '1.0M', '1.0M', '967k']);
+});
+
+test("no code of the plugin's own for why a result stayed reaches a line: every reason, alone, in words (#141)", () => {
+  const CODES = /\b(?:tool-name|too-large|symlink|not-a-file|differs|write-failed|call-differs)\b/;
+  const reasons = Object.keys(REASONS) as (keyof typeof REASONS)[];
+  assert.deepEqual(reasons.sort(), ['call-differs', 'differs', 'not-a-file', 'symlink', 'too-large', 'tool-name', 'write-failed']);
+  for (const reason of reasons) {
+    const one = { ...SAID, notMoved: { [reason]: 1 } };
+    for (const line of [reportLine(one), noticeLine(one), whyNotStored({ reason: reason === 'call-differs' ? 'differs' : reason })]) {
+      assert.doesNotMatch(line, CODES, `${reason}: ${line}`);
+    }
+    assert.ok(reportLine(one).endsWith(`; 1 left in place: 1 ${REASONS[reason]}`), reason);
+  }
 });
 
 /**
@@ -976,7 +1067,7 @@ test('when results are not enough, the long values handed to a write tool leave 
   assert.equal(report.moved, 0);
   assert.equal(report.inputs, 2);
   assert.equal(enough, true);
-  assert.match(reportLine(report), /^moved 0 of 3 tool results out and 2 tool inputs \(/);
+  assert.match(reportLine(report), /^moved out 0 of 3 tool results and 2 tool inputs; /);
   // What was handed in is not changed: the rebuilt conversation is a copy.
   assert.equal(inputValues(before).get('toolu_1')?.['content'], was.get('toolu_1')?.['content']);
   assert.ok(String(before[1]?.toolUses[0]?.input['content']).startsWith('a.ts\n'));

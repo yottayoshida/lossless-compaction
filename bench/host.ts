@@ -129,13 +129,14 @@ export function judgeSessions(sessions: readonly { label: string; stream: Stream
 /** The plugin running: recall registered, nothing told at the first message, a /compact that moved results out, and recall giving one back as it was. */
 export function judgeRunning(first: Stream, compact: Stream, recalled: Stream, id: string, original: string): Check[] {
   const told = promptHook(first);
-  const moved = compact.logs.map((line) => /moved (\d+) of (\d+) tool results out/.exec(line)).find((match) => match !== null);
+  // Read as the benchmark reads the line, in any of its forms: a pattern of its own here was blind to the worded one (#141).
+  const moved = compact.logs.map((line) => ({ line, read: readLine(line) })).find(({ read }) => read !== null && read.outcome !== 'undone' && read.outcome !== 'other');
   const call = recalled.calls.find((one) => one.name === RECALL_TOOL && one.input['id'] === id);
   const back = call === undefined ? undefined : recalled.results.get(call.id);
   return [
     { name: 'recall is registered', ok: first.tools.includes(RECALL_TOOL), detail: first.tools.filter((tool) => tool.startsWith('mcp__')).join(', ') || 'no tool of a plugin' },
     { name: 'nothing is told at the first message', ok: told !== undefined && told.stdout.trim() === '', detail: told === undefined ? 'no UserPromptSubmit hook ran' : told.stdout.trim().slice(0, 120) || 'nothing' },
-    { name: 'a /compact moves results out', ok: moved !== undefined && Number(moved[1]) > 0, detail: moved?.[0] ?? (compact.logs.join(' | ').slice(0, 160) || compact.result.slice(0, 160)) },
+    { name: 'a /compact moves results out', ok: moved !== undefined && (moved.read?.moved ?? 0) > 0, detail: moved?.line.slice(0, 160) ?? (compact.logs.join(' | ').slice(0, 160) || compact.result.slice(0, 160)) },
     {
       name: 'recall gives a result back as it was',
       ok: back !== undefined && back === original,

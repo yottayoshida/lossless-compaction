@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { reportLine, tokensOf, undoneLine, type Count, type Report } from '../src/compact.ts';
-import { CUT_AT, CUT_TO, cutLine, decide } from '../src/cut.ts';
+import { noticeLine, noticeSize, reportLine, tokensOf, undoneLine, whatOf, type Count, type Report } from '../src/compact.ts';
+import { CUT_AT, CUT_TO, cutLine, cutNotice, decide } from '../src/cut.ts';
 import { NUMBER_SETTINGS, beforeTrying, configFrom, failedLine, nextStep, settingNotes, settingOf, summaryAskedFor, type Step, type Tried } from '../src/flow.ts';
 import { PLUGIN } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
@@ -33,6 +33,29 @@ function report(over: Partial<Report> = {}): Report {
   return { results: 5, candidates: 5, moved: 0, inputs: 0, folded: 0, images: 0, charsBefore: 1000, charsAfter: 1000, tokensAfter: 20_000, counted: true, window: 100_000, notMoved: {}, writeErrors: [], ms: 12, ...over };
 }
 
+// The steps as src/flow.ts gives them, each with its line for the transcript and its notice (#141). What each line and
+// notice says, word for word, is held in test/compact.test.ts and test/cut.test.ts.
+const stepBack = (r: Report): Step => ({ step: 'back', line: reportLine(r), notice: noticeLine(r) });
+const stepBackCut = (r: Report): Step => ({ step: 'back', line: cutLine(r, null), notice: cutNotice(r, null) });
+const stepGiven = (r: Report): Step => ({
+  step: 'summarize',
+  line: `built-in compaction: nothing could be moved out: ${reportLine(r, 'given')}`,
+  notice: "nothing could be moved out: Claude Code's summary runs on the whole conversation",
+  of: 'given',
+});
+const stepTooMuch = (r: Report): Step => ({
+  step: 'summarize',
+  line: `built-in compaction on what is left, too much is still in use: ${reportLine(r)}`,
+  notice: `${whatOf(r)} · still ${noticeSize(r)} · Claude Code's summary runs on what is left`,
+  of: 'rebuilt',
+});
+const stepAsked = (r: Report): Step => ({
+  step: 'summarize',
+  line: `built-in compaction on what is left, as it was asked for with instructions: ${reportLine(r)}`,
+  notice: `${whatOf(r)} · Claude Code's summary runs on what is left, as asked with instructions`,
+  of: 'rebuilt',
+});
+
 /** A compaction in a window of 100,000 with 75 % allowed to stay, of `messages`, as `over` changes it. */
 function tried(messages: readonly Message[], over: { report?: Partial<Report>; enough?: boolean; target?: number } & Partial<Omit<Tried, 'outcome'>> = {}): Tried {
   const { report: changed, enough, target, ...rest } = over;
@@ -61,7 +84,7 @@ test('a /compact by hand with nothing to move out and room left is left undone, 
   // Counted from what stays, it says what takes the room: what every request carries, the first message, the rest (ADR 0023).
   const first = Math.round(tokensOf([WIDE[0] as Message], COUNT));
   assert.deepEqual(nextStep(tried(WIDE, asked)), { step: 'skip', why: `${PLUGIN}: ${undoneLine(30_000, 100_000, { fixed: 10_000, first })}` });
-  assert.ok(undoneLine(30_000, 100_000, { fixed: 10_000, first }).includes(`; of what is in use, 10000 are sent with every request (the system prompt, tools, memory and the like), ${first} the first message and ${30_000 - 10_000 - first} the rest.`));
+  assert.ok(undoneLine(30_000, 100_000, { fixed: 10_000, first }).includes(`; of what is in use, 10,000 are sent with every request (the system prompt, tools, memory and the like), ${first.toLocaleString('en-US')} the first message and ${(30_000 - 10_000 - first).toLocaleString('en-US')} the rest.`));
   assert.deepEqual(nextStep(tried(WIDE, { ...asked, given: false })), { step: 'skip', why: `${PLUGIN}: ${undoneLine(null, 100_000)}` });
   assert.deepEqual(nextStep(tried(WIDE, { ...asked, count: undefined })), { step: 'skip', why: `${PLUGIN}: ${undoneLine(30_000, 100_000)}` });
   // Not with instructions, not on its own, not with something that could have left, not over what may stay, not once results left.
@@ -72,22 +95,20 @@ test('a /compact by hand with nothing to move out and room left is left undone, 
 
 test('a summary asked for with instructions, by hand or by a plugin, is given on what is left though moving out made room; not one an automatic compaction is handed (ADR 0036)', () => {
   const moved = { report: { moved: 3 }, enough: true, instructions: 'keep the plan' } as const;
-  const summarized = { step: 'summarize', line: `built-in compaction on what is left, as it was asked for with instructions: ${reportLine(report({ moved: 3 }))}`, of: 'rebuilt' };
+  const summarized = stepAsked(report({ moved: 3 }));
   assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'manual' })), summarized);
   assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'plugin' })), summarized);
+  // A plugin asks with no /compact typed: the notice names the instructions, and no command (#141).
+  assert.equal('notice' in summarized ? summarized.notice : '', "moved out 3 of 5 tool results · Claude Code's summary runs on what is left, as asked with instructions");
   // A hook above this one can add instructions to every compaction: an automatic one that moving out made room in is
   // handed back as it would be without them (one still too full goes to the summary with them, as before).
-  assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'auto' })), { step: 'back', line: reportLine(report({ moved: 3 })) });
+  assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'auto' })), stepBack(report({ moved: 3 })));
   // Instructions of spaces alone are none.
   for (const instructions of ['', '  \n\t', undefined]) {
-    assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'manual', instructions })), { step: 'back', line: reportLine(report({ moved: 3 })) }, JSON.stringify(instructions));
+    assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'manual', instructions })), stepBack(report({ moved: 3 })), JSON.stringify(instructions));
   }
   // Too much still in use: said as before, whoever asked.
-  assert.deepEqual(nextStep(tried(WIDE, { ...moved, enough: false, trigger: 'manual' })), {
-    step: 'summarize',
-    line: `built-in compaction on what is left, too much is still in use: ${reportLine(report({ moved: 3 }))}`,
-    of: 'rebuilt',
-  });
+  assert.deepEqual(nextStep(tried(WIDE, { ...moved, enough: false, trigger: 'manual' })), stepTooMuch(report({ moved: 3 })));
   assert.deepEqual(
     [summaryAskedFor({ trigger: 'manual', instructions: 'x' }), summaryAskedFor({ trigger: 'plugin', instructions: 'x' }), summaryAskedFor({ trigger: 'auto', instructions: 'x' }), summaryAskedFor({ trigger: 'precompute', instructions: 'x' }), summaryAskedFor({ trigger: 'manual', instructions: ' ' })],
     [true, true, false, false, false],
@@ -96,17 +117,17 @@ test('a summary asked for with instructions, by hand or by a plugin, is given on
 
 test('results moved out and enough: handed back as rebuilt, saying what was moved', () => {
   // The common case: counted, and under the line once results left. src/cut.ts would hand it back too, said as a cut of nothing.
-  assert.deepEqual(nextStep(tried(WIDE, { report: { moved: 3 }, enough: true })), { step: 'back', line: reportLine(report({ moved: 3 })) });
+  assert.deepEqual(nextStep(tried(WIDE, { report: { moved: 3 }, enough: true })), stepBack(report({ moved: 3 })));
   // Nothing moved is never handed back as a compaction that moved results out: src/cut.ts decides it, as one too full would be.
-  assert.deepEqual(nextStep(tried(WIDE, { enough: true })), { step: 'back', line: cutLine(report(), null) });
+  assert.deepEqual(nextStep(tried(WIDE, { enough: true })), stepBackCut(report()));
 });
 
 test('with instructions the built-in summary runs: of the conversation as handed in when nothing was moved out, of what is left when something was', () => {
   const instructions = 'keep the plan';
   const given = nextStep(tried(WIDE, { instructions }));
-  assert.deepEqual(given, { step: 'summarize', line: `built-in compaction: nothing could be moved out (${reportLine(report())})`, of: 'given' });
+  assert.deepEqual(given, stepGiven(report()));
   const rebuilt = nextStep(tried(WIDE, { instructions, report: { moved: 3 } }));
-  assert.deepEqual(rebuilt, { step: 'summarize', line: `built-in compaction on what is left, too much is still in use: ${reportLine(report({ moved: 3 }))}`, of: 'rebuilt' });
+  assert.deepEqual(rebuilt, stepTooMuch(report({ moved: 3 })));
 });
 
 test('without instructions the oldest messages are cut where src/cut.ts says, and a part that cannot be written falls back to the summary as it would have run (ADR 0019)', () => {
@@ -116,16 +137,16 @@ test('without instructions the oldest messages are cut where src/cut.ts says, an
     after: 1,
     at: 8,
     over: false,
-    otherwise: { step: 'summarize', line: `built-in compaction: nothing could be moved out (${reportLine(report({ tokensAfter: WIDE_TOKENS }))})`, of: 'given' },
+    otherwise: stepGiven(report({ tokensAfter: WIDE_TOKENS })),
   });
   const some = nextStep(tried(WIDE, { report: { moved: 3, tokensAfter: WIDE_TOKENS } })) as Extract<Step, { step: 'cut' }>;
   assert.equal(some.step, 'cut');
-  assert.deepEqual(some.otherwise, { step: 'summarize', line: `built-in compaction on what is left, too much is still in use: ${reportLine(report({ moved: 3, tokensAfter: WIDE_TOKENS }))}`, of: 'rebuilt' });
+  assert.deepEqual(some.otherwise, stepTooMuch(report({ moved: 3, tokensAfter: WIDE_TOKENS })));
 });
 
 test('under the line once rebuilt, counted from what stays: handed back with nothing cut, said as a cut of nothing', () => {
   const step = nextStep(tried(SMALL, { report: { moved: 3, tokensAfter: 20_000 } }));
-  assert.deepEqual(step, { step: 'back', line: cutLine(report({ moved: 3, tokensAfter: 20_000 }), null) });
+  assert.deepEqual(step, stepBackCut(report({ moved: 3, tokensAfter: 20_000 })));
 });
 
 // Without a count, src/cut.ts cuts down to the size it is given whatever is in use (test/cut.test.ts): the steps
@@ -134,7 +155,7 @@ test('under the line once rebuilt, counted from what stays: handed back with not
 test('a compaction that moved results out and did enough is handed back without asking src/cut.ts, which would have cut it', () => {
   const enough = tried(WIDE, { report: { moved: 3, tokensAfter: WIDE_TOKENS }, enough: true, count: undefined });
   assert.equal(nextStep({ ...enough, outcome: { ...enough.outcome, enough: false } }).step, 'cut', 'not enough, the same conversation is cut');
-  assert.deepEqual(nextStep(enough), { step: 'back', line: reportLine(report({ moved: 3, tokensAfter: WIDE_TOKENS })) });
+  assert.deepEqual(nextStep(enough), stepBack(report({ moved: 3, tokensAfter: WIDE_TOKENS })));
 });
 
 test('a /compact left undone is decided before src/cut.ts is asked: where it would hand over, and where it would cut (ADR 0015)', () => {
@@ -217,7 +238,7 @@ test('a number setting not used as it was set is said, in one line each; one use
 
 test('long inputs moved out are something moved out: handed back when enough, and never a /compact left undone (ADR 0020)', () => {
   // Only inputs left, and enough: handed back as rebuilt, saying so.
-  assert.deepEqual(nextStep(tried(WIDE, { report: { moved: 0, inputs: 2 }, enough: true })), { step: 'back', line: reportLine(report({ inputs: 2 })) });
+  assert.deepEqual(nextStep(tried(WIDE, { report: { moved: 0, inputs: 2 }, enough: true })), stepBack(report({ inputs: 2 })));
   // By hand, with room and no result that could leave: still not left undone, since inputs did leave.
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, inputs: 1 }, enough: true } as const;
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
@@ -226,7 +247,7 @@ test('long inputs moved out are something moved out: handed back when enough, an
 });
 
 test('old calls folded are something moved out: handed back when enough, and never a /compact left undone (ADR 0022)', () => {
-  assert.deepEqual(nextStep(tried(WIDE, { report: { folded: 4 }, enough: true })), { step: 'back', line: reportLine(report({ folded: 4 })) });
+  assert.deepEqual(nextStep(tried(WIDE, { report: { folded: 4 }, enough: true })), stepBack(report({ folded: 4 })));
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, inputs: 0, folded: 2 }, enough: true } as const;
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
   assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, inputs: 0, folded: 0 }, enough: false })).step, 'skip');
@@ -236,13 +257,13 @@ test('a /compact by hand with room, where what could have left could not be writ
   const asked: Parameters<typeof tried>[1] = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, notMoved: { 'write-failed': 2 }, writeErrors: ['ENOSPC'] } };
   const step = nextStep(tried(WIDE, asked));
   assert.notEqual(step.step, 'skip');
-  assert.ok('line' in step && step.line.includes('could not write: ENOSPC'), JSON.stringify(step));
+  assert.ok('line' in step && step.line.includes('could not be written (ENOSPC)'), JSON.stringify(step));
   // A result whose call holds another text is not one that could not be written: that one is still left undone.
   assert.equal(nextStep(tried(WIDE, { ...asked, report: { moved: 0, candidates: 0, notMoved: { 'call-differs': 1 } } })).step, 'skip');
 });
 
 test('middles of long messages moved out are something moved out: handed back when enough, and never a /compact left undone (ADR 0024)', () => {
-  assert.deepEqual(nextStep(tried(WIDE, { report: { bodies: 1 }, enough: true })), { step: 'back', line: reportLine(report({ bodies: 1 })) });
+  assert.deepEqual(nextStep(tried(WIDE, { report: { bodies: 1 }, enough: true })), stepBack(report({ bodies: 1 })));
   const asked = { trigger: 'manual', inUse: 30_000, report: { moved: 0, candidates: 0, bodies: 1 }, enough: true } as const;
   assert.equal(nextStep(tried(WIDE, asked)).step, 'back');
 });
@@ -273,7 +294,7 @@ test('a conversation holding CUT_AT entries is cut where moving results out was 
   assert.equal(nextStep(tried(long, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT - 1 })).step, 'back');
   assert.equal(nextStep(tried(long, { trigger: 'manual', report: { candidates: 0, results: 0, tokensAfter: 20_000 }, inUse: 20_000, entries: CUT_AT - 1 })).step, 'skip');
   // Where the cut cannot be written, or no place to cut is left, it goes as it would have gone: handed back as rebuilt, or left undone.
-  assert.deepEqual((enough as Extract<Step, { step: 'cut' }>).otherwise, { step: 'back', line: reportLine(report({ moved: 3, tokensAfter: 20_000 })) });
+  assert.deepEqual((enough as Extract<Step, { step: 'cut' }>).otherwise, stepBack(report({ moved: 3, tokensAfter: 20_000 })));
   assert.equal((byHand as Extract<Step, { step: 'cut' }>).otherwise.step, 'skip');
   // No place to cut at, a call waiting for its result from the second message to the last: as before.
   const oneTurn: Message[] = [
@@ -282,7 +303,7 @@ test('a conversation holding CUT_AT entries is cut where moving results out was 
     ...Array.from({ length: 2_100 }, (_, at): Message => (at % 2 === 0 ? { role: 'user', text: `note ${at}`, toolUses: [] } : { role: 'assistant', text: 'ok', toolUses: [] })),
     { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'w', text: 'done', isError: false }] },
   ];
-  assert.deepEqual(nextStep(tried(oneTurn, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT })), { step: 'back', line: reportLine(report({ moved: 3, tokensAfter: 20_000 })) });
+  assert.deepEqual(nextStep(tried(oneTurn, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT })), stepBack(report({ moved: 3, tokensAfter: 20_000 })));
   // With instructions the summary that was asked for runs, as for any conversation.
   assert.equal(nextStep(tried(long, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT, instructions: 'keep the plan' })).step, 'back');
   assert.equal(nextStep(tried(long, { report: { tokensAfter: 20_000 }, entries: CUT_AT, instructions: 'keep the plan' })).step, 'summarize');

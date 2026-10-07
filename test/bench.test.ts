@@ -188,42 +188,61 @@ test('a figure a session did not give is not read as nought: the session is not 
 });
 
 test('the plugin\'s line is read in every form it has, and from the function that writes it', () => {
-  const report: Report = { results: 21, candidates: 9, moved: 6, inputs: 0, folded: 0, images: 2, charsBefore: 844544, charsAfter: 548237, tokensAfter: 52357, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 61 };
-  assert.deepEqual(readLine(`lossless-compaction: ${reportLine(report)}`), {
-    outcome: 'moved', moved: 6, results: 21, images: 2, charsBefore: 844544, charsAfter: 548237, estimate: 52357, window: 167000, ms: 61,
-  });
-  // No count of tokens when the plugin could not stand behind one, and seconds for a slow one.
-  const plain = readLine(reportLine({ ...report, images: 0, counted: false, ms: 2400 }));
-  assert.equal(plain?.estimate, undefined);
-  assert.equal(plain?.window, undefined);
-  assert.equal(plain?.ms, 2400);
+  const report: Report = { results: 21, candidates: 9, moved: 6, inputs: 0, folded: 0, images: 2, charsBefore: 844544, charsAfter: 548237, tokensBefore: 160412, tokensAfter: 52357, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 61 };
+  // Worded (#141): counted, the line gives tokens and no characters; the figures are read past their commas.
+  assert.deepEqual(readLine(`lossless-compaction: ${reportLine(report)}`), { outcome: 'moved', moved: 6, results: 21, images: 2, estimate: 52357, window: 167000, ms: 61 });
+  for (const [windowOf, window] of [['off', 1_000_000], ['window', 967_000], ['assumed', 200_000]] as const) {
+    assert.equal(readLine(reportLine({ ...report, window, windowOf }))?.window, window, windowOf);
+  }
+  // No count of tokens when the plugin could not stand behind one, and seconds for a slow one: the characters then.
+  const { tokensBefore: _before, ...uncounted } = report;
+  const plain = readLine(reportLine({ ...uncounted, images: 0, counted: false, ms: 2400 }));
+  assert.deepEqual(plain, { outcome: 'moved', moved: 6, results: 21, images: 0, charsBefore: 844544, charsAfter: 548237, ms: 2400 });
+  // What else left, the newest turns reached into and the results that stayed, after the time: read the same.
+  const all = readLine(reportLine({ ...report, inputs: 2, bodies: 1, folded: 3, recent: 3, notMoved: { 'too-large': 1 } }));
+  assert.deepEqual([all?.inputs, all?.bodies, all?.folded, all?.estimate, all?.ms], [2, 1, 3, 52357, 61]);
   assert.equal(readLine(`built-in compaction on what is left, too much is still in use: ${reportLine(report)}`)?.outcome, 'too-much');
   // Asked for with instructions after moving out made room (ADR 0036): the line src/flow.ts writes, read as summarized.
   const asked = nextStep({ trigger: 'manual', instructions: 'Summarize the conversation so far.', outcome: { messages: [], enough: true, target: 0, report }, inUse: 0, given: false, maxAfterPercent: 75, count: undefined, keepTokens: 0 });
   assert.equal(asked.step, 'summarize');
   assert.equal(readLine('line' in asked ? asked.line : '')?.outcome, 'asked');
-  assert.equal(readLine(`built-in compaction: nothing could be moved out (${reportLine({ ...report, moved: 0 })})`)?.outcome, 'nothing');
+  // Nothing moved out, handed over as it was: what the plugin counts less the thinking is its estimate, as the benchmark
+  // sets it against what was in use less the thinking.
+  const nothing = nextStep({ trigger: 'manual', instructions: 'keep the plan', outcome: { messages: [], enough: false, target: 0, report: { ...report, moved: 0 } }, inUse: 0, given: true, maxAfterPercent: 75, count: undefined, keepTokens: 0 });
+  assert.deepEqual(nothing.step === 'summarize' ? readLine(nothing.line) : null, { outcome: 'nothing', moved: 0, results: 21, images: 2, estimate: 52357, window: 167000, ms: 61 });
   assert.equal(readLine('lossless-compaction: built-in compaction: the conversation holds what a rebuilt message cannot carry: image')?.outcome, 'other');
   // A `/compact` left undone (ADR 0015): what was in use where Claude Code gave the figure, and no figure where it did not.
-  assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(28425, 167000)}`), {
-    outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, inUse: 28425, window: 167000, ms: 0,
-  });
+  const undone = { outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, inUse: 28425, window: 167000, ms: 0 };
+  assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(28425, 167000)}`), undone);
   assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(null, 167000)}`), { outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, ms: 0 });
-  // And with what takes the room named (ADR 0023): read the same.
-  assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(28425, 167000, { fixed: 12100, first: 15700 })}`), {
-    outcome: 'undone', moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, inUse: 28425, window: 167000, ms: 0,
-  });
+  // And with what takes the room named (ADR 0023), or measured against the model's window: read the same.
+  assert.deepEqual(readLine(`lossless-compaction: ${undoneLine(28425, 167000, { fixed: 12100, first: 15700 })}`), undone);
+  assert.deepEqual(readLine(undoneLine(28425, 1_000_000, { fixed: 12100, first: 15700 }, 'off')), { ...undone, window: 1_000_000 });
   assert.equal(readLine('something else'), null);
+
+  // The forms before #141, as recorded sessions and the fixtures hold them, read as they were read.
+  assert.deepEqual(readLine('lossless-compaction: moved 6 of 21 tool results out (844544 -> 548237 chars, about 52357 of 167000 tokens in use) in 61 ms'), {
+    outcome: 'moved', moved: 6, results: 21, images: 0, charsBefore: 844544, charsAfter: 548237, estimate: 52357, window: 167000, ms: 61,
+  });
+  assert.deepEqual(readLine('moved 2 of 2 tool results out, 2 images with them and 1 tool input (900 -> 300 chars) in 2.4 s; left in place: 1 too-large'), {
+    outcome: 'moved', moved: 2, results: 2, images: 2, inputs: 1, charsBefore: 900, charsAfter: 300, ms: 2400,
+  });
+  assert.deepEqual(readLine('lossless-compaction: no summary, messages 2-22 of 30 kept in 11 parts: moved 0 of 3 tool results out (609241 -> 224393 chars, about 75804 of 231000 tokens in use) in 237 ms'), {
+    outcome: 'cut', moved: 0, results: 3, images: 0, charsBefore: 609241, charsAfter: 224393, estimate: 75804, window: 231000, ms: 237, cut: { first: 2, last: 22, of: 30, parts: 11 },
+  });
+  assert.equal(readLine('built-in compaction: nothing could be moved out (moved 0 of 3 tool results out (100 -> 100 chars) in 5 ms)')?.outcome, 'nothing');
+  assert.deepEqual(readLine('lossless-compaction: nothing to move out, 28546 of 167000 tokens in use: the conversation is left as it is'), { ...undone, inUse: 28546 });
 });
 
 test('a conversation cut in place of a summary is read as one the summary did not run on, with how much was kept (ADR 0019)', () => {
   const report: Report = { results: 21, candidates: 0, moved: 0, inputs: 0, folded: 0, images: 0, charsBefore: 440000, charsAfter: 330000, tokensAfter: 118000, counted: true, window: 167000, notMoved: {}, writeErrors: [], ms: 48 };
   // From the function that writes it: the sizes are those of what was handed back.
   const cut = readLine(`lossless-compaction: ${cutLine(report, { first: 2, last: 5, of: 16, parts: 3, over: false })}`);
-  assert.deepEqual(cut, {
-    outcome: 'cut', moved: 0, results: 21, images: 0, charsBefore: 440000, charsAfter: 330000, estimate: 118000, window: 167000, ms: 48, cut: { first: 2, last: 5, of: 16, parts: 3 },
-  });
+  assert.deepEqual(cut, { outcome: 'cut', moved: 0, results: 21, images: 0, estimate: 118000, window: 167000, ms: 48, cut: { first: 2, last: 5, of: 16, parts: 3 } });
   assert.equal(readLine(cutLine(report, { first: 1, last: 2, of: 9, parts: 1, over: true }))?.outcome, 'cut', 'one part, and still over what may stay');
+  // Cut for its length (ADR 0034): a cut too, which was read as results moved out before #141.
+  const long = readLine(cutLine(report, { first: 2, last: 1100, of: 3100, parts: 4, over: false, held: 3100 }));
+  assert.deepEqual([long?.outcome, long?.cut], ['cut', { first: 2, last: 1100, of: 3100, parts: 4 }]);
   const rebuilt = readLine(`lossless-compaction: ${cutLine(report, null)}`);
   assert.equal(rebuilt?.outcome, 'rebuilt');
   assert.equal(rebuilt?.cut, undefined);

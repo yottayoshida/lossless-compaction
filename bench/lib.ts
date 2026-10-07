@@ -310,9 +310,13 @@ export type Line = {
   folded?: number;
   results: number;
   images: number;
-  charsBefore: number;
-  charsAfter: number;
-  /** The plugin's estimate of the tokens in use afterwards, and what it measured against; absent when it gave none. */
+  /** The conversation's characters before and after; absent where the line gives its size in tokens alone (#141). */
+  charsBefore?: number;
+  charsAfter?: number;
+  /**
+   * The plugin's estimate of the tokens in use afterwards, and what it measured against; absent when it gave none. Of a
+   * conversation handed over as it was, what it counts of what was in use less the thinking.
+   */
   estimate?: number;
   window?: number;
   /** Of a compaction left undone: what was in use, as Claude Code gave it; absent when it gave none. */
@@ -324,9 +328,17 @@ export type Line = {
 
 const LINE =
   /moved (?<moved>\d+) of (?<results>\d+) tool results out(?:, (?<images>\d+) images? with them)?(?: and (?<inputs>\d+) tool inputs?)?(?:, the middle of (?<bodies>\d+) long messages?)?(?:, (?<folded>\d+) old tool calls? folded into lists)? \((?<before>\d+) -> (?<after>\d+) chars(?:, about (?<estimate>\d+) of (?<window>\d+) tokens in use)?\) in (?<took>[\d.]+) (?<unit>ms|s)/;
-const UNDONE = /nothing to move out(?:, (\d+) of (\d+) tokens in use)?: the conversation is left as it is/;
+// From #141: what was moved out first, the sizes with their thousands set apart and what they are measured against in
+// words, then the time; and the reasons results stayed in words, after.
+const WORDED =
+  /moved out (?<moved>\d+) of (?<results>\d+) tool results(?:, (?<images>\d+) images? with them)?(?: and (?<inputs>\d+) tool inputs?)?(?:, the middle of (?<bodies>\d+) long messages?)?(?:, (?<folded>\d+) old tool calls? folded into lists)?(?:; (?<size>[^;]*))?; (?<took>[\d.]+) (?<unit>ms|s)(?=;|$)/;
+/** The size a worded line measures against: "of the 167,000 at which", "of the model's 1,000,000-token window", "of an assumed 200,000-token window". */
+const WINDOW = /\bof (?:the |the model's |an assumed )([\d,]+)/;
+const UNDONE = /nothing to move out(?:, (\d+) of (\d+) tokens in use|, ([\d,]+) tokens in use, of (?:the |the model's |an assumed )([\d,]+)[^:]*)?: the conversation is left as it is/;
 // No summary in place of one (ADR 0019, src/cut.ts writes the line): the oldest messages kept, or nothing to cut once rebuilt.
-const CUT = /no summary, messages (\d+)-(\d+) of (\d+) kept in (\d+) parts?: /;
+// Kept for its length (ADR 0034), the line says so before its colon.
+const CUT = /no summary, messages (\d+)-(\d+) of (\d+) kept in (\d+) parts?(?: for its length, [^:]*)?: /;
+const numberIn = (text: string | undefined): number | undefined => (text === undefined ? undefined : Number(text.replace(/,/g, '')));
 const REBUILT = 'no summary, nothing to cut: ';
 
 /** True when the built-in summary ran on what the plugin left: it handed over, for the size or for what it cannot rebuild. */
@@ -334,14 +346,18 @@ export const summarizedBy = (line: Line): boolean => line.outcome === 'too-much'
 
 /** Reads the line the plugin shows at a compaction, in any of the forms it has had since 0.5.0. */
 export function readLine(text: string): Line | null {
-  const match = LINE.exec(text);
+  const old = LINE.exec(text);
+  const worded = old ? null : WORDED.exec(text);
+  const match = old ?? worded;
   // A line that names no results moved: none, and no time of the plugin's.
   const none = { moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, ms: 0 };
   const undone = match ? null : UNDONE.exec(text);
   if (undone) {
     const line: Line = { outcome: 'undone', ...none };
-    if (undone[1] !== undefined) line.inUse = Number(undone[1]);
-    if (undone[2] !== undefined) line.window = Number(undone[2]);
+    const inUse = numberIn(undone[1] ?? undone[3]);
+    const window = numberIn(undone[2] ?? undone[4]);
+    if (inUse !== undefined) line.inUse = inUse;
+    if (window !== undefined) line.window = window;
     return line;
   }
   if (!match) return text.includes('built-in compaction:') ? { outcome: 'other', ...none } : null;
@@ -362,16 +378,23 @@ export function readLine(text: string): Line | null {
     moved: Number(got['moved']),
     results: Number(got['results']),
     images: Number(got['images'] ?? 0),
-    charsBefore: Number(got['before']),
-    charsAfter: Number(got['after']),
     ms: Number(got['took']) * (got['unit'] === 's' ? 1000 : 1),
   };
   if (cut) line.cut = { first: Number(cut[1]), last: Number(cut[2]), of: Number(cut[3]), parts: Number(cut[4]) };
   if (got['inputs'] !== undefined) line.inputs = Number(got['inputs']);
   if (got['bodies'] !== undefined) line.bodies = Number(got['bodies']);
   if (got['folded'] !== undefined) line.folded = Number(got['folded']);
-  if (got['estimate'] !== undefined) line.estimate = Number(got['estimate']);
-  if (got['window'] !== undefined) line.window = Number(got['window']);
+  // The size: in the line's own brackets up to #141, after it in words since.
+  const size = got['size'] ?? '';
+  const chars = old ? [got['before'], got['after']] : /the conversation from ([\d,]+) to ([\d,]+) characters/.exec(size)?.slice(1);
+  const estimate = old ? got['estimate'] : /\babout ([\d,]+) (?:tokens in use )?(?:after|less the thinking)\b/.exec(size)?.[1];
+  const window = old ? got['window'] : WINDOW.exec(size)?.[1];
+  if (chars?.[0] !== undefined && chars[1] !== undefined) {
+    line.charsBefore = numberIn(chars[0]) as number;
+    line.charsAfter = numberIn(chars[1]) as number;
+  }
+  if (estimate !== undefined) line.estimate = numberIn(estimate) as number;
+  if (window !== undefined) line.window = numberIn(window) as number;
   return line;
 }
 

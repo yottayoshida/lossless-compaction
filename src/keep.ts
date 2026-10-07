@@ -9,7 +9,7 @@
 import { inputLine } from './ask.ts';
 import { changedLines } from './changed.ts';
 import type { Attached } from './attached.ts';
-import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, storedText, type NotMoved } from './store.ts';
+import { ATTACHED_KEPT, PART, PLUGIN, attachedTicketText, bytesOf, holds, isPart, moveOut, partTicketText, readTicket, storedText, whyNotStored, type NotMoved } from './store.ts';
 import { UNREAD_MAX, type Stop, type Unread } from './lifetime.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
@@ -472,7 +472,7 @@ export async function keepThenSummarize<R extends { messages?: readonly unknown[
         // `say` names the plugin itself; the notice a skip shows does not.
         say(why);
         return skip(`${PLUGIN}: ${why}`);
-      } else if ('failed' in done) unkept(`a part could not be written (${done.failed})`);
+      } else if ('failed' in done) unkept(`a part could not be kept: ${whyNotStored({ reason: done.failed })}`);
       else if ('nothing' in done) unkept('there is nothing to keep');
       else kept = done;
     } catch (error) {

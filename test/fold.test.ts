@@ -77,7 +77,7 @@ test('old small calls fold into a list where they stood; what the person and Cla
   pairedAsTheApiWants(messages);
   assert.equal(report.folded, 3);
   assert.equal(enough, true);
-  assert.match(reportLine(report), /^moved 0 of 4 tool results out, 3 old tool calls folded into lists \(/);
+  assert.match(reportLine(report), /^moved out 0 of 4 tool results, 3 old tool calls folded into lists; /);
   assert.equal(readLine(`lossless-compaction: ${reportLine(report)}`)?.folded, 3);
 
   // Each list's part is this store's, and gives back the calls and what they returned, whole.
@@ -334,7 +334,7 @@ test('a /compact typed without instructions reaches into the newest calls, up to
   const dAt = messages.indexOf(d as Message);
   assert.equal(messages[dAt + 1]?.toolResults?.[0]?.text, 'd result line\n'.repeat(300));
   assert.ok(messages.some((m) => m.text === 'Now look at d.') && messages.some((m) => m.text === 'Done with those.'));
-  assert.match(reportLine(report), /in \d+ ms; 3 of these from the newest turns/);
+  assert.match(reportLine(report), /; \d+ ms; 3 of these from the newest turns/);
   assert.equal(readLine(`lossless-compaction: ${reportLine(report)}`)?.moved, 1);
 });
 

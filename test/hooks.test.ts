@@ -427,7 +427,7 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   assert.ok(carrying.includes(': summarizeKeeping($, { ...e, messages: outcome.messages }, next, { store, messages: outcome.messages });'), 'too much left: what is left');
   // The line is said before the summary runs, as it was said before a hand-over.
   const summarizing = carrying.slice(carrying.indexOf("case 'summarize':"));
-  assert.ok(summarizing.startsWith("case 'summarize':\n      say($, step.line);\n"), 'said first');
+  assert.ok(summarizing.startsWith("case 'summarize':\n      say($, step.line, step.notice);\n"), 'said first');
   // The hook chooses no step: every branch on what the compaction came to is src/flow.ts's.
   assert.ok(!/\boutcome\.(enough|report)\b/.test(handler) && !handler.includes('decide(') && !handler.includes('leftUndone('), 'nothing decided in the handler');
   assert.ok(!/\bif \(/.test(carrying), 'and nothing chosen in carrying a step out but by the step');
@@ -453,7 +453,7 @@ test('stored results are written through mv where it starts, the reason a write 
   assert.ok(hooks.includes('return { files: storingFilesOf($), now: () => Date.now() };'), 'the compaction writes through it');
   assert.ok(hooks.includes('return keepThenSummarize(storingFilesOf($), where,'), 'keeping the conversation too');
   assert.ok(hooks.includes("(why) => ({ skip: why })"), 'a skip is what the hook returns');
-  assert.ok(compaction.includes("`; could not write: ${report.writeErrors.join(', ')}`"), 'the reason is said');
+  assert.ok(compaction.includes("` (${report.writeErrors.join(', ')})`"), 'the reason is said');
   // How mv is run and what a rename checks is src/commands.ts's, run in test/commands.test.ts; the hook hands it the host's calls.
   const storing = hooks.slice(hooks.indexOf('function storingFilesOf('), hooks.indexOf('function runOf('));
   assert.ok(storing.includes('return { ...filesOf($), move: moverOf(runOf($), (path) => $.fs.stat(path)) };'));
@@ -463,13 +463,16 @@ test('stored results are written through mv where it starts, the reason a write 
 
 test("a compaction is told what is not the conversation from Claude Code's breakdown, and the line comes from src/", () => {
   assert.ok(hooks.includes('const count = countFrom(context?.breakdown, tokens, api, messages);'), 'count: the thinking from the blocks, the density over the messages the hook was handed');
-  assert.ok(hooks.includes('        tokens: inUse,\n        count,\n        window: windowFrom(context, FALLBACK_WINDOW),'), 'and the compaction is handed it');
+  // With where the size came from, which the line names (#141).
+  assert.ok(hooks.includes('const window = windowFrom(context, FALLBACK_WINDOW);'), 'the size measured against');
+  assert.ok(hooks.includes('        tokens: inUse,\n        count,\n        window: window.size,\n        windowOf: window.of,'), 'and the compaction is handed it');
   assert.ok(!hooks.includes('function summary('), 'no line of its own');
   // Every line a compaction shows is src/'s: src/flow.ts writes those of each step (test/flow.test.ts), and the line of
   // a cut is src/cut.ts's, written here only because it names how many parts were kept, which the hook learns.
   assert.ok(!hooks.includes('reportLine('), 'no line of a step is written here');
   assert.equal(hooks.split('cutLine(').length - 1, 1, 'the line of a cut that was made');
-  assert.equal(hooks.split('say($, step.line);').length - 1, 2, 'the line of a step is said as src/flow.ts wrote it: handed back, or handed over');
+  assert.equal(hooks.split('say($, step.line, step.notice);').length - 1, 2, 'the line of a step is said as src/flow.ts wrote it, with its notice: handed back, or handed over');
+  assert.ok(!hooks.includes('noticeLine(') && hooks.split('cutNotice(').length - 1 === 1, 'no notice of a step is written here either, but that of a cut that was made');
 });
 
 test('a conversation too full, or with nothing to move out, is cut in place of a summary where src/ says so, and handed over as before where it does not (ADR 0019)', () => {
@@ -484,7 +487,7 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   );
   // Handed back only where the step says so: as rebuilt, or cut. A part that could not be written goes on to the hand-over the step names.
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
-  assert.ok(carrying.includes("case 'back':\n      say($, step.line);\n      return { messages: outcome.messages };"), 'the rebuilt messages, no handle');
+  assert.ok(carrying.includes("case 'back':\n      say($, step.line, step.notice);\n      return { messages: outcome.messages };"), 'the rebuilt messages, no handle');
   assert.ok(carrying.includes('const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);'), 'cut where the step says, its length named where it was cut for it (ADR 0034)');
   // What Claude Code handed over is counted before anything is rebuilt: the larger of the messages and the conversation as sent.
   assert.ok(hooks.includes('entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),'), 'the entries, as Claude Code handed them over');
@@ -505,7 +508,9 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   // What `find` says of itself speaks of parts kept either way, and its sentences stand apart as they did.
   assert.ok(hooks.includes("moved out of this conversation and the parts of it that were ` +\n            'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about;"));
   // The line names the messages kept by their place in the conversation: from behind what stays in front, up to the cut.
-  assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));'));
+  // The line and its notice from the report of the cut as it was made, with the same messages named (#141).
+  assert.ok(keeping.includes('const made = { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) };'));
+  assert.ok(keeping.includes('say($, cutLine(report, made), cutNotice(report, made));'));
 });
 
 test('a /compact left undone is decided in src/: by who asked, with what, what Claude Code says is in use, and what could have left (ADR 0015)', () => {
@@ -1020,8 +1025,9 @@ test('what Claude Code attached as it sent the messages is kept when the convers
   const hook = await compactionHook({ keepTokens: 0 });
   const files = new MemoryFiles();
   const { handed, api } = sentWithAttached();
+  const made = mainHost(files, handed, api);
   const answer = await hook(
-    mainHost(files, handed, api).host,
+    made.host,
     { trigger: 'manual', messages: handed },
     nextOn(async () => {
       throw new Error('no summary is asked for');
@@ -1030,6 +1036,12 @@ test('what Claude Code attached as it sent the messages is kept when the convers
   const messages = answer.messages ?? [];
   const last = messages.at(-1);
   assert.ok(last !== undefined && last.text.startsWith(ATTACHED_KEPT), JSON.stringify(answer).slice(0, 300));
+  // The line in the transcript names the plugin; the notice is drawn under its name by Claude Code, and is the short
+  // form, which a notice cut at the width of the screen still shows the start of (#141).
+  assert.equal(made.logged.length, 1);
+  assert.match(made.logged[0] ?? '', new RegExp(`^${PLUGIN_NAME}: moved out \\d+ of \\d+ tool results; `));
+  assert.match(made.toasted[0] ?? '', /^moved out \d+ of \d+ tool results · \d+ ms$/);
+  assert.equal(made.toasted.length, 1);
   assert.equal(messages.filter((message) => message.text.startsWith(ATTACHED_KEPT)).length, 1, 'one, at the end');
   const kept = await partsNamed(files, last.text);
   assert.ok(kept.includes('PROBE-HOOK-WORD: walrus') && kept.includes('PROBE-POST-WORD: otter'), kept.slice(0, 300));
@@ -1133,7 +1145,7 @@ test('where what Claude Code attached cannot be written, the conversation is not
   assert.equal(answer.messages, undefined, 'no rebuilt conversation handed back');
   assert.match(answer.skip ?? '', /nothing could be kept \(could not write: ENOSPC\), so the summary did not run/);
   assert.equal(asked, 0);
-  assert.ok(logged.includes(`${PLUGIN_NAME}: built-in compaction: what Claude Code attached to the messages could not be kept (could not write: ENOSPC)`), logged.join(' | '));
+  assert.ok(logged.includes(`${PLUGIN_NAME}: built-in compaction: what Claude Code attached to the messages could not be kept: could not be written (ENOSPC)`), logged.join(' | '));
 });
 
 test("the places written to under these settings are noted in the plugin's own store and read after the current ones, with the defaults beside a storeDir of your own where the repository did not set what they are built from (#116)", () => {

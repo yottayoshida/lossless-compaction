@@ -4,7 +4,7 @@
 // summarized: what was cut comes back, as it was said, with `recall`.
 
 import { MAX_PATH_CHARS, NAMED, changedLines, readChangedLine } from './changed.ts';
-import { mayStay, reportLine, tokensOf, type Count, type Report } from './compact.ts';
+import { mayStay, noticeLine, noticeSize, reportLine, tokensOf, tookOf, type Count, type Report } from './compact.ts';
 import { PART_BYTES, keepConversation, messageText } from './keep.ts';
 import { HOST_SHOWS, HOST_TEXT } from './select.ts';
 import { PLUGIN, bytesOf, partTicketText, type NotMoved, type StoreDirs } from './store.ts';
@@ -268,4 +268,14 @@ export function cutLine(report: Report, cut: { first: number; last: number; of: 
     `no summary, messages ${cut.first}-${cut.last} of ${cut.of} kept in ${cut.parts} part${cut.parts === 1 ? '' : 's'}${long}: ${reportLine(report)}` +
     (cut.over ? '; still over what may stay in use, which a summary would not change' : '')
   );
+}
+
+/**
+ * The short form of `cutLine`, for the notice over the transcript (#141). Made from the report of the cut as it was
+ * made, as `cutLine` is: a notice made before would give another size than the line.
+ */
+export function cutNotice(report: Report, cut: { first: number; last: number; of: number; parts: number; over: boolean; held?: number } | null): string {
+  if (cut === null) return noticeLine(report);
+  const kept = `no summary: messages ${cut.first}-${cut.last} of ${cut.of} kept in ${cut.parts} part${cut.parts === 1 ? '' : 's'}${cut.held === undefined ? '' : ', for its length'}`;
+  return [kept, noticeSize(report), tookOf(report.ms), ...(cut.over ? ['still over what may stay in use'] : [])].filter((part) => part !== '').join(' · ');
 }

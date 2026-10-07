@@ -29,42 +29,78 @@ with the directory
 ([what is written and checked](limits.md#to-another-machine)).
 
 **A compaction.** A line starting `lossless-compaction:` says what each one
-did. From a real session of `Read` results, with `targetPercent` at 40:
+did, in the transcript, and a shorter one shows over it for a few seconds.
+From the host check (`npm run check:host`), a session that read six files of
+about 45 KB, at the default settings:
 
 ```text
-lossless-compaction: moved 6 of 21 tool results out (844544 -> 548237 chars, about 52357 of 167000 tokens in use) in 61 ms
+lossless-compaction: moved out 5 of 6 tool results; about 109,339 tokens in use before, about 22,360 after, of the 167,000 at which Claude Code compacts on its own; 43 ms
 ```
 
-Each result that left has a ticket in its place:
+and over it, on one line under the plugin's name, which a narrow screen cuts
+short at its end:
 
 ```text
-[moved out] Read result, 83261 bytes; recall with mcp__lossless-compaction__recall id ed8701f23087852c07ee8eb0b91b9335cc94cc8b21e42826c6b684299e8008e3
+lossless-compaction: moved out 5 of 6 tool results · ~22k of 167k tokens, where Claude Code compacts · 43 ms
+```
+
+The line names what each of its figures counts and, in words, why anything
+it could not move out stayed: no code of the plugin's own reaches it. The
+first figure is what was in use before, as Claude Code counts it, thinking
+included; the second is what the plugin counts in use after
+([ADR 0011](adr/0011-the-size-after-is-what-stays.md)). Both are of the size
+at which Claude Code compacts on its own; with automatic compaction off the
+line names the model's window instead, and where Claude Code gave neither,
+an assumed window, and says so. Where the plugin could not count the
+conversation from what Claude Code gave, it gives the conversation in
+characters instead, and no tokens. Where nothing could be moved out and
+Claude Code's summary runs on the conversation as it was, the line gives,
+where it was counted, what was in use and what the plugin counts of it less
+the thinking, images and what Claude Code attached, which no rebuilt message
+carries; where it was not, no size. What the plugin left by its settings (the newest results,
+those too short) is not named; what it could not move out is, after the
+time, by why:
+
+| The line says | What happened | What to do |
+| --- | --- | --- |
+| too large to keep (over about 4 MB) | One result is over what the store takes | Nothing: it stays as it was |
+| could not be written (ENOSPC) | The disk refused, with what the system said | Free some space, or let the place results are kept be written to |
+| where the store has a link in its place, where the store has something other than a file in its place, read back unlike what was written | Something else wrote where results are kept | `/lossless-store` says where that is; `/lossless-store check` names what is not whole |
+| from a tool whose name cannot go on a ticket, whose text is not the same in its call and its result | The result cannot stand behind a ticket | Nothing: it stays as it was |
+
+Each result that left has a ticket in its place, from the same check:
+
+```text
+[moved out] Read result, 45130 bytes; recall with mcp__lossless-compaction__recall id 9f4115d935e68429ec7e4e3409c400c15ba50e8d5f355797caf064c961eecf61
 ```
 
 Where moving results out is not enough, or there is nothing to move out and
 the conversation is too full to go on with, the oldest messages are kept
-whole instead and no summary runs. From a session of text pasted into
-messages, at 40 as well:
+whole instead and no summary runs. From the host check's session made to be
+cut, at `maxAfterPercent` 1, `keepTokens` 0 and `minChars` 10,000,000, not
+the defaults:
 
 ```text
-lossless-compaction: no summary, messages 2-22 of 30 kept in 11 parts: moved 0 of 3 tool results out (609241 -> 224393 chars, about 75804 of 231000 tokens in use) in 237 ms
+lossless-compaction: no summary, messages 2-18 of 20 kept in 1 part: moved out 0 of 7 tool results; about 40,276 tokens in use before, about 4,632 after, of the 167,000 at which Claude Code compacts on its own; 44 ms; still over what may stay in use, which a summary would not change
 ```
 
 A conversation that holds 1,536 of the 4096 entries Claude Code hands a
 plugin is cut down to 1,024 messages the same way, however much room is left
 ([why](limits.md#when-the-conversation-is-too-long)). From a made-up
-session of 3,400 short messages, at a `/compact` by hand:
+session of 3,400 short messages, at a `/compact` by hand, with no figures
+from Claude Code to count by:
 
 ```text
-lossless-compaction: no summary, messages 2-2378 of 3400 kept in 3 parts for its length, 3400 of the 4096 entries Claude Code hands a plugin: moved 0 of 0 tool results out (83181 -> 26742 chars) in 86 ms
+lossless-compaction: no summary, messages 2-2378 of 3400 kept in 3 parts for its length, 3400 of the 4096 entries Claude Code hands a plugin: moved out 0 of 0 tool results; the conversation from 83,181 to 26,742 characters; 86 ms
 ```
 
 The first message stays, and one message lists the parts where the others
-stood ([what stays, and how far a cut goes](limits.md#when-the-conversation-is-too-full)):
+stood ([what stays, and how far a cut goes](limits.md#when-the-conversation-is-too-full)).
+From the cut above:
 
 ```text
-[lossless-compaction] Earlier messages of this conversation are kept as they were said, with no summary in their place, in 11 parts; recall a part by its id.
-[moved out] conversation, part 1 of 11, messages 2-12, 1438 bytes; recall with mcp__lossless-compaction__recall id aeda8ee2358743538f517ef841ea5aa71780a5d523b81441ca65097beab4b2e7
+[lossless-compaction] Earlier messages of this conversation are kept as they were said, with no summary in their place, in 1 part; recall a part by its id.
+[moved out] conversation, part 1 of 1, messages 2-18, 3904 bytes; recall with mcp__lossless-compaction__recall id ba6a93c9890c7edb1c0d2455e90db09e0f61809b61c3c9deb221978c33eb7f8c
 ```
 
 Old small calls fold into a list where they stood, each run kept as a part,

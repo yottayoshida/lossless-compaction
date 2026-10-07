@@ -3,9 +3,9 @@
 @@ -629,7 +629,7 @@
        return { skip: step.why };
      case 'back':
-       say($, step.line);
+       say($, step.line, step.notice);
 -      return { messages: outcome.messages };
 +      return { messages: 'refused on purpose by bench/host.ts' } as never;
      case 'cut': {
-       const cut = await cutKeeping($, tried, step.after, step.at, step.over);
+       const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);
        // A part could not be written: handed over as `otherwise` says, where what could not be kept is said, or skipped (ADR 0008).
