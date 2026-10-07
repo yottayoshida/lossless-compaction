@@ -7,6 +7,9 @@
     "name": "Iori Yoshida",
     "url": "https://github.com/yottayoshida"
   },
+  "documentationUrl": "https://github.com/yottayoshida/lossless-compaction/blob/main/README.md",
+  "supportUrl": "https://github.com/yottayoshida/lossless-compaction/issues",
+  "privacyPolicyUrl": "https://github.com/yottayoshida/lossless-compaction/blob/main/PRIVACY.md",
   "userConfig": {
     "provider": {
       "type": "string",
