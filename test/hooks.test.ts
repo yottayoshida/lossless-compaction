@@ -1178,3 +1178,10 @@ test("/lossless-export and /lossless-import run only when you type them, check w
   const read = reading.map((one) => importing.indexOf(one));
   assert.ok(read.every((place, i) => place > 0 && (i === 0 || place > (read[i - 1] as number))), JSON.stringify(read));
 });
+
+test('the files a clean-up and a compaction read through ask Claude Code where a path lands, and a path it cannot tell is no place (ADR 0039)', () => {
+  // A host that answers no realPath leaves every place unresolved: a clean-up then stops on each, every week.
+  const files = hooks.slice(hooks.indexOf('function filesOf('), hooks.indexOf('\n}\n', hooks.indexOf('function filesOf(')));
+  assert.ok(files.includes('return (await $.fs.stat(path, { resolve: true })).realPath ?? null;'), files);
+  assert.ok(files.includes('} catch {\n        return null;'), 'a path the host refuses to look at resolves to nothing, not to an error');
+});

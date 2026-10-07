@@ -16,6 +16,8 @@ export type Files = {
   stat(path: string): Promise<FileStat>;
   /** Moving a file into place in one step, where the host can (ADR 0008). Absent, files are written in place. */
   move?: Mover;
+  /** Where `path` lands, every link followed; null where it leads nowhere or the host cannot tell. Absent, paths are read as given. */
+  realPath?(path: string): Promise<string | null>;
 };
 
 export type Mover = {

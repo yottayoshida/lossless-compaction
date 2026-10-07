@@ -367,6 +367,31 @@ export const MUTATIONS: readonly Mutation[] = [
     killedBy: "a mark none of whose sessions has a transcript here keeps a clean-up from running; this session's, and a container's made again over the same transcripts, do not (ADR 0032)",
   },
   {
+    promise: 'I5',
+    breaks: 'a trash that is there and cannot be listed is taken for an empty one',
+    file: 'src/lifetime.ts',
+    find: "    return top !== null && !top.some((entry) => entry.name === 'trash') ? [] : null;",
+    replace: '    return [];',
+    killedBy: 'a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one',
+  },
+  {
+    promise: 'I5',
+    breaks: 'a recorded place whose end cannot be told is passed over, and what only it names is not counted',
+    file: 'src/lifetime.ts',
+    find: "    if (root === null) return { stop: `${recorded} could not be resolved`, kind: 'place' };",
+    replace: '    if (root === null) continue;',
+    killedBy: 'a recorded place that is there and leads nowhere the host can tell stops it all',
+  },
+  {
+    promise: 'I5',
+    breaks: 'a recorded place that is a link stops every clean-up again',
+    file: 'src/lifetime.ts',
+    find: "    if (there.kind !== 'dir') return { stop: `${recorded} is not a directory`, kind: 'place' };",
+    replace: "    if (there.kind !== 'dir' || there.isLink === true) return { stop: `${recorded} is not a directory`, kind: 'place' };",
+    killedBy:
+      'a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)',
+  },
+  {
     promise: 'I7',
     breaks: 'what a conversation names is not put back before its parts are read',
     file: 'src/lifetime.ts',

@@ -97,3 +97,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0037](0037-find-without-a-key.md): why `find` is registered with no key,
   looks on the machine and sends nothing, and lists every result for the
   agent to choose from where Jev would have chosen.
+- [0039](0039-a-place-that-is-a-link-is-read-where-it-leads.md): why a
+  place transcripts are kept in that is a link is read where it leads, not
+  taken for one that cannot be read.

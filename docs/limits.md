@@ -1116,17 +1116,24 @@ too, so they are counted without the plugin keeping a list of its own.
   first, with what it names, and where something named is still in the trash
   and not in its place, the clean-up stops before anything moves.
 - A recorded place that is gone is skipped: nothing can be resumed from it.
-  A place on a disk that is not mounted at the time looks gone too, and what
-  only its transcripts name can go to the trash; it comes back from there if
-  the disk is back within the week.
+  A place on a disk that is not mounted at the time looks gone too — or empty,
+  where an empty directory stands where it is mounted — and what only its
+  transcripts name can go to the trash; it comes back from there if the disk
+  is back within the week.
   One that is there but cannot be looked at or read in full, a project
   directory that is a link (a search does not follow it), a search that does
   not reach its end — every search also reads a file of the plugin's own that
   holds one known id, and one that does not print it did not finish — a
-  search whose output is too long, all recorded places gone, or commands that
-  cannot be run, stop the collection before anything moves, and the line it
-  prints says why. A transcript that is itself a link inside a project
-  directory is not followed and not counted.
+  search whose output is too long, all recorded places gone, a trash that is
+  there and cannot be listed, or commands that cannot be run, stop the
+  collection before anything moves, and the line it prints says why. A
+  transcript that is itself a link inside a project directory is not
+  followed and not counted.
+- A place that is itself a link — `<config>/projects` linked to another
+  disk, say — is recorded as named and read, at each collection, where it
+  leads then; one recorded both under the link and where it leads is read
+  once (ADR 0039). Where the host cannot tell where it leads, the collection
+  stops.
 - The search reads transcripts as Claude Code writes them now: files named
   `*.jsonl`, an id spelled as 64 lowercase hexadecimal characters. Were it to
   write them otherwise — from the start of a conversation or from some point

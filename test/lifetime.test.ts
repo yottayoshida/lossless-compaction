@@ -203,6 +203,57 @@ test('a project directory that is a link stops it all: a search does not follow 
   assert.match(JSON.stringify(await liveIds(files, list(files), commands(files).exec, existsIn(files), [ROOT], SENTINEL)), /is a link/);
 });
 
+test('a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)', async () => {
+  const files = new MemoryFiles();
+  const elsewhere = '/disk/projects';
+  const [named, unnamed] = (await storeWith(files, [output('named behind a link', 40), output('named by none', 40)], 3 * DAY)) as [string, string];
+  await files.write(`${elsewhere}/-proj/s.jsonl`, `"${named}"`);
+  files.links.set(ROOT, elsewhere);
+  await writeSentinel(files, DIR);
+  const { exec, ran } = commands(files);
+  // Recorded under the link by an earlier version, and where it leads by this one.
+  const live = await liveIds(files, list(files), exec, existsIn(files), [ROOT, elsewhere], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual(live.roots, [elsewhere]);
+  assert.ok(live.ids.has(named));
+  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep')).length, 1, 'searched once');
+  assert.deepEqual(await collect(list(files), exec, DIR, live.ids, NOW), { trashed: 1, restored: 0, removed: 0 });
+  assert.ok(files.files.has(`${DIR}/blobs/${named}.txt`), 'what only the transcripts behind the link name went to the trash');
+  assert.ok(!files.files.has(`${DIR}/blobs/${unnamed}.txt`));
+});
+
+test('a recorded place that is there and leads nowhere the host can tell stops it all', async () => {
+  class Unresolved extends MemoryFiles {
+    override async realPath(): Promise<string | null> {
+      return null;
+    }
+  }
+  const files = new Unresolved();
+  await files.write(`${ROOT}/-proj/s.jsonl`, hex('5'));
+  await writeSentinel(files, DIR);
+  assert.deepEqual(await liveIds(files, list(files), commands(files).exec, existsIn(files), [ROOT], SENTINEL), { stop: `${ROOT} could not be resolved`, kind: 'place' });
+});
+
+test('a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one', async () => {
+  const files = new MemoryFiles();
+  await storeWith(files, [output('old, named by none', 40)], 3 * DAY);
+  files.dirs.add(`${DIR}/trash`);
+  const refusing = async (path: string) => {
+    if (path === `${DIR}/trash`) throw new Error('EACCES');
+    return files.list(path);
+  };
+  assert.equal(await trashIn(refusing, DIR), null);
+  const before = files.snapshot();
+  assert.deepEqual(await collect(refusing, commands(files).exec, DIR, new Set(), NOW), { stop: `the trash of ${DIR} could not be listed`, kind: 'trash' });
+  assert.deepEqual(await putBackNamed(files, refusing, commands(files).exec, [DIR], new Set()), { stop: `the trash of ${DIR} could not be listed`, kind: 'trash' });
+  assert.deepEqual(files.snapshot(), before, 'something moved');
+  // A store whose first clean-up has not made a trash yet goes on.
+  const fresh = new MemoryFiles();
+  await storeWith(fresh, [output('old, named by none', 40)], 3 * DAY);
+  assert.deepEqual(await trashIn(list(fresh), DIR), []);
+  assert.deepEqual(await collect(list(fresh), commands(fresh).exec, DIR, new Set(), NOW), { trashed: 1, restored: 0, removed: 0 });
+});
+
 test('a collection moves what no transcript names to the trash, and a week later removes it', async () => {
   const files = new MemoryFiles();
   const [kept, dropped] = await storeWith(files, [output('kept', 40), output('dropped', 40)], 3 * DAY);
@@ -367,6 +418,19 @@ test("the place of this session's transcript is recorded only when a project dir
   await files.write(`${ROOT}/-repo/abc-123.jsonl`, '{}');
   files.dirs.add(ROOT);
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', 'abc-123'), ROOT);
+  // A projects directory that is a link is looked into where it leads, and recorded as named, so that a clean-up
+  // follows it wherever it is turned (ADR 0039). Claude Code 2.1.292 lists through a link; the transcript is looked
+  // for where it lands all the same, so that it does not rest on that.
+  class Unlisted extends MemoryFiles {
+    override async list(path: string) {
+      if (path === '/home/u/.claude/projects') throw new Error('listed through the link, not where it lands');
+      return super.list(path);
+    }
+  }
+  const linked = new Unlisted();
+  await linked.write('/disk/projects/-proj/abc-123.jsonl', '{}');
+  linked.links.set('/home/u/.claude/projects', '/disk/projects');
+  assert.equal(await rootFor(linked, list(linked), '/home/u/.claude', 'abc-123'), '/home/u/.claude/projects');
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', 'other'), null);
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', '../x'), null);
   assert.equal(await rootFor(new MemoryFiles(), list(new MemoryFiles()), '/home/u/.claude', 'abc-123'), null);
