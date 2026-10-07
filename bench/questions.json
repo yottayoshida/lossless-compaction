@@ -843,6 +843,48 @@
         "by": "value",
         "ask": "Which earlier result gave the reference code RX-4851-M?",
         "target": "Reference code RX-4851-M was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-2",
+        "by": "subject",
+        "ask": "The earlier result that described the outage in which buyers could not finish paying because a callback went silent was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-9882-P was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-4",
+        "by": "subject",
+        "ask": "The earlier result that covered letting an outside worker reach the internal network from home was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-9764-W was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-5",
+        "by": "subject",
+        "ask": "The earlier result that explained why what is paid to keep files in the cloud went up twofold was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-5205-K was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-7",
+        "by": "subject",
+        "ask": "The earlier result that named the spot staff assemble at when the alarm is practised was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-5087-P was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-9",
+        "by": "subject",
+        "ask": "The earlier result that set out who answers customers while most people are away in December was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-4969-W was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-10",
+        "by": "subject",
+        "ask": "The earlier result that told how stored data wiped out by a tidying job was restored was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-9410-K was given to this document when it was filed."
+      },
+      {
+        "id": "find-subject-12",
+        "by": "subject",
+        "ask": "The earlier result that was about keeping the credentials that secure web traffic from lapsing was given a reference code when it was filed. Which code was it?",
+        "target": "Reference code RX-9292-P was given to this document when it was filed."
       }
     ]
   },

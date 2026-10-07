@@ -164,6 +164,8 @@ test('text and images of one result are stored in the order the result held them
   assert.equal(outcome.report.images, 2);
   const line = resultOf(outcome.messages, 'toolu_1')?.text ?? '';
   assert.ok(readTicket(line) && !line.includes('\n'), 'one ticket, one line');
+  // Its lines are those of its text, the images not counted (#149).
+  assert.equal(readTicket(line)?.lines, 2);
   const back = await recall(files, DIR, readTicket(line)?.id);
   assert.ok('text' in back);
   assert.equal(back.text, 'before the image\nafter the image');

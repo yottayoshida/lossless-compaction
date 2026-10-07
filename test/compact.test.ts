@@ -1139,3 +1139,28 @@ test('inputs leave until what is in use is at the target and no further: the old
   assert.deepEqual(left, ['toolu_1', 'toolu_2', 'toolu_3']);
   assert.equal(report.inputs, 3);
 });
+
+test("a result moved out leaves a ticket that says how many lines it held, whatever its tool, and the ticket stays as it is when compacted again (#149)", async () => {
+  const files = new MemoryFiles();
+  const fetched: Call = { tool: 'WebFetch', input: { url: 'https://example.com' }, text: output('page', 100) };
+  const before = conversation([call('a'), fetched, call('c')]);
+  const config = CONFIG;
+
+  const first = await compact(inputFor(before), config, hostWith(files).host);
+
+  const after = new Map(first.messages.flatMap((m) => m.toolResults ?? []).map((r) => [r.tool_use_id, r.text]));
+  const shown = readTicket(after.get('toolu_1') ?? '');
+  assert.ok(shown);
+  assert.equal(after.get('toolu_1'), ticketText(shown));
+  assert.equal(shown.lines, 100);
+  // From the web as well.
+  const web = readTicket(after.get('toolu_2') ?? '');
+  assert.ok(web);
+  assert.equal(after.get('toolu_2'), ticketText(web));
+  assert.equal(web.lines, 100);
+  // On the call's side too, as on the result's.
+  assert.equal(first.messages.flatMap((m) => m.toolUses).find((u) => u.tool_use_id === 'toolu_1')?.text, after.get('toolu_1'));
+
+  const second = await compact(inputFor(first.messages), config, hostWith(files).host);
+  assert.deepEqual(second.messages, first.messages);
+});

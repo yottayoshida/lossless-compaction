@@ -511,7 +511,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     const first = new Map<string, string>();
     for (const id of ids) if (!first.has(texts.get(id) as string)) first.set(texts.get(id) as string, id);
     const leading = [...first.values()];
-    const store = (id: string) => moveOut(files, config.store.write, tools.get(id) ?? 'tool', texts.get(id) as string);
+    const store = (id: string) => moveOut(files, config.store.write, tools.get(id) ?? 'tool', texts.get(id) as string, true);
     const written = await inParallel(leading, WRITES_IN_FLIGHT, store);
     const firsts = new Map(leading.map((id, at) => [id, written[at] as Moved | NotMoved]));
     for (const id of ids) {
@@ -585,7 +585,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
         expected += size;
       } while (left.length > 0 && expected * perUnit < need);
       const written = await inParallel(wave, WRITES_IN_FLIGHT, (candidate) =>
-        moveOut(files, config.store.write, candidate.tool, candidate.text),
+        moveOut(files, config.store.write, candidate.tool, candidate.text, true),
       );
       wave.forEach((candidate, at) => {
         const result = written[at] as Moved | NotMoved;

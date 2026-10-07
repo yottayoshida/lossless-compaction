@@ -6,7 +6,7 @@ import { needed, OUTCOMES, outcomeOf, spread, type Arm, type Outcome, type ToolC
 import { keyOf, type Grades, type Verdict } from './grade.ts';
 import { pickTable, type Pick } from './pick.ts';
 import { type Asked, type Unit } from './run.ts';
-import { type Kind } from './traces.ts';
+import { BUILT, type Kind } from './traces.ts';
 
 const ARMS: readonly Arm[] = ['plugin', 'builtin'];
 const KINDS: readonly Kind[] = ['exact-gone', 'exact-unchanged', 'exact-then', 'exact-now', 'continuity', 'constraint'];
@@ -166,6 +166,9 @@ export function whole(units: readonly Unit[], grades: Grades | null, older = 0, 
   ];
   if (units.some((unit) => unit.mode === 'chain')) parts.push('', '### The questions asked one after another: how much the context grew', '', chains(units, grades));
   if (units.some((unit) => unit.mode === 'find')) parts.push('', '### The questions `find` is for, asked of an agent', '', finds(units));
+  if (units.some((unit) => unit.mode === 'find' && unit.questions.some((one) => one.fetched?.opened !== undefined))) {
+    parts.push('', '### The questions `find` is for, by how they were asked', '', findsByKind(units));
+  }
   if (picks !== null) parts.push('', '### What `find` picks, against a word match', '', pickTable(picks));
   if (units.some((unit) => unit.arm === 'plugin' && (unit.mode === 'ask' || unit.mode === 'find') && unit.questions.some((one) => one.fetched !== undefined))) {
     parts.push('', '### Where the answer went, and how far the agent got in fetching it', '', fetches(units));
@@ -189,6 +192,9 @@ export function fetches(units: readonly Unit[]): string {
     const key = [unit.trace, unit.model, unit.mode === 'find' ? `${unit.variant}, find's questions` : unit.variant].join('\t');
     groups.set(key, [...(groups.get(key) ?? []), unit]);
   }
+  // Shown only where it was recorded (#148), so that a table of earlier units reads as it did: of the questions whose
+  // answer had to be fetched, the bytes `recall` handed back, and of them those handed to calls that named no holder.
+  const handed = [...groups.values()].flat().some((unit) => unit.questions.some((one) => one.fetched?.wasted !== undefined));
   const rows = [...groups]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, group]) => {
@@ -206,10 +212,25 @@ export function fetches(units: readonly Unit[]): string {
         reached((one) => one.fetched?.restored === true),
         reached((one) => one.verdict === 'correct'),
         reached((one) => one.fetched?.restored === true && one.verdict !== 'correct'),
+        ...(handed ? [String(sum(had.map((one) => one.handed?.recall ?? 0))), String(sum(had.map((one) => one.fetched?.wasted ?? 0)))] : []),
       ];
     });
   return table(
-    ['Trace', 'Model', 'Setting', 'Runs', 'Questions', 'Answer left in the conversation', 'Had to be fetched', '`recall` or `find` called', 'A piece holding it chosen', 'It came back', 'Right', 'Came back, answered wrong'],
+    [
+      'Trace',
+      'Model',
+      'Setting',
+      'Runs',
+      'Questions',
+      'Answer left in the conversation',
+      'Had to be fetched',
+      '`recall` or `find` called',
+      'A piece holding it chosen',
+      'It came back',
+      'Right',
+      'Came back, answered wrong',
+      ...(handed ? ['Bytes `recall` handed back', 'Of them, to calls naming no piece that holds it'] : []),
+    ],
     rows,
   );
 }
@@ -266,6 +287,8 @@ export function finds(units: readonly Unit[]): string {
   const asked = units.filter((unit) => unit.mode === 'find');
   // Shown only where it happened: an answer after the model refused is another model's, and is counted in Right all the same.
   const fellBack = asked.some((unit) => unit.questions.some((one) => one.fellBackTo !== undefined));
+  // Shown only where it was recorded (#148 #149), so that a table of earlier units reads as it did.
+  const handed = asked.some((unit) => unit.questions.some((one) => one.handed !== undefined));
   const rows = asked
     .sort((a, b) => `${a.trace}${a.model}${a.run}${a.variant}`.localeCompare(`${b.trace}${b.model}${b.run}${b.variant}`))
     .map((unit) => [
@@ -280,14 +303,67 @@ export function finds(units: readonly Unit[]): string {
       String(sum(unit.questions.map((one) => one.retrieval.finds))),
       String(sum(unit.questions.map((one) => one.retrieval.recalls))),
       String(sum(unit.questions.map((one) => one.retrieval.reads))),
+      ...(handed ? [String(sum(unit.questions.map((one) => one.handed?.recall ?? 0))), String(sum(unit.questions.map((one) => one.handed?.find ?? 0)))] : []),
       (sum(unit.questions.map((one) => one.durationMs)) / 1000).toFixed(1),
       String(sum(unit.questions.flatMap((one) => one.requests))),
       sum(unit.questions.map((one) => one.own.costUSD)).toFixed(4),
     ]);
   return table(
-    ['Trace', 'Model', 'Run', 'Key', 'Compaction', 'Right', ...(fellBack ? ['Answered by another model after a refusal'] : []), '`find` calls', '`recall` calls', 'Files read again', 'Seconds', 'Input tokens', 'Cost, USD'],
+    [
+      'Trace',
+      'Model',
+      'Run',
+      'Key',
+      'Compaction',
+      'Right',
+      ...(fellBack ? ['Answered by another model after a refusal'] : []),
+      '`find` calls',
+      '`recall` calls',
+      'Files read again',
+      ...(handed ? ['Bytes `recall` handed back', 'Bytes `find` handed back'] : []),
+      'Seconds',
+      'Input tokens',
+      'Cost, USD',
+    ],
     rows,
   );
+}
+
+/** How a question `find` is for was asked (`FindQuestion.by`), from the trace that holds it; empty where none does. */
+function askedBy(trace: string, id: string): string {
+  return BUILT.find((one) => one.name === trace)?.finds.find((find) => find.id === id)?.by ?? '';
+}
+
+/**
+ * The questions `find` is for, by how each was asked, of the units that recorded where its answer went (#149): how
+ * many were right, the calls to `find` and `recall`, the ids handed to `recall` that do not hold the answer, and the
+ * bytes `recall` handed back. Asked by a subject, the result is named by what it was about and the line asked for is
+ * far below its first line: a ticket that quotes its first line tells which to open, and does not answer.
+ */
+export function findsByKind(units: readonly Unit[]): string {
+  const rows = units
+    .filter((unit) => unit.mode === 'find' && unit.questions.some((one) => one.fetched?.opened !== undefined))
+    .sort((a, b) => a.trace.localeCompare(b.trace) || a.model.localeCompare(b.model) || a.variant.localeCompare(b.variant) || a.run - b.run)
+    .flatMap((unit) => {
+      const kinds = [...new Set(unit.questions.map((one) => askedBy(unit.trace, one.id)))];
+      return kinds.map((by) => {
+        const of = unit.questions.filter((one) => askedBy(unit.trace, one.id) === by);
+        return [
+          unit.trace,
+          unit.model,
+          unit.variant === 'default' ? 'no key' : unit.variant === 'find' ? 'with a key' : unit.variant,
+          String(unit.run),
+          by,
+          `${of.filter((one) => one.verdict === 'correct').length}/${of.length}`,
+          String(of.filter((one) => one.fellBackTo !== undefined).length),
+          String(sum(of.map((one) => one.retrieval.finds))),
+          String(sum(of.map((one) => one.retrieval.recalls))),
+          String(sum(of.map((one) => one.fetched?.opened ?? 0))),
+          String(sum(of.map((one) => one.handed?.recall ?? 0))),
+        ];
+      });
+    });
+  return table(['Trace', 'Model', 'Key', 'Run', 'Asked by', 'Right', 'Answered by another model', '`find` calls', '`recall` calls', 'Ids handed to `recall` not holding it', 'Bytes `recall` handed back'], rows);
 }
 
 /**

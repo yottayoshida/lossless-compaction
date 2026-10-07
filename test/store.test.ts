@@ -33,6 +33,7 @@ import {
   type StoreDirs,
 } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
+import { encodeMedia } from '../src/encoded.ts';
 import { MemoryFiles, output } from './helpers.ts';
 
 const DIR = '/home/u/.claude/lossless-compaction';
@@ -109,6 +110,50 @@ test('the ticket carries nothing from the result it replaces', async () => {
 
   assert.equal(ticket.text, ticketText({ tool: 'WebFetch', bytes: ticket.bytes, id: ticket.id }));
   for (const line of text.split('\n')) assert.ok(!ticket.text.includes(line));
+});
+
+test("a result's ticket says how many lines of text it held, and nothing of what it said (#149)", async () => {
+  const files = new MemoryFiles();
+  const text = '{\n  ---\nIncident 0412: payment retries doubled after the "deploy"\nmore\nand more';
+  const result = await moveOut(files, DIR, 'Bash', text, true);
+  assert.ok(!('reason' in result));
+  assert.equal(result.text, `[moved out] Bash result, 5 lines, ${Buffer.byteLength(text)} bytes; recall with ${RECALL_TOOL} id ${result.id}`);
+  assert.ok(!result.text.includes('Incident'));
+  assert.deepEqual(readTicket(result.text), { tool: 'Bash', bytes: Buffer.byteLength(text), id: result.id, lines: 5 });
+  assert.deepEqual(await recall(files, DIR, result.id), { text });
+  // One line is a line; a value of an input, a part or a reading kept apart is named by its size alone, as before.
+  const one = await moveOut(files, DIR, 'Grep', 'src/a.ts:1:match', true);
+  assert.ok(!('reason' in one));
+  assert.match(one.text, /^\[moved out\] Grep result, 1 line, 16 bytes; /);
+  const plain = await moveOut(files, DIR, 'Bash', `${text}\nonce more`);
+  assert.ok(!('reason' in plain));
+  assert.equal(plain.text, ticketText({ tool: 'Bash', bytes: plain.bytes, id: plain.id }));
+  // A result of an image and text is counted by its text; of an image alone, not at all.
+  const image = { type: 'image' as const, media_type: 'image/png', data: `iVBORw0KGgo${'Qk1G'.repeat(100)}`.slice(0, 400) };
+  const shot = await moveOut(files, DIR, 'Read', encodeMedia([{ type: 'text', text: 'A screenshot of the login page' }, image]), true);
+  assert.ok(!('reason' in shot));
+  assert.equal(readTicket(shot.text)?.lines, 1);
+  const bare = await moveOut(files, DIR, 'Read', encodeMedia([image]), true);
+  assert.ok(!('reason' in bare));
+  assert.equal(bare.text, ticketText({ tool: 'Read', bytes: bare.bytes, id: bare.id }));
+});
+
+test('the ticket docs/usage.md shows is one the plugin writes, and reads as one (#149)', async () => {
+  const usage = await readFile(new URL('../docs/usage.md', import.meta.url), 'utf8');
+  const shown = /```text\n(\[moved out\] Read result, \d+ lines, [^\n]+)\n```/.exec(usage)?.[1] ?? '';
+  const ticket = readTicket(shown);
+  assert.ok(ticket, shown);
+  assert.equal(ticketText(ticket), shown);
+});
+
+test('a ticket is one line: a line under it makes it no ticket; the wordings before #149 are read as they were', () => {
+  const id = 'c'.repeat(64);
+  const line = ticketText({ tool: 'Bash', bytes: 12, id, lines: 3 });
+  assert.deepEqual(readTicket(line), { tool: 'Bash', bytes: 12, id, lines: 3 });
+  assert.equal(readTicket(`${line}\n  begins: "what it began with"`), null);
+  assert.deepEqual(readTicket(ticketText({ tool: 'Bash', bytes: 12, id })), { tool: 'Bash', bytes: 12, id });
+  assert.deepEqual(readTicket(`[moved out] Bash result, 12 bytes; recall with mcp__jev-lossless-compaction__recall id ${id}`), { tool: 'Bash', bytes: 12, id });
+  assert.equal(readTicket(`[moved out] Bash result, 3 lines, 12 bytes; recall with mcp__jev-lossless-compaction__recall id ${id}`), null);
 });
 
 test('moving the same text out twice writes nothing new and gives the same ticket', async () => {

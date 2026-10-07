@@ -432,7 +432,48 @@ export type Fetched = {
   chose: boolean;
   /** Whether what `recall` gave back, or the text `find` gave as its answer, holds the answer. */
   restored: boolean;
+  /**
+   * The ids handed to calls of `recall` that named no holder and got back nothing that holds the answer, each counted
+   * once. Absent in a unit measured before it was recorded.
+   */
+  opened?: number;
+  /** The bytes `recall` handed back to those calls (`handedBy`). Absent where `opened` is. */
+  wasted?: number;
 };
+
+/** The ids a call to `recall` named: its `id`, and each of its `ids` (#148). */
+export function idsOf(call: ToolCall): string[] {
+  const many = call.input['ids'];
+  return [...(typeof call.input['id'] === 'string' ? [call.input['id']] : []), ...(Array.isArray(many) ? many.filter((one): one is string => typeof one === 'string') : [])];
+}
+
+const bytes = (text: string) => Buffer.byteLength(text, 'utf8');
+
+/**
+ * The bytes one call to `recall` handed back. A refusal, or an answer the plugin opens with its own line (some lines of
+ * a text, #148), is counted as it came back. A whole text is counted by what is stored under its id: Claude Code puts
+ * a result over about 50 KB in a file and shows its path (docs/limits.md), which is not what was handed over. An id
+ * not stored here, one copied wrong and taken for another, is counted as it came back. A whole text is counted by the
+ * first id the call named: a call that names several is answered with some lines of each, which the plugin opens with
+ * its own line.
+ */
+export function handedBy(call: ToolCall, stored: ReadonlyMap<string, string>): number {
+  const result = call.result ?? '';
+  if (isRefusal(result) || result.startsWith('[lossless-compaction] ')) return bytes(result);
+  const [id] = idsOf(call);
+  const text = id === undefined ? undefined : stored.get(id);
+  return text === undefined ? bytes(result) : bytes(text);
+}
+
+/** What `recall` and `find` handed back to one question, in bytes. */
+export type Handed = { recall: number; find: number };
+
+export function handedOf(calls: readonly ToolCall[], stored: ReadonlyMap<string, string>): Handed {
+  return {
+    recall: calls.filter((call) => isRecall(call.name)).reduce((sum, call) => sum + handedBy(call, stored), 0),
+    find: calls.filter((call) => isFind(call.name)).reduce((sum, call) => sum + bytes(call.result ?? ''), 0),
+  };
+}
 
 /** Whether the answer had to be fetched: it had left the conversation, and something moved out holds it. */
 export const needed = (fetched: Fetched): boolean => !fetched.inContext && fetched.holders.length > 0;
@@ -456,14 +497,20 @@ export function fetchedOf(needles: readonly string[], conversation: string, stor
     // The text it gave ends where the plugin's own lines about other results begin: those say the question's values back.
     return match === null ? [] : [{ id: match[1] as string, text: (call.result ?? '').slice(match[0].length).split('\n[lossless-compaction] ')[0] as string }];
   });
-  const chosen = new Set([...recalls.map((call) => String(call.input['id'] ?? '')), ...given.map((one) => one.id)]);
+  const chosen = new Set([...recalls.flatMap(idsOf), ...given.map((one) => one.id)]);
+  // What was opened that does not hold the answer: a call that named no holder and got back nothing that holds it. An
+  // id copied wrong that `recall` took for the holder's brought the answer back, and is not counted.
+  const brought = (call: ToolCall) => call.result !== undefined && !isRefusal(call.result) && holdsAll(call.result, needles);
+  const astray = recalls.filter((call) => !idsOf(call).some((id) => holders.includes(id)) && !brought(call));
   return {
     holders,
     inContext: holdsAll(conversation, needles),
     tried: recalls.length + finds.length > 0,
     chose: holders.some((id) => chosen.has(id)),
     // A refusal names other tickets with what they stand for and their ids: what it holds is not what came back.
-    restored: recalls.some((call) => call.result !== undefined && !isRefusal(call.result) && holdsAll(call.result, needles)) || given.some((one) => holdsAll(one.text, needles)),
+    restored: recalls.some(brought) || given.some((one) => holdsAll(one.text, needles)),
+    opened: new Set(astray.flatMap(idsOf)).size,
+    wasted: astray.reduce((sum, call) => sum + handedBy(call, stored), 0),
   };
 }
 

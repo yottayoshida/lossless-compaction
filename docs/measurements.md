@@ -2776,3 +2776,72 @@ running beside it.
   for. Whether its writes would be there after the power went off was not
   measured: that takes cutting the power.
 - Nothing was added: a cost is known, and what it would buy is not.
+
+## A ticket's quote of a result's first line
+
+A ticket says a result's tool, its size and its id. #149 proposed a line
+under it quoting the result's first line, so that two results of a call that
+says nothing of them, `sh show.sh 03`, could be told apart without opening
+them, and a count of the result's lines; the quote was to be measured on its
+own (ADR 0040). Measured on 2026-10-07 with Sonnet 5.5 and no key, Claude
+Code 2.1.289, on the `opaque` of `bench/results/2026-10-06-no-key-find/`,
+each question asked of a fresh copy, three runs of each
+(`bench/results/2026-10-07-ticket-quote/`): the plugin at `7309597` (code
+`a14aaad597f3`), the quote under `  begins: ` at `24323d4` (code
+`c4765c8457f8`), and, measured once more after the first missed, the quote
+under `  first line, recall for the rest: ` at `61ad10d` (code
+`b5c0edb7e898`). Seven questions were added for it: each names a document by
+what it was about, in the words of the questions by meaning, and asks for the
+line in its middle that gives its code, which no first line holds. Document
+1, whose question by meaning Sonnet 5.5's safeguards stopped in each run of
+2026-10-06, is left out, and document 5 named instead.
+
+Before it was run, the line was set: on the seven, over three runs, the
+calls to `find` and `recall` together at 75 % of before or fewer, no more ids
+opened that hold nothing asked for, and no fewer right answers.
+
+| Seven questions by subject | Run | Right | `find` | `recall` | Ids opened holding nothing asked | Cost, USD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before | 1 | 6/7 | 7 | 6 | 0 | 0.34 |
+| Before | 2 | 7/7 | 7 | 7 | 0 | 0.22 |
+| Before | 3 | 7/7 | 7 | 8 | 1 | 0.23 |
+| `begins:` | 1 | 4/7 | 0 | 4 | 0 | 0.23 |
+| `begins:` | 2 | 5/7 | 0 | 5 | 0 | 0.08 |
+| `begins:` | 3 | 4/7 | 0 | 5 | 0 | 0.10 |
+| `first line, recall for the rest:` | 1 | 5/7 | 1 | 6 | 1 | 0.27 |
+| `first line, recall for the rest:` | 2 | 5/7 | 0 | 5 | 0 | 0.16 |
+| `first line, recall for the rest:` | 3 | 5/7 | 0 | 5 | 0 | 0.09 |
+
+- **The calls fell to a third and the right answers fell with them; the line
+  was missed both times, and the quote was not shipped.** Before, the agent
+  called `find` once and `recall` once a question, 13 to 15 calls a run of
+  seven. With a quote it read the document's first line off its ticket and
+  recalled at once, 4 to 7 calls, and answered 4 or 5 of 7 right against 6
+  or 7.
+- **Thirteen of the fourteen answers missed with a quote went one way:** the
+  agent knew the document from the quote, did not recall it, and gave the
+  ticket's id as the code the question asked for, quoting the ticket as the
+  line. The fourteenth was stopped by Sonnet 5.5's safeguards after a recall.
+  Under the second opening the misses were the same two documents, 5 and 12,
+  in each run. Before, `find`'s list said to recall one by its id, and the
+  agent did each time.
+- The questions by meaning, whose answer is a document's first line, were
+  right 7 of 7 in every run with a quote, against 6, 7 and 6 before: their
+  answer stood in the conversation. The three by a code were right 3 of 3
+  everywhere.
+- **What is shipped is the count.** Eight compactions of working sessions in
+  a window of 1,000,000, the first of each, replayed offline with
+  `bench/replay.ts` at `targetPercent` 1 on `7309597` and on this change:
+  the count left 213 to 450 tokens more of 245,519 to 391,549, 0.06 to
+  0.15 %, about five a ticket. With the quote under `begins:` it was 1,278 to
+  3,225 more, 0.36 to 0.91 %.
+
+The same day `full` was compacted once with `maxAfterPercent` at 10 on
+`7309597` (#148), to see whether a part was still opened that does not hold
+the answer: moving results out brought it from 197,394 tokens to 1,954, under
+the line, so nothing was cut and no part was made. Each of the three questions
+whose answer had to be fetched recalled the one result that holds it, 4,831
+to 6,169 bytes, and no bytes went to anything that does not hold it. The five
+answers a program grades were right; the four a model grades were not graded.
+The nine cost 0.21 USD. The parts recalled eight to a question in #148 were of
+a cut at `targetPercent` 40.
