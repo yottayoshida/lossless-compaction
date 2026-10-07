@@ -184,7 +184,7 @@ test("the settings' defaults and ranges are those plugin.json gives them, and a 
   for (const [name, value] of Object.entries(defaults)) assert.equal(value, manifest.userConfig[name]?.default, name);
   // Each description names the range the code takes, so a reader of the settings knows it.
   for (const [name, { min, max }] of Object.entries(NUMBER_SETTINGS)) {
-    assert.ok(manifest.userConfig[name]?.description.includes(`From ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}; a number outside is taken as the nearest end`), name);
+    assert.ok(manifest.userConfig[name]?.description.includes(`From ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}, else the nearest end.`), name);
   }
   // Outside the range: the nearest end (ADR 0025, decision 3). 100 was 1 before, the other end of what was asked for.
   assert.deepEqual(configFrom({ keepTokens: -1, minChars: 20_000_000, targetPercent: 100, maxAfterPercent: 0 }), { keepTokens: 0, minChars: 10_000_000, targetPercent: 99, maxAfterPercent: 1 });
