@@ -74,7 +74,12 @@ function callAround(text: string, at: number): string | undefined {
 const named = (word: string) => PRIVACY.includes(`\`${word}\``);
 
 test('every address the code can send to is named in PRIVACY.md', () => {
-  const hosts = new Set(CODE.flatMap((path) => hostsIn(code(path))));
+  // The address of the plugin's own documentation is written into what the agent and the person are told, and is never
+  // fetched (#143): it is in the one line that names it, and nothing below hands it to the host's fetch.
+  const DOCS = 'https://github.com';
+  const docLines = CODE.flatMap((path) => code(path).split('\n').filter((line) => hostsIn(line).includes(DOCS)).map((line) => `${path}: ${line.trim().split(' = ')[0]}`));
+  assert.deepEqual(docLines, ['src/find.ts: export const GETTING_A_KEY']);
+  const hosts = new Set(CODE.flatMap((path) => hostsIn(code(path))).filter((host) => host !== DOCS));
   // The two Jev providers: a code without them would make this test hold nothing.
   assert.deepEqual([...hosts].sort(), ['https://api.cloudflare.com', 'https://api.typesafe.ai']);
   for (const host of hosts) assert.ok(PRIVACY.includes(host), `PRIVACY.md does not name ${host}, which the code can send to`);
@@ -86,7 +91,7 @@ test('the plugin sends only through the one call the host gives it, which only f
   const calls = CODE.flatMap((path) => [...code(path).matchAll(/\$\.http\b/g)].map(() => path));
   assert.deepEqual(calls, ['hooks/move-out.ts']);
   const hook = code('hooks/move-out.ts');
-  assert.equal(callAround(hook, hook.indexOf('$.http')), 'find', 'the host fetch is handed to something other than find');
+  assert.equal(callAround(hook, hook.indexOf('$.http')), 'findAnswer', 'the host fetch is handed to something other than find');
 });
 
 test('every program the code runs is named in PRIVACY.md, and the code runs commands through the host in one place', () => {

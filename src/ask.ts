@@ -259,7 +259,15 @@ export function readProbabilities(body: string, keys: readonly string[]): Map<st
 /** The options of one request, and the probability Jev gave each of them. */
 type Answered = { options: Option[]; probabilities: Map<string, number> };
 
-export type Chosen = { ranked: [string, number][]; requests: number } | { error: string };
+/**
+ * Why asking ended: what went wrong, and the HTTP status where an answer came with one. Set together, the two cannot
+ * come from different requests. `json` where the answer was in JSON, as both providers answer (measured with a key
+ * they refused): one that is not may be from something between this machine and the provider. Nothing else of the
+ * answer is kept.
+ */
+export type Failed = { error: string; status?: number; json?: true };
+
+export type Chosen = { ranked: [string, number][]; requests: number } | Failed;
 
 export type Asking = {
   /** An option put into every request, such as "none of these"; it is ranked with the rest. */
@@ -289,14 +297,19 @@ export async function choose(http: Http, provider: Provider, question: string, o
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const queue = batchesFor(pool).map((batch) => ({ options: always ? [always, ...batch] : batch, splits: SPLITS }));
     const answered: Answered[] = [];
-    let failure: string | null = null;
+    let failure: Failed | null = null;
+    // Requests in flight end one after another: an answer with a status says more of why than one that came late or not
+    // at all, and is not given up for it.
+    const fail = (one: Failed) => {
+      if (failure === null || (failure.status === undefined && one.status !== undefined)) failure = one;
+    };
 
     const work = async () => {
       for (;;) {
         const job = queue.shift();
         if (!job || failure !== null) return;
         if (requests >= MAX_REQUESTS) {
-          failure = 'too many requests';
+          fail({ error: 'too many requests' });
           return;
         }
         requests += 1;
@@ -313,14 +326,14 @@ export async function choose(http: Http, provider: Provider, question: string, o
         try {
           response = await Promise.race([http(request.url, { method: 'POST', headers: request.headers, body: request.body }), late]);
         } catch {
-          failure = 'the endpoint could not be reached';
+          fail({ error: 'the endpoint could not be reached' });
           return;
         } finally {
           // The clock is stopped once the answer is in: a wait that ran on would be paid for.
           timer.abort();
         }
         if (response === 'late') {
-          failure = 'Jev did not answer in time';
+          fail({ error: 'Jev did not answer in time' });
           return;
         }
         if (!response.ok) {
@@ -334,21 +347,21 @@ export async function choose(http: Http, provider: Provider, question: string, o
             }
             continue;
           }
-          failure = `HTTP ${response.status}`;
+          fail({ error: `HTTP ${response.status}`, status: response.status, ...(response.text.trimStart().startsWith('{') ? { json: true as const } : {}) });
           return;
         }
         const keys = job.options.map((option) => option.key);
         const probabilities = readProbabilities(response.text, keys);
         // Every option asked about has to have been answered: a missing one ranked as 0 would be a wrong answer.
         if (probabilities.size !== keys.length) {
-          failure = 'the answer could not be read';
+          fail({ error: 'the answer could not be read' });
           return;
         }
         answered.push({ options: job.options, probabilities });
       }
     };
     await Promise.all(Array.from({ length: IN_FLIGHT }, work));
-    if (failure !== null) return { error: failure };
+    if (failure !== null) return failure;
 
     const rankedOf = (answer: Answered): [Option, number][] =>
       answer.options.map((option): [Option, number] => [option, answer.probabilities.get(option.key) ?? 0]).sort((a, b) => b[1] - a[1]);

@@ -1,7 +1,7 @@
 // Finding, among the results moved out of a conversation, the one a question
 // is about: what the `find` tool answers with.
 
-import { choose, digest, head, inputLine, redact, stateFor, type Provider } from './ask.ts';
+import { choose, digest, head, inputLine, redact, stateFor, type Failed, type Provider } from './ask.ts';
 import { unnumbered } from './changed.ts';
 import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
@@ -411,17 +411,67 @@ function listed(entries: readonly [Entry, number][], none: number | undefined, v
 
 /** The text of the `find` tool's answer. Nothing is thrown. */
 export async function find(input: FindInput): Promise<string> {
-  if (input.agentId !== undefined) {
-    return `[${PLUGIN}] Nothing to find: find does not look in a subagent's conversation. What a summary replaced there is kept in parts named after the summary; recall reads one by its id.`;
-  }
-  const question = typeof input.question === 'string' ? input.question.trim() : '';
-  if (question === '') return `[${PLUGIN}] Ask in words what the result is about.`;
-  // With no key nothing is sent: what is looked for here is, and the agent is given the rest to choose from (#110).
-  const answer = await looked(input, question);
-  return input.provider === null ? `${answer}\n${NO_KEY}` : answer;
+  return (await findAnswer(input)).text;
 }
 
-async function looked(input: FindInput, question: string): Promise<string> {
+/** `find`'s answer, and the line the person is told where only they can put right why Jev was not asked (#143). */
+export type Found = { text: string; tell?: string };
+
+export async function findAnswer(input: FindInput): Promise<Found> {
+  if (input.agentId !== undefined) {
+    return { text: `[${PLUGIN}] Nothing to find: find does not look in a subagent's conversation. What a summary replaced there is kept in parts named after the summary; recall reads one by its id.` };
+  }
+  const question = typeof input.question === 'string' ? input.question.trim() : '';
+  if (question === '') return { text: `[${PLUGIN}] Ask in words what the result is about.` };
+  const told: { tell?: string } = {};
+  // With no key nothing is sent: what is looked for here is, and the agent is given the rest to choose from (#110).
+  const answer = await looked(input, question, told);
+  return { text: input.provider === null ? `${answer}\n${NO_KEY}` : answer, ...(told.tell === undefined ? {} : { tell: told.tell }) };
+}
+
+/** Where the settings are set, as the agent and the person are told to set them. */
+const CONFIGURE = '/plugin configure lossless-compaction@lossless-compaction';
+/** The section on getting a key, by its address: the agent works in another repository, where docs/usage.md is another file. */
+export const GETTING_A_KEY = 'https://github.com/yottayoshida/lossless-compaction/blob/main/docs/usage.md#getting-a-key';
+
+/**
+ * What the agent is told when Jev could not be asked, by what the provider answered, and what the person is told where it
+ * may be theirs to put right: a key refused, access refused, an account to pay, requests limited (#143). A refusal is
+ * put on the key or the account only where the answer is the provider's own, in JSON: one from something between, a
+ * proxy say, is not. Cloudflare refuses access with 403 for the key's access, the account's plan or blocking, or terms not
+ * agreed to, and limits with 429 for a day's free allocation used up as for its capacity (its table of errors). Nothing
+ * asks the agent to call again: each call sends a digest of every result.
+ */
+export function unasked(failed: Failed, provider: Provider): Found {
+  const { status } = failed;
+  const account = provider.kind === 'cloudflare' ? ' and the account id' : '';
+  const where = `/lossless-status says where the key came from, and ${GETTING_A_KEY} how to get one`;
+  let what = failed.error;
+  let next = '';
+  let tell: string | undefined;
+  if ((status === 401 || status === 402 || status === 403 || status === 429) && failed.json !== true) {
+    what = `HTTP ${status}, in an answer not in JSON, as the provider's are: something between this machine and the provider may have refused it`;
+  } else if (status === 401) {
+    what = 'the provider refused the key (HTTP 401)';
+    next = ` Check the key${account} with ${CONFIGURE}; ${where}.`;
+    tell = `Jev refused the find tool's key${account === '' ? '' : ' or account id'} (HTTP 401): set it with ${CONFIGURE}; until then find cannot ask Jev; ${where}`;
+  } else if (status === 403) {
+    what = 'the provider refused access (HTTP 403)';
+    next = ` The key, what it may reach or the account was refused: check the key${account} with ${CONFIGURE}, and the account with the provider; ${where}.`;
+    tell = `Jev's provider refused access (HTTP 403), for the key, what it may reach or the account: check the key${account} with ${CONFIGURE}, and the account with the provider; until then find cannot ask Jev; ${where}`;
+  } else if (status === 402) {
+    what = 'the provider asks for payment (HTTP 402)';
+    tell = "Jev's provider asks for payment (HTTP 402): until the account is paid, find cannot ask Jev";
+  } else if (status === 429) {
+    what = 'the provider is limiting requests (HTTP 429)';
+    tell = "Jev's provider is limiting requests (HTTP 429): find cannot ask Jev until it takes more, which may be the next day where a free allocation ran out";
+  } else if (status !== undefined && status >= 500 && status < 600) {
+    what = `the provider failed (HTTP ${status})`;
+  }
+  return { text: `[${PLUGIN}] Jev could not be asked: ${what}.${next} recall still reads a result by its id.`, ...(tell === undefined ? {} : { tell }) };
+}
+
+async function looked(input: FindInput, question: string, told: { tell?: string }): Promise<string> {
   const { files, dirs, provider } = input;
   const phrases = phrasesOf(question);
   // The values are those of the question as it is sent — shapes of secrets blanked, cut where it is cut — so that what Jev
@@ -527,7 +577,11 @@ async function looked(input: FindInput, question: string): Promise<string> {
       [...byKey].map(([key, entry]) => ({ key, text: optionOf(entry) })),
       { always: { key: NONE, text: NONE_TEXT }, wait: input.wait },
     );
-    if ('error' in chosen) return `[${PLUGIN}] Jev could not be asked: ${chosen.error}.`;
+    if ('error' in chosen) {
+      const failed = unasked(chosen, provider);
+      if (failed.tell !== undefined) told.tell = failed.tell;
+      return failed.text;
+    }
 
     const [first, second] = chosen.ranked;
     const decisive = first !== undefined && first[1] >= FOUND_AT && first[1] - (second?.[1] ?? 0) >= MARGIN;

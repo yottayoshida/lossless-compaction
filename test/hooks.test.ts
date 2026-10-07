@@ -120,6 +120,54 @@ test("the find hook hands find the host's clock, answers a broken provider setti
   assert.ok(handler.includes('} catch (error) {'), 'catch');
 });
 
+test("a key refused is told to the person once a session, anew once the settings load the hook again, and the find hook tells what find's answer says (#143)", async () => {
+  // Loaded by its URL, so that the type check of the tests does not take in the host's types the hook is written against.
+  const { tellOnce, register } = (await import(new URL('../hooks/move-out.ts', import.meta.url).href)) as {
+    tellOnce: ($: unknown, line: string) => Promise<void>;
+    register: (on: (name: string, ...rest: unknown[]) => unknown, options: Record<string, unknown>) => void;
+  };
+  const logged: string[] = [];
+  const toasted: string[] = [];
+  const hostIn = (session: () => Promise<string>) => ({
+    ui: { log: (text: string) => void logged.push(text), toast: (text: string) => void toasted.push(text) },
+    session: { id: session },
+  });
+  const line = "Jev refused the find tool's key (HTTP 401)";
+  const one = hostIn(async () => 'session-1');
+  await tellOnce(one, line);
+  await tellOnce(one, line);
+  assert.deepEqual(logged, [`${PLUGIN_NAME}: ${line}`], 'once in the session, though every call is refused');
+  // The notice says the same, under the plugin's name, which Claude Code draws it under (#141).
+  assert.deepEqual(toasted, [line]);
+  await tellOnce(hostIn(async () => 'session-2'), line);
+  assert.equal(logged.length, 2, 'a session of its own is told');
+  // Another line in a session told one already, requests limited after a key refused say, is told too.
+  const limited = "Jev's provider is limiting requests (HTTP 429)";
+  await tellOnce(one, limited);
+  await tellOnce(one, limited);
+  assert.deepEqual(logged.slice(2), [`${PLUGIN_NAME}: ${limited}`]);
+  logged.splice(2);
+  // The settings changed: Claude Code runs register again, and what was told under the settings before is told anew.
+  register(() => ({ catch: () => undefined }), {});
+  await tellOnce(one, line);
+  assert.equal(logged.length, 3, 'told again once the hook is loaded again');
+  // A session that cannot be told apart is told nothing, and nothing is thrown.
+  await tellOnce(
+    hostIn(async () => {
+      throw new Error('no session');
+    }),
+    line,
+  );
+  assert.equal(logged.length, 3);
+  // The hook tells what find's answer says, after it, and hands the agent the text alone.
+  const handler = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
+  assert.ok(handler.includes('if (answer.tell !== undefined) await tellOnce($, answer.tell);'), 'told');
+  assert.ok(handler.includes('return { result: answer.text };'), 'the text alone');
+  assert.ok(handler.indexOf('await tellOnce(') > handler.indexOf('await findAnswer('));
+  const loading = hooks.slice(hooks.indexOf('export const register: Register'), hooks.indexOf("on('session.start'"));
+  assert.ok(loading.includes('toldUnasked.clear();'), 'cleared where register runs');
+});
+
 test("every variable trust.ts judges is read by the hook, so none of them is silently never the repository's", () => {
   const env = hooks.slice(hooks.indexOf('async function envOf('), hooks.indexOf('async function taintsOf('));
   for (const name of [...PLACE_VARIABLES, ...KEY_VARIABLES, ...ROUTE_VARIABLES]) {
@@ -198,7 +246,7 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   const putBack = recalled.indexOf('restoreFor($, store, new Set([id]))');
   assert.ok(recalledAt > 0 && putBack > 0 && putBack < recalled.lastIndexOf('recall(filesOf($), store.read, id)'), 'recall, put back first');
   const findHook = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
-  assert.ok(findHook.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < findHook.indexOf('await find('), 'find, first');
+  assert.ok(findHook.indexOf('restoreFor($, store, ticketIds(messages), partIds(messages))') < findHook.indexOf('await findAnswer('), 'find, first');
   const placing = hooks.slice(hooks.indexOf('async function placeOf('), hooks.indexOf('async function attempt('));
   const attempt = hooks.slice(hooks.indexOf('async function attempt('), hooks.indexOf('async function summarizeKeeping('));
   assert.ok(placing.indexOf('await restoreFor($, place, ticketIds(messages), partIds(messages));') > 0, 'put back where the place is prepared');
@@ -560,7 +608,7 @@ test('recall names find in its description when find is registered, and only the
   // Registered at the start with no key, find sends nothing, as its description says, though a key turns up later in the
   // environment (a key set in the plugin's settings loads the hook again, and is used); and where looking for the key fails
   // when it is called, it looks here with none (#110).
-  const calling = hooks.slice(hooks.indexOf("on('tool.call', { tool: 'mcp__lossless-compaction__find' }"), hooks.indexOf('const result = await find({'));
+  const calling = hooks.slice(hooks.indexOf("on('tool.call', { tool: 'mcp__lossless-compaction__find' }"), hooks.indexOf('const answer = await findAnswer({'));
   assert.ok(calling.includes("if (findAtStart?.registered === true && 'local' in findAtStart) provider = null;"), calling);
   assert.ok(calling.includes('} catch {\n        provider = null;\n      }'), calling);
   // Loaded by its URL, so that the type check of the tests does not take in the host's types the hook is written against.

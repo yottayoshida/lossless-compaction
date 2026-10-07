@@ -41,7 +41,7 @@ asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#f
   nothing is sent anywhere ([how it works](docs/how-it-works.md)).
 - **Gives a result back as it was.** The agent calls `recall` with the id on
   a ticket. It can also ask `find` in words; with a key,
-  [Jev](https://typesafe.ai) chooses ([usage](docs/usage.md)).
+  [Jev](https://typesafe.ai) chooses ([getting a key](docs/usage.md#getting-a-key)).
 - **Saves the conversation before a summary.** When Claude Code's summary
   does run, the plugin keeps what it replaces first, for `recall` to read:
   not images, documents or thinking ([what is kept](docs/limits.md#what-a-summary-replaces)).
@@ -86,7 +86,7 @@ questions one after another:
 - [How it works](docs/how-it-works.md) — what is stored, what leaves, what is deleted
 - [Limits](docs/limits.md) — when the summary still runs, what is not kept, setup
 - [Comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
-- [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](.claude-plugin/plugin.json), [privacy](PRIVACY.md) and [decision records](docs/adr/)
+- [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](docs/usage.md#settings), [privacy](PRIVACY.md) and [decision records](docs/adr/)
 
 The idea comes from [fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction), with which this shares no code. Not affiliated with TypeSafe AI or Anthropic.
 
