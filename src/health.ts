@@ -117,7 +117,7 @@ export const UNREAD_HOW: Record<Unread['why'], string> = {
 /** What each kind of stop is said as: no path, nothing a command printed. */
 export const STOP_SAID: Record<StopKind, string> = {
   unread: 'the transcripts could not be read to the end',
-  'too-many': 'one directory of transcripts held more ids than one search can return',
+  'too-many': 'a search of the transcripts printed more ids than Claude Code keeps of what one prints',
   place: 'a place transcripts are kept in is gone, or could not be looked at or listed',
   part: 'a stored thing it follows, a kept part of a conversation or what one names, could not be read',
   trash: 'the trash could not be listed, made or emptied',

@@ -2088,6 +2088,20 @@ the largest of them. A search is given up after five minutes, and then the
 clean-up stops. How long that leaves before the largest directory reaches it
 depends on how fast its transcripts grow, which was not measured.
 
+Read a set at a time instead (#118, ADR 0042), on 2026-10-07 on the same
+machine, macOS 15.3.1 with `/usr/bin/grep`, load about 10 from other
+sessions: 3,633 transcripts in 250 project directories, the largest
+3.26 GB of 4.31 GB, read by 263 searches of at most 400 files and 256 MiB.
+Twice, each between two `grep -r` runs over every project directory as the
+clean-up read them before: the sets took 105.6 s and 99.6 s, the `grep -r`
+runs 119.9 s, 108.1 s, 104.2 s and 94.0 s. Every id the sets found was
+found by the `grep -r` after them; every id the `grep -r` before them found
+was found by the sets but one, the sentinel's 64 zeros, which a collection
+leaves out by design and which 101 lines of 25 transcripts hold. Measured by
+a script calling the clean-up's `liveIds` with the host's limits (4 MiB of
+output kept, a search's five minutes), reading the transcripts only;
+Claude Code itself was not run.
+
 Had the clean-up run then, it would have moved 119 results, 1.3 MB, to the
 trash: put to the plan the clean-up makes (`planGc`), with the ids in use
 found as it finds them, nothing moved. Of the 1,820 results by then, 1,066

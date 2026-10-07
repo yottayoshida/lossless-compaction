@@ -28,7 +28,7 @@ export const GRACE_MS = 7 * DAY;
 export const YOUNG_MS = DAY;
 /** No collection until this long after the first place transcripts were found in was recorded. */
 export const FIRST_WAIT_MS = 7 * DAY;
-/** One search of one project's transcripts may take this long. */
+/** One search, of one set of a project's transcripts, may take this long. */
 export const SEARCH_WITHIN_MS = 5 * 60 * 1000;
 
 const ID = /^[0-9a-f]{64}$/;
@@ -280,7 +280,7 @@ export async function grepOf(exec: Exec, sentinel: string): Promise<{ grep: stri
 }
 
 /**
- * Every id in the transcripts under `roots`, one search per project directory,
+ * Every id in the transcripts under `roots`, read a set of each project directory at a time,
  * and the roots that are still there, with the grep that read them (null where
  * there was nothing to search). A root that is gone is dropped: no conversation
  * can be resumed from it. Anything else that keeps a project from being read in
@@ -321,14 +321,18 @@ export async function liveIds(
       // grep -r does not follow it: what is in it would not be counted. The host lists a link as `other`.
       if (project.isLink) return { stop: `${root}/${project.name} is a link, which a search does not follow`, kind: 'place' };
       if (project.kind !== 'dir') continue;
-      if (grep === null) {
-        const chosen = await grepOf(exec, sentinel);
-        if ('why' in chosen) return { stop: chosen.why, kind: 'unread' };
-        grep = chosen.grep;
+      const dir = `${root}/${project.name}`;
+      const transcripts = await transcriptsIn(list, dir);
+      if (!Array.isArray(transcripts)) return transcripts;
+      for (const set of setsOf(transcripts)) {
+        if (grep === null) {
+          const chosen = await grepOf(exec, sentinel);
+          if ('why' in chosen) return { stop: chosen.why, kind: 'unread' };
+          grep = chosen.grep;
+        }
+        const stopped = await readSet(list, exec, grep, dir, set, sentinel, ids);
+        if (stopped !== null) return stopped;
       }
-      const found = await search(exec, grep, `${root}/${project.name}`, sentinel);
-      if ('stop' in found) return found;
-      idsIn(found.stdout, ids);
     }
   }
   if (kept.length === 0) return { stop: 'none of the places transcripts were found in is there', kind: 'place' };
@@ -348,20 +352,113 @@ export async function writeSentinel(files: Files, dir: string): Promise<void> {
   await files.write(sentinelOf(dir), `"${SENTINEL_ID}"\n`);
 }
 
-async function search(exec: Exec, grep: string, dir: string, sentinel: string): Promise<{ stdout: string } | Stop> {
+/**
+ * At most this many transcripts, and this many bytes of them, are read by one search, so that how large a project
+ * directory grows does not decide whether a search ends in its five minutes (#118, ADR 0042): 4,116 MiB were read in
+ * 131 s on one machine, so a set of 256 MiB takes about ten.
+ */
+export const SET_FILES = 400;
+export const SET_BYTES = 256 * 1024 * 1024;
+
+type Transcript = { path: string; size: number };
+
+/**
+ * The transcripts in `dir` and below as `grep -r --include=*.jsonl` read them: every plain file whose name ends in
+ * `.jsonl`, hidden ones too, and nothing through a link, which it did not follow (ADR 0042). A directory in it that
+ * cannot be listed stops it, as one grep could not read did.
+ */
+async function transcriptsIn(list: List, dir: string, into: Transcript[] = []): Promise<Transcript[] | Stop> {
+  const entries = await listed(list, dir);
+  if (entries === null) return { stop: `${dir} could not be listed`, kind: 'unread' };
+  for (const entry of entries) {
+    if (entry.isLink) continue;
+    const path = `${dir}/${entry.name}`;
+    if (entry.kind === 'dir') {
+      const below = await transcriptsIn(list, path, into);
+      if (!Array.isArray(below)) return below;
+    } else if (entry.kind === 'file' && entry.name.endsWith('.jsonl')) into.push({ path, size: entry.size ?? 0 });
+  }
+  return into;
+}
+
+/** The transcripts in sets of SET_FILES and SET_BYTES at most, in the order listed; one larger alone is a set of its own. */
+function setsOf(transcripts: readonly Transcript[]): Transcript[][] {
+  const sets: Transcript[][] = [];
+  let set: Transcript[] = [];
+  let bytes = 0;
+  for (const one of transcripts) {
+    if (set.length > 0 && (set.length >= SET_FILES || bytes + one.size > SET_BYTES)) {
+      sets.push(set);
+      set = [];
+      bytes = 0;
+    }
+    set.push(one);
+    bytes += one.size;
+  }
+  if (set.length > 0) sets.push(set);
+  return sets;
+}
+
+/**
+ * Whether `path`, below `dir`, is gone: its name not listed in the directory it was in, or that directory gone the
+ * same way, as when Claude Code removes a session's directory with its transcripts. Null where a directory on the way
+ * is listed above it but cannot be listed itself: what is in it cannot be told. `dir` itself, listed before, is there.
+ */
+async function goneBelow(list: List, dir: string, path: string, listedIn: Map<string, Set<string> | null>): Promise<boolean | null> {
+  if (!path.startsWith(`${dir}/`)) return false;
+  const parent = path.slice(0, path.lastIndexOf('/'));
+  let names = listedIn.get(parent);
+  if (names === undefined) {
+    const entries = await listed(list, parent);
+    listedIn.set(parent, (names = entries === null ? null : new Set(entries.map((entry) => entry.name))));
+  }
+  if (names !== null) return !names.has(path.slice(path.lastIndexOf('/') + 1));
+  return (await goneBelow(list, dir, parent, listedIn)) === true ? true : null;
+}
+
+/** Of `set`, those not gone from below `dir`; null where whether one is cannot be told. */
+async function stillThere(list: List, dir: string, set: readonly Transcript[]): Promise<Transcript[] | null> {
+  const listedIn = new Map<string, Set<string> | null>();
+  const left: Transcript[] = [];
+  for (const one of set) {
+    const gone = await goneBelow(list, dir, one.path, listedIn);
+    if (gone === null) return null;
+    if (!gone) left.push(one);
+  }
+  return left;
+}
+
+/**
+ * Reads the ids of one set of `dir`'s transcripts into `ids`, with the sentinel; null when every one was read to the
+ * end. Its output cut by the host (4 MiB), the set is read again in halves, and one transcript alone cut stops it. A
+ * search that cannot read a file (2) is read again, once, without those no longer listed — removed after they were,
+ * as Claude Code removes old transcripts — and stops where any other is left.
+ */
+async function readSet(list: List, exec: Exec, grep: string, dir: string, set: readonly Transcript[], sentinel: string, ids: Set<string>, again = true): Promise<Stop | null> {
   let result;
   try {
-    result = await exec([grep, '-rahoE', '[0-9a-f]{64}', '--include=*.jsonl', '--', dir, sentinel], SEARCH_WITHIN_MS);
+    result = await exec([grep, '-aohE', '[0-9a-f]{64}', '--', ...set.map((one) => one.path), sentinel], SEARCH_WITHIN_MS);
   } catch (error) {
     // The grep was seen to start: one that does not come back did not end in its time (or was stopped), and is not
     // run again with the other grep, which would take as long (#118).
     return { stop: `grep did not run to the end on ${dir}: ${error instanceof Error ? error.message : String(error)}`, kind: 'unread' };
   }
+  if (result.exitCode === 2 && again) {
+    const left = await stillThere(list, dir, set);
+    if (left === null || left.length === set.length) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
+    return left.length === 0 ? null : readSet(list, exec, grep, dir, left, sentinel, ids, false);
+  }
   // With the sentinel, something always matches: 0 is the only answer; 1 or 2 is a search that did not finish.
   if (result.exitCode !== 0) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
-  if (result.truncated) return { stop: `the ids in ${dir} are more than one search can return`, kind: 'too-many' };
+  if (result.truncated) {
+    const [only] = set;
+    if (set.length === 1 && only !== undefined) return { stop: `the ids in ${only.path} are more than one search can return`, kind: 'too-many' };
+    const half = Math.ceil(set.length / 2);
+    return (await readSet(list, exec, grep, dir, set.slice(0, half), sentinel, ids)) ?? readSet(list, exec, grep, dir, set.slice(half), sentinel, ids);
+  }
   if (!result.stdout.split('\n').includes(SENTINEL_ID)) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
-  return { stdout: result.stdout };
+  idsIn(result.stdout, ids);
+  return null;
 }
 
 /** One result in the trash: the day it was moved there and its id. */

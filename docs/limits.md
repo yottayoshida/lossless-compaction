@@ -1129,7 +1129,10 @@ too, so they are counted without the plugin keeping a list of its own.
   plugin reads every 64-hex string out of those transcripts (`grep` from
   `/usr/bin`, or from `/bin` where that one cannot be started or does not
   answer, within 30 s, a search of a file of the plugin's own made first;
-  measured: 81 s for 2.9 GB). A result over a day
+  measured: 81 s for 2.9 GB). How large a project directory grows does
+  not stop it: its transcripts — files named `*.jsonl` in it and the
+  directories below, as `grep -r` read them — are read a set at a time, at
+  most 400 of them and 256 MiB a search (ADR 0042). A result over a day
   old that none of them names moves, with its index entry, to
   `trash/<day>/`. One the trash has held over a week, still named by none,
   is removed; one named again goes back.
@@ -1150,11 +1153,22 @@ too, so they are counted without the plugin keeping a list of its own.
   not reach its end, or not within its five minutes (it is not run again
   with the other `grep`, #118) — every search also reads a file of the plugin's own that
   holds one known id, and one that does not print it did not finish — a
-  search whose output is too long, all recorded places gone, a trash that is
+  directory of transcripts that cannot be listed, one transcript whose ids
+  alone are more than a command may print (Claude Code keeps the first
+  4,194,304 bytes of what one prints, an id written about 64,000 times; a
+  search cut short is read again in halves until one transcript alone is),
+  a transcript whose name is not UTF-8 (the host lists it otherwise than
+  `grep` finds it), one transcript
+  that takes more than five minutes to read (about 9 GB where 4,116 MiB took
+  131 s), all recorded
+  places gone, a trash that is
   there and cannot be listed, or commands that cannot be run, stop the
   collection before anything moves, and the line it prints says why. A
   transcript that is itself a link inside a project directory is not
-  followed and not counted.
+  followed and not counted. A transcript removed while a collection reads
+  — Claude Code removes old ones, a session's directory with them — is
+  passed over where its name, or a directory it was in, is no longer
+  listed; one still listed that cannot be read stops it.
 - A place that is itself a link — `<config>/projects` linked to another
   disk, say — is recorded as named and read, at each collection, where it
   leads then; one recorded both under the link and where it leads is read

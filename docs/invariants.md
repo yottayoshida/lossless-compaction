@@ -61,8 +61,10 @@ of them names (ADR 0038).
 - `a text stored again has its time renewed, so a clean-up within a day of the new use does not move it; where no command starts it is not`
 
 **I5. A clean-up that cannot tell what is named moves nothing.** A search of
-the transcripts that ends with an error, is cut short, or does not print the
-id it is known to hold; a place that cannot be listed, or that is a link
+the transcripts that ends with an error or does not print the id it is known
+to hold; a transcript whose ids alone are more than one search can print (a
+search cut short is read again in halves, ADR 0042); a directory of
+transcripts that cannot be listed; a place that cannot be listed, or that is a link
 whose end cannot be told; a project directory that is a link; every recorded
 place gone; a kept part that cannot be read; a trash that is there and cannot
 be listed; something named, by a transcript or by a part, that is in the
@@ -82,6 +84,13 @@ where it leads (ADR 0039).
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
 - `a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one`
+- `a search whose output the host cut is read again in halves, and a transcript whose ids alone are cut stops it (#118, ADR 0042)`
+- `a transcript removed after it was listed is passed over, and one still there that cannot be read stops it (#118, ADR 0042)`
+- `a project directory is read a set at a time however large it grows: no search is handed more than a set may hold, and none runs past its time (#118, ADR 0042)`
+- `the transcripts read are those grep -r read: in directories below and hidden ones, not through a link nor in other names; a directory below that cannot be listed stops it (#118, ADR 0042)`
+- `a session directory removed while a clean-up reads is passed over (#118, ADR 0042)`
+- `a directory still listed that cannot be listed again after grep could not read in it stops the clean-up (#118, ADR 0042)`
+- `a project of many small transcripts is read in sets of at most SET_FILES, so that no command line is too long to start (#118, ADR 0042)`
 - `a recorded place that is there and leads nowhere the host can tell stops it all`
 - `a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
