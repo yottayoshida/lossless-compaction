@@ -2719,10 +2719,10 @@ test('the questions asked one after another are tabled by how much the context g
 
 const EVERY_KIND = fileURLToPath(new URL('../bench/results/2026-10-04-every-kind', import.meta.url));
 
-test('the run of every kind with Sonnet 5.5: of the traces as they are, every answer graded, the tables made from it, and every figure the README and docs/measurements.md give of it', () => {
+test('the run of every kind with Sonnet 5.5: of the traces as they are, every answer graded, the tables made from it, and every figure docs/measurements.md, docs/comparison.md and the CHANGELOG give of it', () => {
   const read = (path: string) => readFileSync(path, 'utf8');
   const flat = (text: string) => text.replace(/\s+/g, ' ');
-  const [readme, measurements] = [read(fileURLToPath(new URL('../README.md', import.meta.url))), read(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)))];
+  const measurements = read(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)));
   const section = measurements.slice(measurements.indexOf('## Every kind of conversation, with Sonnet 5.5'), measurements.indexOf('## The benchmark\n'));
   const has = (text: string, phrase: string, what: string) => assert.ok(flat(text).includes(phrase), `${what}: ${phrase}`);
   const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
@@ -2770,23 +2770,15 @@ test('the run of every kind with Sonnet 5.5: of the traces as they are, every an
   const [ours, theirs] = [chains('plugin'), chains('builtin')];
   const [first, firstThen] = [chains('plugin', 1), chains('builtin', 1)];
 
-  // The README's table: the six asked one after another, twice, each cell the range or the sum of them; the cost, of the first run.
+  // The six asked one after another, twice: no summary with the plugin, one each without it. The README's table is of the
+  // run at 1 since #109 (the test of 2026-10-07-at-1); these figures at 40 stay in docs/measurements.md and docs/comparison.md.
   const range = (values: readonly number[], form: (value: number) => string) => `${form(Math.min(...values))}–${form(Math.max(...values))}`;
-  const row = (label: string, mine: string, built: string) => assert.match(readme, new RegExp(`\\| ${escaped(label)} +\\| +${mine} \\| +${built} \\|`), label);
   assert.ok(ours.every((unit) => !unit.compaction.summarized && unit.compaction.line?.outcome === 'moved') && theirs.every((unit) => unit.compaction.summarized));
-  row('A summary was written', `0 of ${ours.length}`, `${theirs.length} of ${theirs.length}`);
-  row('`/compact` took', `${range(ours.map((unit) => unit.compaction.durationMs), (ms) => (ms / 1000).toFixed(2))} s`, `${range(theirs.map((unit) => unit.compaction.durationMs), (ms) => String(Math.round(ms / 1000)))} s`);
-  row('The next request carried, tokens', range(ours.map(next), n), range(theirs.map(next), n));
-  row('After the nine questions, tokens', range(ours.map(after), n), range(theirs.map(after), n));
-  row(`Right answers, of ${ours.length * 9}`, String(sum(ours.map(right))), String(sum(theirs.map(right))));
-  row('The first run cost', `${sum(first.map(cost)).toFixed(2)} USD`, `${sum(firstThen.map(cost)).toFixed(2)} USD`);
-  // Under it: larger in five of six and smaller in the one of many short calls, in both runs; the cost, of the first run.
+  // Larger in five of six and smaller in the one of many short calls, in both runs; the cost, of the first run.
   for (const run of [1, 2] as const) {
     assert.deepEqual(TRACES.filter((trace) => next(of(trace.name, 'plugin', 'chain', run)) < next(of(trace.name, 'builtin', 'chain', run))).map((trace) => trace.name), ['short'], `run ${run}`);
   }
-  has(readme, 'At 40 the next request was larger in five kinds of six;', 'README');
   assert.deepEqual(TRACES.filter((trace) => cost(of(trace.name, 'plugin', 'chain')) > cost(of(trace.name, 'builtin', 'chain'))).map((trace) => trace.name), ['full']);
-  has(readme, 'the plugin cost less in five kinds, and more in the one that fills the window, where Claude Code wrote it to the cache again at four questions', 'README');
   // Those four: the questions after the first, in the first run's `full` and the second's `prose`, each wrote what the plugin left to the cache again.
   const rewrote = (unit: Unit) => unit.questions.map((asked, at) => (at > 0 && asked.own.cacheCreationInputTokens > next(unit) / 2 ? asked.id : null)).filter((id) => id !== null);
   assert.deepEqual(rewrote(of('full', 'plugin', 'chain', 1)), ['gone-2', 'unchanged', 'then', 'now']);
@@ -2865,7 +2857,7 @@ test('large in a window of 1,000,000 with Sonnet 5.5, on the code of every kind:
   const n = (value: number) => value.toLocaleString('en-US');
   const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const doc = (name: string) => read(fileURLToPath(new URL(`../${name}`, import.meta.url)));
-  const [readme, measurements, comparison, changelog] = [doc('README.md'), doc('docs/measurements.md'), doc('docs/comparison.md'), doc('CHANGELOG.md')];
+  const [measurements, comparison, changelog] = [doc('docs/measurements.md'), doc('docs/comparison.md'), doc('CHANGELOG.md')];
 
   const { units, older } = currentOf(unitsUnder(LARGE_AT));
   assert.equal(older, 0);
@@ -2924,13 +2916,150 @@ test('large in a window of 1,000,000 with Sonnet 5.5, on the code of every kind:
   };
   const tokens = n(Math.round(freshMine.compaction.preTokens / 1000) * 1000);
   const [ourTook, theirTook] = [took([freshMine, chainMine], (ms) => (ms / 1000).toFixed(2), '–'), took([freshBuilt, chainBuilt], (ms) => String(Math.round(ms / 1000)), '–')];
-  has(readme, `In a window of 1,000,000**, at 40 and ${tokens} tokens: \`/compact\` ${ourTook} s against ${theirTook} s; eleven questions in a row, ${right(chainMine)} right against ${right(chainBuilt)}, ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}.`, 'README');
   const spoken = (text: string) => text.replace('–', ' to ');
   has(comparison, `In a window of 1,000,000, at ${tokens} tokens, a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; one after another the eleven questions were answered right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}, and each of a fresh copy ${cost(freshMine).toFixed(2)} against ${cost(freshBuilt).toFixed(2)}.`, 'comparison');
   has(
     changelog,
     `at ${tokens} tokens a \`/compact\` took ${spoken(ourTook)} s against ${spoken(theirTook)} s; asked one after another, the eleven questions were right ${right(chainMine)} times against ${right(chainBuilt)} and cost ${cost(chainMine).toFixed(2)} USD against ${cost(chainBuilt).toFixed(2)}; ` +
       `asked each of a fresh copy, where every question writes the 270,000 tokens the plugin left to the prompt cache again, ${cost(freshMine).toFixed(2)} USD against ${cost(freshBuilt).toFixed(2)}, ${right(freshMine)} right against ${right(freshBuilt)}.`,
+    'CHANGELOG',
+  );
+});
+
+const AT_1 = fileURLToPath(new URL('../bench/results/2026-10-07-at-1', import.meta.url));
+
+test("the README's comparison is of the plugin at its default (#109): its arm measured again at 1 on the conversations of every kind and large, beside the built-in arm of those runs, and every figure the documents give of it", () => {
+  const read = (path: string) => readFileSync(path, 'utf8');
+  const doc = (path: string) => read(fileURLToPath(new URL(`../${path}`, import.meta.url)));
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const has = (text: string, phrase: string, what: string) => assert.ok(flat(text).includes(phrase), `${what}: ${phrase}`);
+  const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
+  const n = (value: number) => value.toLocaleString('en-US');
+  const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const range = (values: readonly number[], form: (value: number) => string) => `${form(Math.min(...values))}–${form(Math.max(...values))}`;
+  const [readme, measurements, comparison, changelog] = [doc('README.md'), doc('docs/measurements.md'), doc('docs/comparison.md'), doc('CHANGELOG.md')];
+  const section = measurements.slice(measurements.indexOf('## Every kind of conversation, at the default'), measurements.indexOf('## Every kind of conversation, with Sonnet 5.5'));
+
+  // The plugin's arm alone, at 1: the six asked one after another twice and large once, of one state of the code, with no summary.
+  const { units, older } = currentOf(unitsUnder(AT_1));
+  assert.equal(older, 0);
+  const grades = JSON.parse(read(`${AT_1}/grades.json`)) as Grades;
+  assert.equal(whole(units, grades, older, null), read(`${AT_1}/report.md`));
+  const expected = [...TRACES.flatMap((trace) => [1, 2].map((run) => `${trace.name} ${run}`)), 'large 1'];
+  assert.deepEqual(units.map((unit) => `${unit.trace} ${unit.run}`).sort(), expected.sort());
+  assert.ok(units.every((unit) => unit.arm === 'plugin' && unit.mode === 'chain' && unit.variant === 'default' && unit.model === 'claude-sonnet-5-5' && unit.claudeCode === '2.1.289'));
+  assert.ok(units.every((unit) => unit.plugin === '77307d67d641' && unit.pluginCommit === 'b4b090a8bd69'));
+  assert.ok(units.every((unit) => !unit.compaction.summarized && unit.compaction.line?.outcome === 'moved'));
+  has(section, 'The plugin\'s code is `77307d67d641`, that of `main` at `b4b090a`', 'measurements');
+  // Every answer graded, the grader as said.
+  assert.deepEqual([outcomesOf(units, grades).ungraded, grades.ungraded.length, grades.controls.asExpected, grades.controls.count], [0, 0, 217, 217]);
+  has(section, `The grader graded ${grades.disagreements} answers differently in its two passes; of ${grades.controls.count} answers of known grade mixed in, its first pass graded every one as expected.`, 'measurements');
+
+  // The built-in arm: the runs of 2026-10-04, on the same conversations and the same Claude Code.
+  const every = currentOf(unitsUnder(EVERY_KIND)).units;
+  const everyGrades = JSON.parse(read(`${EVERY_KIND}/grades.json`)) as Grades;
+  const large40 = currentOf(unitsUnder(LARGE_AT)).units;
+  const largeGrades = JSON.parse(read(`${LARGE_AT}/grades.json`)) as Grades;
+  const mine = (trace: string, run = 1) => units.find((unit) => unit.trace === trace && unit.run === run) as Unit;
+  const theirs = (trace: string, run = 1) => [...every, ...large40].find((unit) => unit.trace === trace && unit.run === run && unit.mode === 'chain' && unit.arm === 'builtin') as Unit;
+  for (const unit of units) {
+    const built = theirs(unit.trace, unit.run);
+    assert.ok(built !== undefined && built.base === unit.base && built.claudeCode === unit.claudeCode, `${unit.trace} ${unit.run}`);
+  }
+  const right = (unit: Unit) => unit.questions.filter((asked) => verdictOf(unit, asked, unit.arm === 'plugin' ? grades : unit.trace === 'large' ? largeGrades : everyGrades) === 'correct').length;
+  const cost = (unit: Unit) => unit.compaction.own.costUSD + sum(unit.questions.map((asked) => asked.own.costUSD));
+  const next = (unit: Unit) => unit.questions[0]?.requests[0] ?? NaN;
+  const after = (unit: Unit) => unit.afterQuestions ?? NaN;
+  const ours = TRACES.flatMap((trace) => [mine(trace.name, 1), mine(trace.name, 2)]);
+  const them = TRACES.flatMap((trace) => [theirs(trace.name, 1), theirs(trace.name, 2)]);
+
+  // The README's table, each cell the range or the sum of the twelve; the cost, of the first run.
+  const row = (label: string, plugin: string, built: string) => assert.match(readme, new RegExp(`\\| ${escaped(label)} +\\| +${escaped(plugin)} \\| +${escaped(built)} \\|`), label);
+  row('A summary was written', `0 of ${ours.length}`, `${them.filter((unit) => unit.compaction.summarized).length} of ${them.length}`);
+  row('`/compact` took', `${range(ours.map((unit) => unit.compaction.durationMs), (ms) => (ms / 1000).toFixed(2))} s`, `${range(them.map((unit) => unit.compaction.durationMs), (ms) => String(Math.round(ms / 1000)))} s`);
+  row('The next request carried, tokens', range(ours.map(next), n), range(them.map(next), n));
+  row('After the nine questions, tokens', range(ours.map(after), n), range(them.map(after), n));
+  row(`Right answers, of ${ours.length * 9}`, String(sum(ours.map(right))), String(sum(them.map(right))));
+  const [paid, paidThen] = [sum(TRACES.map((trace) => cost(mine(trace.name)))).toFixed(2), sum(TRACES.map((trace) => cost(theirs(trace.name)))).toFixed(2)];
+  row('The first run cost', `${paid} USD`, `${paidThen} USD`);
+  // At the default plugin.json gives, which the units' code holds.
+  const settings = JSON.parse(doc('.claude-plugin/plugin.json')) as { userConfig: { targetPercent: { default: number } } };
+  assert.equal(settings.userConfig.targetPercent.default, 1);
+  has(readme, `measured twice with Sonnet 5.5 at \`targetPercent\` ${settings.userConfig.targetPercent.default}, the default, beside the built-in compaction's run on the same conversations:`, 'README');
+  // Under it: smaller in five kinds and larger in thinking, in both runs; less in every kind, in the first run.
+  for (const run of [1, 2]) {
+    assert.deepEqual(TRACES.filter((trace) => next(mine(trace.name, run)) > next(theirs(trace.name, run))).map((trace) => trace.name), ['thinking'], `run ${run}`);
+  }
+  has(readme, 'The next request was smaller in five kinds of six, and larger in the one of thinking, in both runs.', 'README');
+  assert.ok(TRACES.every((trace) => cost(mine(trace.name)) < cost(theirs(trace.name))));
+  // With no summary to pay for: the questions alone cost more with the plugin in four kinds.
+  const asking = (unit: Unit) => sum(unit.questions.map((asked) => asked.own.costUSD));
+  assert.deepEqual(TRACES.filter((trace) => asking(mine(trace.name)) > asking(theirs(trace.name))).map((trace) => trace.name).sort(), ['full', 'results', 'short', 'thinking']);
+  has(readme, 'in the first run the plugin cost less in each of the six kinds, its questions alone more in four of them', 'README');
+  assert.ok(sum(ours.map((unit) => sum(unit.questions.map((asked) => asked.calls.filter((call) => call === 'mcp__lossless-compaction__find').length)))) > 0);
+  has(readme, 'With the plugin the agent called `recall` and `find`;', 'README');
+  // The window of 1,000,000: one after another, the compaction's time of that unit alone on each side.
+  const [largeMine, largeBuilt] = [mine('large'), theirs('large')];
+  const tokens = n(Math.round(largeMine.compaction.preTokens / 1000) * 1000);
+  has(
+    readme,
+    `In a window of 1,000,000**, at ${tokens} tokens: \`/compact\` ${(largeMine.compaction.durationMs / 1000).toFixed(2)} s against ${Math.round(largeBuilt.compaction.durationMs / 1000)} s; eleven questions in a row, ${right(largeMine)} right against ${right(largeBuilt)}, ${cost(largeMine).toFixed(2)} USD against ${cost(largeBuilt).toFixed(2)}.`,
+    'README',
+  );
+  // No figure of 40 is left in the comparison.
+  const compared = readme.slice(readme.indexOf('## Against the built-in compaction'), readme.indexOf('\n## ', readme.indexOf('## Against the built-in compaction') + 3));
+  assert.ok(!/targetPercent` 40|At 40|at 40/.test(compared), compared);
+
+  // docs/measurements.md: a table a run, the plugin's figure first, and what is said under them.
+  const KINDS = [['results', 'Large tool results'], ['writes', 'Files the agent wrote'], ['prose', 'Text pasted into messages'], ['short', 'Many short calls'], ['full', 'Text filling most of the window'], ['thinking', 'Thinking']] as const;
+  const seconds = (ms: number) => (ms < 1000 ? (ms / 1000).toFixed(2) : (ms / 1000).toFixed(1));
+  for (const run of [1, 2] as const) {
+    const where = run === 1 ? section.slice(0, section.indexOf('The second run:')) : section.slice(section.indexOf('The second run:'));
+    for (const [trace, label] of KINDS) {
+      const [m, b] = [mine(trace, run), theirs(trace, run)];
+      const cells = [
+        `${n(m.compaction.preTokens)} · ${n(b.compaction.preTokens)}`,
+        `${seconds(m.compaction.durationMs)} · ${seconds(b.compaction.durationMs)}`,
+        `${n(next(m))} · ${n(next(b))}`,
+        `${n(after(m))} · ${n(after(b))}`,
+        `${right(m)} · ${right(b)}`,
+        ...(run === 1 ? [`${cost(m).toFixed(2)} · ${cost(b).toFixed(2)}`] : []),
+      ];
+      assert.match(where, new RegExp(`\\| ${label} +\\| +${cells.map(escaped).join(' \\| +')} \\|`), `${label}, run ${run}`);
+    }
+  }
+  const grew = (unit: Unit) => after(unit) - next(unit);
+  has(section, `The plugin's context grew by ${range(ours.map(grew), n).replace('–', ' to ')} tokens over the nine questions, the built-in's by ${range(them.map(grew), n).replace('–', ' to ')}.`, 'measurements');
+  const calls = (name: string) => sum(ours.map((unit) => sum(unit.questions.map((asked) => asked.calls.filter((call) => call === name).length))));
+  const chainRows = read(`${AT_1}/report.md`).split('\n').filter((line) => / \| claude-sonnet-5-5 \| [12] \| plugin \| /.test(line) && !line.startsWith('| large'));
+  assert.equal(chainRows.length, 12);
+  const readAgain = sum(chainRows.map((line) => Number(line.split('|')[11])));
+  assert.equal(sum(ours.map((unit) => unit.questions.filter((asked) => asked.outside).length)), 0);
+  has(section, `the agent called \`recall\` ${calls('mcp__lossless-compaction__recall')} times and \`find\` ${calls('mcp__lossless-compaction__find')} times, and read or searched files ${readAgain} times, none of them outside the working directory.`, 'measurements');
+  has(section, `Right, ${sum(ours.map(right))} of ${ours.length * 9} against ${sum(them.map(right))}.`, 'measurements');
+  // The six wrong: three exact lines of results' second run, two graded apart in the grader's passes, one of short's first.
+  const wrong = ours.flatMap((unit) => unit.questions.filter((asked) => verdictOf(unit, asked, grades) !== 'correct').map((asked) => `${unit.trace} ${unit.run} ${asked.id}`));
+  assert.deepEqual(wrong.sort(), ['results 2 decided', 'results 2 now', 'results 2 then', 'results 2 unchanged', 'short 1 decided', 'thinking 2 next']);
+  assert.ok(['unchanged', 'then', 'now'].every((id) => /ST-/.test(mine('results', 2).questions.find((asked) => asked.id === id)?.answer ?? '')));
+  const summaries = sum(TRACES.map((trace) => theirs(trace.name).compaction.own.costUSD)).toFixed(2);
+  has(section, `${paid} USD in all for the plugin, against ${paidThen}, of which the summaries were ${summaries}; the plugin cost less in each of the six kinds, having no summary to pay for, and its questions alone cost more in four of them.`, 'measurements');
+  has(
+    section,
+    `${n(largeMine.compaction.preTokens)} tokens before, ${n(largeBuilt.compaction.preTokens)} for the built-in: a \`/compact\` took ${seconds(largeMine.compaction.durationMs)} s against ${seconds(largeBuilt.compaction.durationMs)}; the next request carried ${n(next(largeMine))} tokens against ${n(next(largeBuilt))}; the eleven questions one after another were all right against ${right(largeBuilt)}, and cost ${cost(largeMine).toFixed(2)} USD against ${cost(largeBuilt).toFixed(2)}.`,
+    'measurements',
+  );
+  assert.equal(right(largeMine), largeMine.questions.length);
+  const large40Mine = large40.find((unit) => unit.arm === 'plugin' && unit.mode === 'chain') as Unit;
+  has(section, `At 40 the plugin had left ${n(next(large40Mine))} tokens there, and the eleven had cost ${cost(large40Mine).toFixed(2)}.`, 'measurements');
+
+  // docs/comparison.md opens with them, and the CHANGELOG gives them.
+  const ourTook = range(ours.map((unit) => unit.compaction.durationMs), (ms) => (ms / 1000).toFixed(2)).replace('–', ' to ');
+  const theirTook = range(them.map((unit) => unit.compaction.durationMs), (ms) => String(Math.round(ms / 1000))).replace('–', ' to ');
+  has(comparison, `a \`/compact\` took ${ourTook} s against ${theirTook} s, and left the next request smaller in five of them. Asked one after another, twice, the nine questions were answered right ${sum(ours.map(right))} times of ${ours.length * 9} against ${sum(them.map(right))}, and in the first run the \`/compact\`s and their questions cost ${paid} USD against ${paidThen}`, 'comparison');
+  has(comparison, `In a window of 1,000,000, at ${tokens} tokens, a \`/compact\` took ${(largeMine.compaction.durationMs / 1000).toFixed(2)} s against ${Math.round(largeBuilt.compaction.durationMs / 1000)} s, and the eleven questions one after another were answered right ${right(largeMine)} times against ${right(largeBuilt)} and cost ${cost(largeMine).toFixed(2)} USD against ${cost(largeBuilt).toFixed(2)}.`, 'comparison');
+  has(
+    changelog,
+    `the plugin's \`/compact\` took ${ourTook} s against ${theirTook} s; the next request carried ${range(ours.map(next), n).replace('–', ' to ')} tokens against ${range(them.map(next), n).replace('–', ' to ')}, smaller in five kinds of six; ${sum(ours.map(right))} answers of ${ours.length * 9} were right against ${sum(them.map(right))}; and in the first run the \`/compact\`s with their questions cost ${paid} USD against ${paidThen}. In a window of 1,000,000, the eleven questions were all right against ${right(largeBuilt)}, at ${cost(largeMine).toFixed(2)} USD against ${cost(largeBuilt).toFixed(2)}.`,
     'CHANGELOG',
   );
 });
@@ -3018,7 +3147,6 @@ test('the six conversations at 40 and at 1: the tables made from them, and every
   const flat = (text: string) => text.replace(/\s+/g, ' ');
   const measurements = read(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)));
   const section = flat(measurements.slice(measurements.indexOf('## The six kinds of conversation, at 40 and at 1')));
-  const readme = flat(read(fileURLToPath(new URL('../README.md', import.meta.url))));
   const has = (text: string, phrase: string) => assert.ok(text.includes(phrase), phrase);
   const units = unitsUnder(TARGETS_AT);
   const grades = JSON.parse(read(`${TARGETS_AT}/grades.json`)) as Grades;
@@ -3044,7 +3172,13 @@ test('the six conversations at 40 and at 1: the tables made from them, and every
   const smaller = TRACES.filter((trace) => next(at(trace.name, 'target-1')) < next(builtin.find((unit) => unit.trace === trace.name)));
   assert.equal(smaller.length, 4);
   has(section, 'less than after the summary in four kinds of six');
-  has(readme, 'at 1, the default, smaller in four');
+  // docs/comparison.md gives them, the README no longer.
+  const comparison = flat(read(fileURLToPath(new URL('../docs/comparison.md', import.meta.url))));
+  const rightAt = (variant: string) => TRACES.reduce((sum, trace) => sum + right(at(trace.name, variant)), 0);
+  has(
+    comparison,
+    `a \`/compact\` by hand at 1 left the next request at ${n(Math.min(...sizes('target-1')))} to ${n(Math.max(...sizes('target-1')))} tokens, smaller than after the summary in four kinds of six, with ${rightAt('target-1')} answers right of 54, against ${rightAt('target-40')} at 40`,
+  );
   const total = (variant: string) => TRACES.reduce((sum, trace) => sum + right(at(trace.name, variant)), 0);
   has(section, `${total('target-1')} of 54 at 1, ${total('target-40')} of 54 at 40`);
   // What a program grades was right everywhere; at 1 `recall` brought it back, where at 40 two kinds still had it in the conversation.

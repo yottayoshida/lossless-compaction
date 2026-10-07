@@ -1,7 +1,24 @@
 # Against the built-in compaction
 
-Measured on 2026-10-04 with Sonnet 5.5, the plugin compacted each of
-the six kinds of conversation by itself and no summary ran: a `/compact`
+Measured on 2026-10-07 with Sonnet 5.5 at `targetPercent` 1, the default,
+the plugin compacted each of the six kinds of conversation by itself and no
+summary ran: a `/compact` took 0.11 to 0.48 s against 15 to 27 s, and left
+the next request smaller in five of them. Asked one after another, twice,
+the nine questions were answered right 102 times of 108 against 96, and in
+the first run the `/compact`s and their questions cost 0.65 USD against 2.17
+([every table](measurements.md#every-kind-of-conversation-at-the-default)).
+In a window of 1,000,000, at 579,000 tokens, a `/compact` took 0.29 s
+against 52 s, and the eleven questions one after another were answered right
+11 times against 6 and cost 0.14 USD against 1.58. The built-in compaction's
+figures are those of 2026-10-04, on the same conversations and Claude Code:
+it does not read `targetPercent`. On 2026-10-05, with the code before #99 to
+#111, asked each of a fresh copy once, a `/compact` by hand at 1 left the
+next request at 7,373 to 17,641 tokens, smaller than after the summary in
+four kinds of six, with 52 answers right of 54, against 53 at 40
+([at 40 and at 1](measurements.md#the-six-kinds-of-conversation-at-40-and-at-1));
+in a window of 1,000,000 each of a fresh copy was not measured at 1.
+
+At `targetPercent` 40, the default until 0.7.1, on 2026-10-04: a `/compact`
 took 0.07 to 0.35 s against 15 to 27 s, and left the next request larger in
 five of them. Asked one after another, twice, the nine questions were
 answered right 106 times of 108 against 96, and in the first run the
@@ -12,12 +29,7 @@ fresh copy, where no question reads what another wrote to the prompt cache,
 In a window of 1,000,000, at 576,000 tokens, a `/compact` took 0.26 to 0.27 s
 against 40 to 52 s; one after another the eleven questions were answered
 right 11 times against 6 and cost 2.05 USD against 1.58, and each of a fresh
-copy 12.28 against 1.67. All of that was at `targetPercent` 40, the default
-then. At 1, the default since (ADR 0025), a `/compact` by hand left the next
-request at 7,373 to 17,641 tokens, smaller than after the summary in four
-kinds of six, with 52 answers right of 54 asked each of a fresh copy, against 53 at
-40 ([at 40 and at 1](measurements.md#the-six-kinds-of-conversation-at-40-and-at-1));
-in a window of 1,000,000 it was not measured.
+copy 12.28 against 1.67.
 What follows is how it stood before.
 
 What follows was measured with Haiku 4.5, but for the one point on Opus 5.5.

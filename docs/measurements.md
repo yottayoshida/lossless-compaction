@@ -2,8 +2,10 @@
 
 Every figure the README compares the plugin and the built-in compaction by
 comes from one protocol, run on the same traces; `bench/` holds the traces,
-the questions, the grading and what it takes to run it again. Its latest run
-is the first section, and its first run the second.
+the questions, the grading and what it takes to run it again. Its latest run,
+of the plugin at its default, is the first section; the run before it, which
+the built-in compaction's figures come from, the second; and its first run
+the third.
 
 The sections after it are single measurements, taken while the plugin was
 built and kept for what each was taken to decide. The README's demo quotes
@@ -14,6 +16,72 @@ otherwise, all on 2026-09-30, Claude Code 2.1.285 with Claude Haiku 4.5. The
 later ones say when they were taken. Function hooks were early access then,
 and are on by default from Claude Code 2.1.287; another version of Claude
 Code may have changed them.
+
+## Every kind of conversation, at the default
+
+On 2026-10-07 the plugin's arm of the run below was measured again at
+`targetPercent` 1, the default since 0.7.1 (ADR 0025), where the run below was
+at 40 (#109): the six conversations built for that run, and `large` in a
+window of 1,000,000; Claude Code 2.1.289, as they were built with; a `/compact`
+by hand, then the nine questions one after another, twice, and `large`'s
+eleven once. The plugin's code is `77307d67d641`, that of `main` at `b4b090a`,
+whose `plugin.json` gives `targetPercent` 1; with no key for Jev, so with
+`recall` and, since #110, `find`. The built-in compaction does not read
+`targetPercent`: its figures are those of the run below, on the same
+conversations and the same Claude Code, its answers graded with that run and
+these with this one, by Sonnet 5.5 both. The units, their grades and the
+tables are in `bench/results/2026-10-07-at-1/`.
+
+The first run, as the README gives it. In every cell the plugin's figure is
+first and the built-in compaction's second:
+
+| The conversation is mostly      | Tokens before     | `/compact` took, s | The next request, tokens | After the nine, tokens | Right, of 9 | Cost, USD   |
+| ------------------------------- | ----------------: | -----------------: | -----------------------: | ---------------------: | ----------: | ----------: |
+| Large tool results              | 104,292 · 103,450 |        0.28 · 23.0 |            8,596 · 9,242 |        13,512 · 12,010 |       9 · 6 | 0.08 · 0.36 |
+| Files the agent wrote           |   78,485 · 77,643 |        0.46 · 16.9 |          11,099 · 30,735 |        20,639 · 34,629 |       9 · 9 | 0.12 · 0.47 |
+| Text pasted into messages       |   77,039 · 76,198 |        0.17 · 15.1 |           7,970 · 13,883 |        12,576 · 16,283 |       9 · 8 | 0.07 · 0.31 |
+| Many short calls                |   28,183 · 27,341 |        0.32 · 21.2 |           9,703 · 14,081 |        20,241 · 17,082 |       8 · 7 | 0.12 · 0.20 |
+| Text filling most of the window | 200,427 · 199,586 |        0.19 · 22.6 |           8,451 · 14,251 |        17,672 · 16,684 |       9 · 8 | 0.12 · 0.63 |
+| Thinking                        |   28,625 · 27,783 |        0.11 · 23.3 |          18,243 · 14,859 |        23,135 · 17,597 |       9 · 8 | 0.14 · 0.21 |
+
+The second run:
+
+| The conversation is mostly      | Tokens before     | `/compact` took, s | The next request, tokens | After the nine, tokens | Right, of 9 |
+| ------------------------------- | ----------------: | -----------------: | -----------------------: | ---------------------: | ----------: |
+| Large tool results              | 104,292 · 103,450 |        0.28 · 17.9 |            8,596 · 9,044 |        13,572 · 12,214 |       5 · 9 |
+| Files the agent wrote           |   78,485 · 77,643 |        0.27 · 17.7 |          11,099 · 30,631 |        15,944 · 40,921 |       9 · 9 |
+| Text pasted into messages       |   77,040 · 76,198 |        0.23 · 16.5 |           7,971 · 13,959 |        14,774 · 15,955 |       9 · 8 |
+| Many short calls                |   28,183 · 27,341 |        0.48 · 21.6 |           9,703 · 14,086 |        15,355 · 16,225 |       9 · 7 |
+| Text filling most of the window | 200,427 · 199,586 |        0.22 · 19.7 |           8,451 · 13,938 |        12,970 · 17,205 |       9 · 9 |
+| Thinking                        |   28,625 · 27,783 |        0.15 · 26.7 |          18,243 · 14,280 |        25,298 · 16,676 |       8 · 8 |
+
+- **No summary was written by the plugin**, in any of its thirteen
+  compactions. The next request was smaller with the plugin in five kinds of
+  six and larger in `thinking`, in both runs; at 40 it was larger in five.
+- **What the questions added.** The plugin's context grew by 4,519 to
+  10,538 tokens over the nine questions, the built-in's by 1,996 to 10,290. In
+  the two runs the agent called `recall` 22 times and `find` 14 times, and
+  read or searched files 14 times, none of them outside the working
+  directory.
+- **Right, 102 of 108 against 96.** Of the plugin's six wrong: three in
+  `results`' second run, where the agent wrote the line it had fetched or read
+  again with the prefix `ST-` that a rule of the conversation puts on station
+  ids; two the grader graded differently in its two passes, wrong in the
+  first, which is the one the benchmark counts; and one in `short`'s first run, where the agent,
+  having recalled what a shelf held, answered that an open question's premise
+  was wrong. The grader graded 2 answers differently in its two passes; of 217
+  answers of known grade mixed in, its first pass graded every one as
+  expected.
+- **The cost, of the first run.** 0.65 USD in all for the plugin, against
+  2.17, of which the summaries were 1.41; the plugin cost less in each of the
+  six kinds, having no summary to pay for, and its questions alone cost more
+  in four of them. As at 40, the turn sent before each `/compact` is not
+  counted for either.
+- **`large`, in a window of 1,000,000.** 578,591 tokens before, 577,763 for
+  the built-in: a `/compact` took 0.29 s against 51.8; the next request
+  carried 12,428 tokens against 9,669; the eleven questions one after another
+  were all right against 6, and cost 0.14 USD against 1.58. At 40 the plugin
+  had left 272,163 tokens there, and the eleven had cost 2.05.
 
 ## Every kind of conversation, with Sonnet 5.5
 
@@ -48,8 +116,9 @@ second run that turn said what it said in the first, and the plugin's first
 questions read what the first run's had written within the hour: the
 second run's cost is not compared, and the turn now names the run.
 
-The first run, one after another, as the README gives it. In every cell the
-plugin's figure is first and the built-in compaction's second:
+The first run, one after another, as the README gave it until the run above.
+In every cell the plugin's figure is first and the built-in compaction's
+second:
 
 | The conversation is mostly      | Tokens before     | `/compact` took, s | The next request, tokens | After the nine, tokens | Right, of 9 | Cost, USD   |
 | ------------------------------- | ----------------: | -----------------: | -----------------------: | ---------------------: | ----------: | ----------: |
@@ -150,8 +219,8 @@ on, which was rebased since and is not in the history.
 It was run again the same day on 0.6.1, which moves fewer results out where
 they are dense:
 [the benchmark, run again on 0.6.1](#the-benchmark-run-again-on-061). The
-README's figures are of that run; the tables of this section are of the
-first.
+README gave that run's figures at the time; the tables of this section are
+of the first.
 
 The six conversations, and what was in use when each was compacted:
 
