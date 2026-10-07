@@ -171,8 +171,36 @@ by the plugin.
   Code attached as it sent the messages; a message kept whole in a part,
   before a summary or a cut, can have lines in that part's digest, and a
   conversation kept as it was sent (where it was not rebuilt) can have what
-  Claude Code attached to it there too. Shapes of secrets are blanked first, which is a courtesy
-  and not a guarantee. A proxy set in the environment is used for these
+  Claude Code attached to it there too. Shapes of secrets, and of what tells
+  who a person is, are blanked first, which is a courtesy and not a
+  guarantee: a password with no telling name or prefix passes. They are
+  ([src/ask.ts](src/ask.ts), some adapted from
+  [gitleaks](https://github.com/gitleaks/gitleaks), MIT): a private key's
+  block; the password of a URL, with a user or none, or its user alone (as
+  a DSN holds a key); an `Authorization` header and a `Bearer` or `Basic` token; a value
+  given to a name that holds `api_key`, `secret`, `token`, `password`, `pwd`,
+  `credential` or `private_key` — a quoted one to its closing quote, any
+  other to a space, comma or semicolon — or, written as an
+  environment file or a shell assigns one, to a name in capitals ending in
+  `_KEY`, `_PASS`, `_PW`, `DSN`, `_WEBHOOK` or `_WEBHOOK_URL` (or that is
+  `DSN`); keys that begin `sk-`, `pk-`, `rk-`,
+  `sk_live_`, `sk_test_`, `sk_prod_` (and `rk_` likewise), `ghp_` and the
+  other GitHub prefixes, `github_pat_`, `glpat-`, `xox?-`, `AKIA`, `ASIA`,
+  `AIza`, `npm_`, `pypi-AgEIcHlwaS5vcmc` and `rubygems_`; a JSON web token;
+  a signature, credential or token in a URL's query; the path of a Slack,
+  Microsoft Teams or Discord incoming webhook; an email address (not
+  `user@host:path`, as git and scp name an account); and a telephone number
+  written with `+` and its country code (or `(+81)`), then groups apart by a
+  space, `-` or `.` (or after a part in brackets, `(0)20`), 8 to 15 digits in
+  all (where more groups follow, the first that make one), and whatever
+  follows `tel:` — not one written without them (`+14155550100`,
+  `090-1234-5678`). The same
+  shapes are blanked in the call lines `find` sends, whichever version kept
+  them; a line an earlier version cut at 300 characters can end inside a
+  value, and what is left of it may match no shape. With no key, an answer's
+  call lines, first lines and lines holding the values are blanked the same
+  way; a result `find` hands back is as it was kept. A proxy set in the
+  environment is used for these
   requests. How long the provider keeps what it is sent is set by its terms.
 - Installing the plugin fetches it from GitHub, under GitHub's own terms.
 

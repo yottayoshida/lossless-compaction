@@ -1,7 +1,7 @@
 // Finding, among the results moved out of a conversation, the one a question
 // is about: what the `find` tool answers with.
 
-import { choose, digest, head, inputLine, redact, stateFor, type Failed, type Provider } from './ask.ts';
+import { QUESTION_CHARS, choose, digest, head, inputLine, redact, stateFor, type Failed, type Provider } from './ask.ts';
 import { unnumbered } from './changed.ts';
 import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
@@ -286,7 +286,8 @@ function middlesLine(middles: readonly Entry[], values: readonly string[]): stri
  */
 type Entry = { ticket: Stored; option: string; holds: boolean; valued: boolean; first?: string; line?: string; own?: boolean; at?: number };
 
-const describe = (ticket: Stored) => `${ticket.about}; ${ticket.bytes} bytes`;
+// Blanked here, as it goes out: a part's call line was blanked by the shapes of the version that kept the part.
+const describe = (ticket: Stored) => `${redact(ticket.about)}; ${ticket.bytes} bytes`;
 
 /** Said after every answer `find` gives with no key: what it did, and that nothing was sent. */
 export const NO_KEY = `[${PLUGIN}] no key: looked through on this machine; Jev was not asked.`;
@@ -519,9 +520,10 @@ export function unasked(failed: Failed, provider: Provider): Found {
 async function looked(input: FindInput, question: string, told: { tell?: string }): Promise<string> {
   const { files, dirs, provider } = input;
   const phrases = phrasesOf(question);
-  // The values are those of the question as it is sent — shapes of secrets blanked, cut where it is cut — so that what Jev
-  // is told of a result's line is in the question it is asked, and a secret the question names is told of no result.
-  const values = valuesOf(stateFor(question).task);
+  // With a key, the values are those of the question as it is sent — shapes of secrets blanked, cut where it is cut — so
+  // that what Jev is told of a result's line is in the question it is asked, and a secret the question names is told of
+  // no result. With no key nothing is sent: they are those of the question as asked, cut where it would be.
+  const values = valuesOf(provider === null ? head(question, QUESTION_CHARS) : stateFor(question).task);
   const entries: Entry[] = [];
   // One stored text at a time: what is kept of each is a few hundred characters.
   const every = await everyTicket(files, dirs, input.messages);

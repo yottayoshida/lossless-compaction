@@ -843,3 +843,41 @@ test('a refused id is answered with the tickets of the conversation it may stand
   const many = Array.from({ length: 9 }, (_, n) => read(n, `6c7c${String(n).repeat(60)}`)).flat();
   assert.equal(mayStandFor('6c7c', many).split('\n').length - 2, NAMED_ON_REFUSAL);
 });
+
+test('a kept part written before shapes were added is blanked as it goes out: its call line with a webhook and an address sends neither (#131)', async () => {
+  // Put together here so that no line of this file has the shape of a real credential.
+  const hook = ['https://hooks.slack.com/services/', 'T0001/B0002/', 'q9W8e7R6t5Y4u3I2o1P0a9S8'].join('');
+  const mail = ['someone', '@', 'example.org'].join('');
+  const pass = ['mail', 'pass', '99887766'].join('');
+  const files = new MemoryFiles();
+  const result = await moveOut(files, DIR, 'Bash', output('posted', 40));
+  assert.ok(!('reason' in result));
+  // As an earlier version wrote the part: the call line holds what its shapes did not blank, a quote in it escaped as
+  // JSON escapes one.
+  const part = `--- assistant\n[call Bash toolu_p] {"command":"export SMTP_PASS=\\"${pass}\\" && curl -d hi ${hook} # ${mail}"}\n--- user\n[result toolu_p]\n${result.text}\n`;
+  const stored = await moveOut(files, DIR, 'conversation', part);
+  assert.ok(!('reason' in stored));
+  const messages: Message[] = [{ role: 'user', text: `[lossless-compaction] kept\n${partTicketText({ part: 1, parts: 1, first: 1, last: 2, bytes: stored.bytes, id: stored.id })}`, toolUses: [] }];
+
+  const jev = trusting();
+  await find(input(files, messages, 'Which result posted the message?', jev.http));
+  const sent = JSON.stringify(jev.sent);
+  assert.ok(jev.sent.length > 0 && sent.includes('curl -d hi'), sent.slice(0, 300));
+  for (const secret of [hook.slice(hook.lastIndexOf('services/') + 9), mail, pass]) {
+    for (let at = 0; at + 8 <= secret.length; at += 1) assert.ok(!sent.includes(secret.slice(at, at + 8)), `piece at ${at} of ${secret.slice(0, 4)}…`);
+  }
+});
+
+test('with no key the values are taken from the question as asked: a telephone number blanked in what would be sent is still looked for (#131)', async () => {
+  const number = ['+81 90', '1234 5678'].join(' ');
+  const files = new MemoryFiles();
+  const messages = await compacted(files, [call('a'), deep('b', `call ${number} back`), call('c')]);
+  const answer = await find(input(files, messages, `Which result has ${number}?`, refuse, { provider: null }));
+  // Looked for, and the result named; the line is shown blanked, as every line an answer shows.
+  assert.ok(answer.startsWith('[not sure] One moved-out result has a line holding "81" and "90" and "1234" and "5678"'), answer);
+  assert.ok(answer.includes('show b"}') && answer.includes('the line: call [redacted] back'), answer);
+  // With a key the question goes out blanked, and so are its values: the number is told of no result.
+  const jev = trusting();
+  await find(input(files, messages, `Which result has ${number}?`, jev.http));
+  assert.ok(!JSON.stringify(jev.sent).includes('1234 5678'));
+});
