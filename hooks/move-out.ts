@@ -86,7 +86,7 @@ type WithFiles = {
   fs: {
     read: (path: string) => Promise<string>;
     write: (path: string, text: string) => Promise<void>;
-    stat: (path: string) => Promise<FileStat>;
+    stat: (path: string, options?: { resolve: boolean }) => Promise<FileStat & { realPath?: string | undefined }>;
     list: (path: string) => Promise<DirEntry[]>;
     exists: (path: string) => Promise<boolean>;
   };
@@ -134,6 +134,14 @@ function filesOf($: WithFiles): Files {
     read: (path) => $.fs.read(path),
     write: (path, text) => $.fs.write(path, text),
     stat: (path) => $.fs.stat(path),
+    // Where a path lands, as the host resolves it; a place transcripts are kept in is read there (ADR 0039).
+    realPath: async (path) => {
+      try {
+        return (await $.fs.stat(path, { resolve: true })).realPath ?? null;
+      } catch {
+        return null;
+      }
+    },
   };
 }
 
@@ -517,7 +525,9 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     // One try, one stop: the first, should more than one place stop.
     let stopped: StopKind | null = null;
     for (const dir of dirs) {
-      const done = await collect(list, execOf($), dir, named, now);
+      // The time of the moves, not of the start: the day a clean-up moves into is the day it is in when it moves,
+      // which another clean-up takes its own day before (ADR 0038).
+      const done = await collect(list, execOf($), dir, named, Date.now());
       if ('stop' in done) {
         stopped ??= done.kind;
         say($, `moved-out results in ${dir} are kept, not cleaned up: ${done.stop}`);

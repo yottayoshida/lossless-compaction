@@ -16,6 +16,8 @@ export type Files = {
   stat(path: string): Promise<FileStat>;
   /** Moving a file into place in one step, where the host can (ADR 0008). Absent, files are written in place. */
   move?: Mover;
+  /** Where `path` lands, every link followed; null where it leads nowhere or the host cannot tell. Absent, paths are read as given. */
+  realPath?(path: string): Promise<string | null>;
 };
 
 export type Mover = {
@@ -27,6 +29,8 @@ export type Mover = {
   remove(path: string): Promise<void>;
   /** Makes a directory and those above it, as far as it can: a move makes none. */
   makeDir(path: string): Promise<void>;
+  /** Sets a file's time to now, as far as it can, and makes none where there is none. */
+  renew?(path: string): Promise<void>;
 };
 
 /** One entry of a directory, as it stands: a link is not followed. */

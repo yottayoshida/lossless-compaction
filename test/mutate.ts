@@ -42,8 +42,8 @@ export const MUTATIONS: readonly Mutation[] = [
     promise: 'I1',
     breaks: 'a result just written is not compared with what was written',
     file: 'src/blobs.ts',
-    find: "  if (back === text) return null;\n  if (found === 'missing' || !repair(back)) return { reason: 'differs' };",
-    replace: "  if (back === text || found === 'missing') return null;\n  if (!repair(back)) return { reason: 'differs' };",
+    find: "  if (found === 'missing' || !repair(back)) return { reason: 'differs' };",
+    replace: "  if (found === 'missing') return null;\n  if (!repair(back)) return { reason: 'differs' };",
     killedBy: 'a result that does not read back as it was written stays in the conversation',
   },
   {
@@ -109,6 +109,23 @@ export const MUTATIONS: readonly Mutation[] = [
     find: '    if (part === false) continue;',
     replace: '    continue;',
     killedBy: 'a collection keeps what a kept part names: its results, and the parts of an earlier summary and theirs',
+  },
+  {
+    promise: 'I4',
+    breaks: "a copy in the trash is removed from a day another clean-up may still be moving the one in place into",
+    file: 'src/lifetime.ts',
+    find: '    const doubled = plan.toRestore.filter((item) => item.day < settled).flatMap((item) => {',
+    replace: '    const doubled = plan.toRestore.flatMap((item) => {',
+    killedBy:
+      'clean-ups at once, one that names a result and others that do not, leave it to recall: a copy in the trash goes only from a day none still moves into (ADR 0038)',
+  },
+  {
+    promise: 'I4',
+    breaks: 'a text stored again keeps the time it was first stored at',
+    file: 'src/blobs.ts',
+    find: "    if (renew && found === 'file') await files.move?.renew?.(path).catch(() => undefined);",
+    replace: '    // not renewed',
+    killedBy: 'a text stored again has its time renewed, so a clean-up within a day of the new use does not move it; where no command starts it is not',
   },
   {
     promise: 'I5',
@@ -365,6 +382,31 @@ export const MUTATIONS: readonly Mutation[] = [
     find: '!mark.sessions.includes(session) && ',
     replace: '',
     killedBy: "a mark none of whose sessions has a transcript here keeps a clean-up from running; this session's, and a container's made again over the same transcripts, do not (ADR 0032)",
+  },
+  {
+    promise: 'I5',
+    breaks: 'a trash that is there and cannot be listed is taken for an empty one',
+    file: 'src/lifetime.ts',
+    find: "    return top !== null && !top.some((entry) => entry.name === 'trash') ? [] : null;",
+    replace: '    return [];',
+    killedBy: 'a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one',
+  },
+  {
+    promise: 'I5',
+    breaks: 'a recorded place whose end cannot be told is passed over, and what only it names is not counted',
+    file: 'src/lifetime.ts',
+    find: "    if (root === null) return { stop: `${recorded} could not be resolved`, kind: 'place' };",
+    replace: '    if (root === null) continue;',
+    killedBy: 'a recorded place that is there and leads nowhere the host can tell stops it all',
+  },
+  {
+    promise: 'I5',
+    breaks: 'a recorded place that is a link stops every clean-up again',
+    file: 'src/lifetime.ts',
+    find: "    if (there.kind !== 'dir') return { stop: `${recorded} is not a directory`, kind: 'place' };",
+    replace: "    if (there.kind !== 'dir' || there.isLink === true) return { stop: `${recorded} is not a directory`, kind: 'place' };",
+    killedBy:
+      'a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)',
   },
   {
     promise: 'I7',

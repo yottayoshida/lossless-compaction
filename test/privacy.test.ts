@@ -91,7 +91,7 @@ test('the plugin sends only through the one call the host gives it, which only f
 
 test('every program the code runs is named in PRIVACY.md, and the code runs commands through the host in one place', () => {
   const programs = new Set(CODE.flatMap((path) => programsIn(code(path))));
-  assert.deepEqual([...programs].sort(), ['chmod', 'grep', 'ln', 'mkdir', 'mv', 'rm', 'sh']);
+  assert.deepEqual([...programs].sort(), ['chmod', 'grep', 'ln', 'mkdir', 'mv', 'rm', 'sh', 'touch']);
   for (const program of programs) assert.ok(named(program), `PRIVACY.md does not name ${program}, which the code runs`);
   // Every command goes through the hook's two runners; a third would run what the shapes above do not see.
   const runners = CODE.flatMap((path) => [...code(path).matchAll(/\$\.process\.run\(/g)].map(() => path));

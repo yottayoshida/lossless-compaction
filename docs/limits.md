@@ -1119,17 +1119,24 @@ too, so they are counted without the plugin keeping a list of its own.
   first, with what it names, and where something named is still in the trash
   and not in its place, the clean-up stops before anything moves.
 - A recorded place that is gone is skipped: nothing can be resumed from it.
-  A place on a disk that is not mounted at the time looks gone too, and what
-  only its transcripts name can go to the trash; it comes back from there if
-  the disk is back within the week.
+  A place on a disk that is not mounted at the time looks gone too — or empty,
+  where an empty directory stands where it is mounted — and what only its
+  transcripts name can go to the trash; it comes back from there if the disk
+  is back within the week.
   One that is there but cannot be looked at or read in full, a project
   directory that is a link (a search does not follow it), a search that does
   not reach its end — every search also reads a file of the plugin's own that
   holds one known id, and one that does not print it did not finish — a
-  search whose output is too long, all recorded places gone, or commands that
-  cannot be run, stop the collection before anything moves, and the line it
-  prints says why. A transcript that is itself a link inside a project
-  directory is not followed and not counted.
+  search whose output is too long, all recorded places gone, a trash that is
+  there and cannot be listed, or commands that cannot be run, stop the
+  collection before anything moves, and the line it prints says why. A
+  transcript that is itself a link inside a project directory is not
+  followed and not counted.
+- A place that is itself a link — `<config>/projects` linked to another
+  disk, say — is recorded as named and read, at each collection, where it
+  leads then; one recorded both under the link and where it leads is read
+  once (ADR 0039). Where the host cannot tell where it leads, the collection
+  stops.
 - The search reads transcripts as Claude Code writes them now: files named
   `*.jsonl`, an id spelled as 64 lowercase hexadecimal characters. Were it to
   write them otherwise — from the start of a conversation or from some point
@@ -1160,6 +1167,20 @@ too, so they are counted without the plugin keeping a list of its own.
 - A collection stopped while moving leaves what it moved in the trash, where
   `recall` and the next collection put it back when it is named. What it
   reports is counted on disk afterwards.
+- Sessions started together can each start a clean-up, and nothing keeps one
+  out while another runs. What a clean-up removes is chosen so that this
+  takes nothing any of them names: a result both in place and in the trash
+  has its copy in the trash removed only from a day two or more days past,
+  which no clean-up is still moving into; a newer copy stays until a later
+  clean-up, or a week after it is named by none (ADR 0038).
+- Storing a text that is already stored renews its file's time (`touch`,
+  from `/bin` or `/usr/bin`), so its day before the trash is counted from
+  this use; where no command can be started (Windows), from the first. The
+  days `/lossless-store` gives a result, and the oldest result the line at
+  the start of a session counts from, are the last time it was stored.
+- A collection takes its time when it is handed it, after the search: one
+  that spends more than a day from then to its last move — a machine asleep
+  in the middle of it — can meet another's removal of a copy.
 - A collection that a short session cuts off is tried again a day later;
   only one that went to the end waits a week.
 - A session that can read where results are kept — as `/lossless-store`
@@ -1215,12 +1236,16 @@ too, so they are counted without the plugin keeping a list of its own.
   `/usr/bin` on the files under `blobs/`, `index/` and `trash/`, and `rm`
   on what a write left in `tmp/`, only; a
   write runs `mv` from `tmp/` into `blobs/` and `index/`, `mkdir -p` on those
-  two, and `rm` on a part of its own in `tmp/` that it could not move. A
-  guard that sits in `PATH` does not see them.
+  two, `rm` on a part of its own in `tmp/` that it could not move, and
+  `touch -c -h` on a result in `blobs/` it stores again. A guard that sits in
+  `PATH` does not see them.
 - A copy of 0.4.0 or earlier, on the same store, does not put back from the
   trash: a result moved there while it ran is read again once a current copy
   puts it back, which the next collection does for any result a transcript
   names.
+- A copy of 0.7.1 or earlier, on the same store and cleaning up at the same
+  time as a current one, removes a copy in the trash from any day, as it
+  did, and can remove what the current one names (ADR 0038).
 
 Before a compaction writes anything, the plugin makes the directory it writes
 to readable by its owner alone: it runs `mkdir -m 700` when the directory is

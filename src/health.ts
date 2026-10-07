@@ -22,6 +22,8 @@ export type Counted =
       from: { results: Tally; parts: Tally; own: Tally; unknown: Tally };
       entries: Tally;
       trash: (Tally & { day: string })[];
+      /** The trash is there and could not be listed: what it holds is not known, and a clean-up stops on it. */
+      trashUnlisted?: true;
       /**
        * What is in `tmp/`; of it, what a write of the plugin's left a day ago or more, which a clean-up removes, and
        * what else there is a day old or more, which it does not.
@@ -70,7 +72,10 @@ export async function countStore(files: Files, list: List, dir: string, now: num
   }
   const times = blobs.map((entry) => entry.mtimeMs);
   const trash: (Tally & { day: string })[] = [];
-  for (const day of await listed(list, trashDir(dir)) ?? []) {
+  const days = await listed(list, trashDir(dir));
+  // As the clean-up reads it (#119): a trash that is there and cannot be listed is not an empty one.
+  const trashUnlisted = days === null && top.some((entry) => entry.name === 'trash');
+  for (const day of days ?? []) {
     if (day.kind !== 'dir' || day.isLink || !DATE.test(day.name)) continue;
     const trashed = filesIn(await listed(list, trashDayDir(dir, day.name))).filter((entry) => trashedIdOf(entry.name) !== undefined);
     trash.push({ day: day.name, ...tally(trashed) });
@@ -85,6 +90,7 @@ export async function countStore(files: Files, list: List, dir: string, now: num
     from,
     entries: tally(entries),
     trash: trash.sort((a, b) => a.day.localeCompare(b.day)),
+    ...(trashUnlisted ? { trashUnlisted: true as const } : {}),
     tmp: {
       ...tally(tmp),
       stale: removed.length,
@@ -163,7 +169,7 @@ export function storeReport(
     );
     const trashed = trashedOf(one);
     lines.push(
-      `  trash: ${one.trash.length === 0 ? 'empty' : `${tallyText(trashed)} files, by day moved there: ${one.trash.map((day) => `${day.day} ${tallyText(day)}`).join(', ')}`}`,
+      `  trash: ${one.trashUnlisted === true ? 'there, and could not be listed' : one.trash.length === 0 ? 'empty' : `${tallyText(trashed)} files, by day moved there: ${one.trash.map((day) => `${day.day} ${tallyText(day)}`).join(', ')}`}`,
     );
     lines.push(
       `  tmp/: ${

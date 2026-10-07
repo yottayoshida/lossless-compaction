@@ -445,8 +445,8 @@ test('a clean-up keeps what kept parts name: it collects against the ids followe
   assert.ok(back > 0 && back < collecting.indexOf('namedThroughParts('), 'put back first');
   assert.ok(collecting.slice(back, collecting.indexOf('namedThroughParts(')).includes("if ('stop' in inTrash) {"), 'and stopped where the trash cannot be read');
   assert.ok(collecting.includes("if ('stop' in named) {"), 'stops');
-  assert.ok(collecting.includes('collect(list, execOf($), dir, named, now)'), 'collected against them');
-  assert.ok(!collecting.includes('collect(list, execOf($), dir, live.ids, now)'), 'not against the transcripts alone');
+  assert.ok(collecting.includes('collect(list, execOf($), dir, named, Date.now())'), 'collected against them, at the time of the moves (ADR 0038)');
+  assert.ok(!collecting.includes('collect(list, execOf($), dir, live.ids,'), 'not against the transcripts alone');
 });
 
 test('stored results are written through mv where it starts, the reason a write failed is said, and a summary can be skipped', () => {
@@ -1177,4 +1177,11 @@ test("/lossless-export and /lossless-import run only when you type them, check w
   const reading = ['privateOf($, store)', 'await readIn(storingFilesOf($), listOf($), from, store.write,', 'await noteRootOf($, store, options);', 'await noteWitnessOf($, witnessCandidates(messages), options, true);'];
   const read = reading.map((one) => importing.indexOf(one));
   assert.ok(read.every((place, i) => place > 0 && (i === 0 || place > (read[i - 1] as number))), JSON.stringify(read));
+});
+
+test('the files a clean-up and a compaction read through ask Claude Code where a path lands, and a path it cannot tell is no place (ADR 0039)', () => {
+  // A host that answers no realPath leaves every place unresolved: a clean-up then stops on each, every week.
+  const files = hooks.slice(hooks.indexOf('function filesOf('), hooks.indexOf('\n}\n', hooks.indexOf('function filesOf(')));
+  assert.ok(files.includes('return (await $.fs.stat(path, { resolve: true })).realPath ?? null;'), files);
+  assert.ok(files.includes('} catch {\n        return null;'), 'a path the host refuses to look at resolves to nothing, not to an error');
 });

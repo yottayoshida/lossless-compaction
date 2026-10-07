@@ -30,10 +30,13 @@ import {
   whyNotNow,
   writeSentinel,
 } from '../src/lifetime.ts';
+import { store } from '../src/blobs.ts';
 import { namedThroughParts } from '../src/keep.ts';
-import { PART, idOf, inputTicketText, partTicketText, ticketText } from '../src/store.ts';
+import { blobPath } from '../src/layout.ts';
+import { PART, idOf, inputTicketText, partTicketText, recall, ticketText } from '../src/store.ts';
+import type { List } from '../src/lifetime.ts';
 import type { DirEntry, Exec } from '../src/types.ts';
-import { MemoryFiles, output } from './helpers.ts';
+import { DiskFiles, MemoryFiles, output } from './helpers.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse('2026-10-20T12:00:00Z');
@@ -203,6 +206,57 @@ test('a project directory that is a link stops it all: a search does not follow 
   assert.match(JSON.stringify(await liveIds(files, list(files), commands(files).exec, existsIn(files), [ROOT], SENTINEL)), /is a link/);
 });
 
+test('a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)', async () => {
+  const files = new MemoryFiles();
+  const elsewhere = '/disk/projects';
+  const [named, unnamed] = (await storeWith(files, [output('named behind a link', 40), output('named by none', 40)], 3 * DAY)) as [string, string];
+  await files.write(`${elsewhere}/-proj/s.jsonl`, `"${named}"`);
+  files.links.set(ROOT, elsewhere);
+  await writeSentinel(files, DIR);
+  const { exec, ran } = commands(files);
+  // Recorded under the link by an earlier version, and where it leads by this one.
+  const live = await liveIds(files, list(files), exec, existsIn(files), [ROOT, elsewhere], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual(live.roots, [elsewhere]);
+  assert.ok(live.ids.has(named));
+  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep')).length, 1, 'searched once');
+  assert.deepEqual(await collect(list(files), exec, DIR, live.ids, NOW), { trashed: 1, restored: 0, removed: 0 });
+  assert.ok(files.files.has(`${DIR}/blobs/${named}.txt`), 'what only the transcripts behind the link name went to the trash');
+  assert.ok(!files.files.has(`${DIR}/blobs/${unnamed}.txt`));
+});
+
+test('a recorded place that is there and leads nowhere the host can tell stops it all', async () => {
+  class Unresolved extends MemoryFiles {
+    override async realPath(): Promise<string | null> {
+      return null;
+    }
+  }
+  const files = new Unresolved();
+  await files.write(`${ROOT}/-proj/s.jsonl`, hex('5'));
+  await writeSentinel(files, DIR);
+  assert.deepEqual(await liveIds(files, list(files), commands(files).exec, existsIn(files), [ROOT], SENTINEL), { stop: `${ROOT} could not be resolved`, kind: 'place' });
+});
+
+test('a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one', async () => {
+  const files = new MemoryFiles();
+  await storeWith(files, [output('old, named by none', 40)], 3 * DAY);
+  files.dirs.add(`${DIR}/trash`);
+  const refusing = async (path: string) => {
+    if (path === `${DIR}/trash`) throw new Error('EACCES');
+    return files.list(path);
+  };
+  assert.equal(await trashIn(refusing, DIR), null);
+  const before = files.snapshot();
+  assert.deepEqual(await collect(refusing, commands(files).exec, DIR, new Set(), NOW), { stop: `the trash of ${DIR} could not be listed`, kind: 'trash' });
+  assert.deepEqual(await putBackNamed(files, refusing, commands(files).exec, [DIR], new Set()), { stop: `the trash of ${DIR} could not be listed`, kind: 'trash' });
+  assert.deepEqual(files.snapshot(), before, 'something moved');
+  // A store whose first clean-up has not made a trash yet goes on.
+  const fresh = new MemoryFiles();
+  await storeWith(fresh, [output('old, named by none', 40)], 3 * DAY);
+  assert.deepEqual(await trashIn(list(fresh), DIR), []);
+  assert.deepEqual(await collect(list(fresh), commands(fresh).exec, DIR, new Set(), NOW), { trashed: 1, restored: 0, removed: 0 });
+});
+
 test('a collection that runs to its end removes what a write left in tmp/ a day ago or more, and nothing else there; one that stops leaves it (#119)', async () => {
   const files = new MemoryFiles();
   await storeWith(files, [output('old, named by none', 40)], 3 * DAY);
@@ -279,17 +333,173 @@ test('a result in the trash that a transcript names again goes back at the next 
   assert.ok(files.files.has(`${DIR}/blobs/${id}.txt`) && files.files.has(`${DIR}/index/${id}.json`));
 });
 
-test('a result written again while its old copy sat in the trash leaves no copy behind there', async () => {
+test('a result written again while its old copy sat in the trash leaves no copy behind there, once no clean-up can still be moving into its day', async () => {
   const files = new MemoryFiles();
   const [id] = await storeWith(files, [output('again', 40)], 3 * DAY);
   const { exec } = commands(files);
   await collect(list(files), exec, DIR, new Set(), NOW);
   // A compaction moved the same text out again: the blob is back in place, the old copy still in the trash.
   await storeWith(files, [output('again', 40)], 0);
+  const inTrash = () => [...files.files.keys()].filter((path) => path.includes('/trash/')).sort();
+  // The next day the copy stays: a clean-up that names it no more could still be moving into that day (ADR 0038).
   assert.deepEqual(await collect(list(files), exec, DIR, new Set([id as string]), NOW + DAY), { trashed: 0, restored: 1, removed: 0 });
-  assert.deepEqual([...files.files.keys()].filter((path) => path.includes('/trash/')), []);
+  assert.deepEqual(inTrash(), [`${DIR}/trash/${dayOf(NOW)}/${id}.json`, `${DIR}/trash/${dayOf(NOW)}/${id}.txt`]);
+  // Two days on, none can: it goes.
+  assert.deepEqual(await collect(list(files), exec, DIR, new Set([id as string]), NOW + 2 * DAY), { trashed: 0, restored: 1, removed: 0 });
+  assert.deepEqual(inTrash(), []);
   // And the next collection has nothing more to say about it.
-  assert.deepEqual(await collect(list(files), exec, DIR, new Set([id as string]), NOW + 2 * DAY), { trashed: 0, restored: 0, removed: 0 });
+  assert.deepEqual(await collect(list(files), exec, DIR, new Set([id as string]), NOW + 3 * DAY), { trashed: 0, restored: 0, removed: 0 });
+});
+
+/** A clean-up's commands, the first that `at` picks held back until `go`; `reached` settles when it is. */
+function holding(exec: Exec, at: (argv: readonly string[]) => boolean) {
+  let reach = () => {};
+  let go = () => {};
+  const reached = new Promise<void>((resolve) => (reach = resolve));
+  const released = new Promise<void>((resolve) => (go = resolve));
+  let held = false;
+  const gated: Exec = async (argv, timeoutMs) => {
+    if (!held && at(argv)) {
+      held = true;
+      reach();
+      await released;
+    }
+    return exec(argv, timeoutMs);
+  };
+  return { exec: gated, reached, go };
+}
+
+const isMv = (argv: readonly string[]) => argv[0]?.endsWith('/mv') === true;
+const isRm = (argv: readonly string[]) => argv[0]?.endsWith('/rm') === true;
+
+/** Whether `recall` gives `id` back once it is put back from the trash, as the hook does when it is asked for (I7). */
+async function recalledAfterAll(files: MemoryFiles, exec: Exec, id: string): Promise<boolean> {
+  await restore(list(files), exec, DIR, new Set([id]));
+  return !('error' in (await recall(files, [DIR], id)));
+}
+
+test('clean-ups at once, one that names a result and others that do not, leave it to recall: a copy in the trash goes only from a day none still moves into (ADR 0038)', async () => {
+  // One that does not name it has moved its entry to the trash and is about to move its text; one that names it puts
+  // the entry back, finds the text still in place, and takes what the trash holds of it for a copy; the first moves the
+  // text into the trash; the second removes its copy, which is now all there is of it.
+  {
+    const files = new MemoryFiles();
+    const [named] = (await storeWith(files, [output('named again, two at once', 40)], 3 * DAY)) as [string];
+    const { exec } = commands(files);
+    const first = holding(exec, (argv) => isMv(argv) && argv.includes(`${DIR}/blobs/${named}.txt`));
+    const firstDone = collect(list(files), first.exec, DIR, new Set(), NOW);
+    await first.reached;
+    const second = holding(exec, isRm);
+    const secondDone = collect(list(files), second.exec, DIR, new Set([named]), NOW);
+    await Promise.race([second.reached, secondDone]);
+    first.go();
+    await firstDone;
+    second.go();
+    await secondDone;
+    assert.ok(await recalledAfterAll(files, exec, named), 'two clean-ups at once lost what one of them names');
+  }
+  // Three: one that does not name it moves it all to the trash; one that names it puts it all back and, finding it in
+  // place, takes what it put back for copies; a third that does not name it moves it to the trash again; the second
+  // removes its copies, which are now all there is of it.
+  {
+    const files = new MemoryFiles();
+    const [named] = (await storeWith(files, [output('named again, three at once', 40)], 3 * DAY)) as [string];
+    const { exec } = commands(files);
+    await collect(list(files), exec, DIR, new Set(), NOW);
+    const second = holding(exec, isRm);
+    const secondDone = collect(list(files), second.exec, DIR, new Set([named]), NOW);
+    await Promise.race([second.reached, secondDone]);
+    await collect(list(files), exec, DIR, new Set(), NOW);
+    second.go();
+    await secondDone;
+    assert.ok(await recalledAfterAll(files, exec, named), 'three clean-ups at once lost what one of them names');
+  }
+});
+
+test('three clean-ups at once, in any order of what they list and run, leave what one of them names to recall', async () => {
+  // Two that do not name it and one that does, from three starting points: in place and old, in today's trash, and in
+  // the trash two days back with a copy in place. Each list and each command waits its turn, and the turns are dealt
+  // at random, by seed, a thousand times.
+  for (let seed = 1; seed <= 1000; seed += 1) {
+    const files = new MemoryFiles();
+    const [named, other] = (await storeWith(files, [output(`named ${seed}`, 20), output(`other ${seed}`, 20)], 3 * DAY)) as [string, string];
+    const { exec } = commands(files);
+    if (seed % 3 !== 0) await collect(list(files), exec, DIR, new Set(), seed % 3 === 1 ? NOW : NOW - 2 * DAY);
+    if (seed % 3 === 2) await storeWith(files, [output(`named ${seed}`, 20)], 3 * DAY);
+    let state = seed;
+    const pick = (count: number) => {
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return state % count;
+    };
+    const waiting: (() => void)[] = [];
+    const turn = () => new Promise<void>((resolve) => waiting.push(resolve));
+    const gatedList: List = async (path) => {
+      await turn();
+      return files.list(path);
+    };
+    const gatedExec: Exec = async (argv, timeoutMs) => {
+      await turn();
+      return exec(argv, timeoutMs);
+    };
+    let running = 3;
+    const done = [new Set<string>(), new Set([named]), new Set<string>()].map((live) =>
+      collect(gatedList, gatedExec, DIR, live, NOW).finally(() => (running -= 1)),
+    );
+    while (running > 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (waiting.length > 0) waiting.splice(pick(waiting.length), 1)[0]?.();
+    }
+    await Promise.all(done);
+    assert.ok(await recalledAfterAll(files, exec, named), `seed ${seed}: lost what one clean-up names`);
+    // What none names is not a week in the trash: it is somewhere still.
+    assert.ok([...files.files.keys()].some((path) => path.endsWith(`/${other}.txt`)), `seed ${seed}: removed what was not due`);
+  }
+});
+
+test('what a clean-up is about to remove from the trash stays where a compaction stores it again, or puts it back whole, before the removal', async () => {
+  // Not covered: a removal between the two moves of a putting back, which leaves the text without its entry. Only
+  // what no transcript named when the clean-up searched is removed, which docs/invariants.md does not promise to keep
+  // ("Transcripts the clean-up does not know of").
+  for (const meanwhile of ['stored again', 'put back'] as const) {
+    const files = new MemoryFiles();
+    const text = output(`removed ${meanwhile}`, 40);
+    const [id] = (await storeWith(files, [text], 30 * DAY)) as [string];
+    const { exec } = commands(files);
+    // In the trash past its grace, named by none when the clean-up searched.
+    await collect(list(files), exec, DIR, new Set(), NOW - GRACE_MS - 2 * DAY);
+    const cleanUp = holding(exec, isRm);
+    const done = collect(list(files), cleanUp.exec, DIR, new Set(), NOW);
+    await cleanUp.reached;
+    // A compaction names it again: it stores the same text, or puts it back from the trash first.
+    if (meanwhile === 'stored again') await store(files, DIR, 'Read', text);
+    else await restore(list(files), exec, DIR, new Set([id]));
+    cleanUp.go();
+    await done;
+    assert.ok(!('error' in (await recall(files, [DIR], id))), `${meanwhile}: removed`);
+  }
+});
+
+test('a text stored again has its time renewed, so a clean-up within a day of the new use does not move it; where no command starts it is not', async () => {
+  const text = output('stored again', 40);
+  const id = await idOf(text);
+  const hour = 60 * 60 * 1000;
+  for (const moves of [true, false]) {
+    const files = new DiskFiles(moves);
+    files.now = () => NOW;
+    assert.ok(!('reason' in (await store(files, DIR, 'Read', text))));
+    // Stored three days ago, and named by no transcript since.
+    files.mtimes.set(blobPath(DIR, id), NOW - 3 * DAY);
+    assert.ok(!('reason' in (await store(files, DIR, 'Read', text))));
+    const blobs = await files.list(`${DIR}/blobs`);
+    const toTrash = planGc(blobs, [], new Set(), NOW + hour).toTrash;
+    if (moves) {
+      assert.deepEqual(files.renewed, [blobPath(DIR, id)]);
+      assert.deepEqual(toTrash, [], 'a text stored again an hour ago went to the trash');
+    } else {
+      // Windows: no `touch` can be started, and the day is counted from the first time it was stored (docs/invariants.md).
+      assert.deepEqual(toTrash, [id]);
+    }
+  }
 });
 
 test('an entry whose move back failed stays in the trash, though its blob went back', async () => {
@@ -411,6 +621,19 @@ test("the place of this session's transcript is recorded only when a project dir
   await files.write(`${ROOT}/-repo/abc-123.jsonl`, '{}');
   files.dirs.add(ROOT);
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', 'abc-123'), ROOT);
+  // A projects directory that is a link is looked into where it leads, and recorded as named, so that a clean-up
+  // follows it wherever it is turned (ADR 0039). Claude Code 2.1.292 lists through a link; the transcript is looked
+  // for where it lands all the same, so that it does not rest on that.
+  class Unlisted extends MemoryFiles {
+    override async list(path: string) {
+      if (path === '/home/u/.claude/projects') throw new Error('listed through the link, not where it lands');
+      return super.list(path);
+    }
+  }
+  const linked = new Unlisted();
+  await linked.write('/disk/projects/-proj/abc-123.jsonl', '{}');
+  linked.links.set('/home/u/.claude/projects', '/disk/projects');
+  assert.equal(await rootFor(linked, list(linked), '/home/u/.claude', 'abc-123'), '/home/u/.claude/projects');
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', 'other'), null);
   assert.equal(await rootFor(files, list(files), '/home/u/.claude', '../x'), null);
   assert.equal(await rootFor(new MemoryFiles(), list(new MemoryFiles()), '/home/u/.claude', 'abc-123'), null);
@@ -513,7 +736,8 @@ test('a result in place and in the trash at once does not stop a collection: it 
   const inTrash = await putBackNamed(files, list(files), exec, [DIR], live);
   assert.deepEqual(inTrash, live);
   assert.deepEqual(await namedThroughParts(files, [DIR], live, inTrash as Set<string>), live);
-  await collect(list(files), exec, DIR, live, NOW + DAY);
+  // Two days after it went there, when no clean-up can still be moving into that day (ADR 0038).
+  await collect(list(files), exec, DIR, live, NOW + 2 * DAY);
   assert.deepEqual(await trashIn(list(files), DIR), []);
   assert.ok(files.files.has(`${DIR}/blobs/${id}.txt`));
   // An id that is named and nowhere, a commit's hash say, stops nothing.

@@ -149,6 +149,27 @@ test('a file under blobs/, index/ or the trash that the clean-up would not take 
   assert.deepEqual([after.results, after.from, after.entries, after.trash], [before.results, before.from, before.entries, before.trash]);
 });
 
+test('a trash that is there and cannot be listed is said as such, not as empty, as the clean-up stops on it (#119)', async () => {
+  const files = new Guarded();
+  await storeIn(files, DIR);
+  await put(files, `${DIR}/trash/2026-10-10/notes.txt`, 'left there', NOW - 10 * DAY);
+  const refusing = async (path: string) => {
+    if (path === `${DIR}/trash`) throw new Error('EACCES');
+    return list(files)(path);
+  };
+  const counted = await countStore(files, refusing, DIR, NOW);
+  assert.ok(!('missing' in counted) && counted.trashUnlisted === true);
+  assert.match(storeReport([counted], await stateIn(files, list(files), [DIR]), NOW, false), /\n {2}trash: there, and could not be listed\n/);
+  // One that can be listed is counted, and one not made yet is empty.
+  const listedOne = await countStore(files, list(files), DIR, NOW);
+  assert.ok(!('missing' in listedOne) && listedOne.trashUnlisted === undefined && listedOne.trash.length > 0);
+  const fresh = new Guarded();
+  await put(fresh, `${DIR}/blobs/${hex('e')}.txt`, 'kept', NOW - DAY);
+  const none = await countStore(fresh, list(fresh), DIR, NOW);
+  assert.ok(!('missing' in none) && none.trashUnlisted === undefined);
+  assert.match(storeReport([none], await stateIn(fresh, list(fresh), [DIR]), NOW, false), /\n {2}trash: empty\n/);
+});
+
 test('what is under a tmp/ that is a link is not said to be removed by a clean-up, which sweeps a plain tmp/ alone (#119)', async () => {
   const files = new Guarded();
   await put(files, `${DIR}/blobs/${hex('e')}.txt`, 'kept', NOW - DAY);

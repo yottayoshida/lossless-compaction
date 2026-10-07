@@ -107,9 +107,17 @@ export async function put(files: Files, path: string, text: string, tmp: string)
  * anything is written. A file there that `repair` says is broken is written
  * over: a blob is named by the hash of its text, so other text under that name
  * is what a write that failed partway left; an entry that is not JSON is the
- * same.
+ * same. With `renew`, the same text already there has its time set to now, as
+ * far as the host can: a clean-up counts a result's day from it (#119).
  */
-async function writeOnce(files: Files, path: string, text: string, tmp: string, repair: (there: string) => boolean): Promise<NotMoved | null> {
+async function writeOnce(
+  files: Files,
+  path: string,
+  text: string,
+  tmp: string,
+  repair: (there: string) => boolean,
+  renew = false,
+): Promise<NotMoved | null> {
   const found = await look(files, path);
   if (found === 'symlink') return { reason: 'symlink' };
   if (found === 'not-a-file') return { reason: 'not-a-file' };
@@ -123,7 +131,10 @@ async function writeOnce(files: Files, path: string, text: string, tmp: string, 
   } catch (error) {
     return failed(error);
   }
-  if (back === text) return null;
+  if (back === text) {
+    if (renew && found === 'file') await files.move?.renew?.(path).catch(() => undefined);
+    return null;
+  }
   if (found === 'missing' || !repair(back)) return { reason: 'differs' };
   // Looked at again: what is written over is a plain file, or nothing, not a link put there meanwhile.
   const again = await look(files, path);
@@ -159,7 +170,7 @@ export async function store(files: Files, dir: string, tool: string, text: strin
   }
   const id = await idOf(text);
   const tmp = tmpDir(dir);
-  const blob = await writeOnce(files, blobPath(dir, id), text, tmp, () => true);
+  const blob = await writeOnce(files, blobPath(dir, id), text, tmp, () => true, true);
   if (blob) return blob;
   const entry = await writeOnce(files, entryPath(dir, id), JSON.stringify({ bytes, tool }), tmp, notJson);
   // An entry written for another tool that returned the same text differs, and that is fine; one that does not read,

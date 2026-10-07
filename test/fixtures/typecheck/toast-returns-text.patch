@@ -1,0 +1,11 @@
+--- a/hooks/move-out.ts
++++ b/hooks/move-out.ts
+@@ -52,7 +52,7 @@
+ 
+ const FALLBACK_WINDOW = 200_000;
+ 
+-type WithUi = { ui: { log: (text: string) => void; toast: (text: string) => void } };
++type WithUi = { ui: { log: (text: string) => void; toast: (text: string) => string } };
+ type WithEnv = { env: { get: (name: string) => Promise<string | undefined> } };
+ type WithEnvSet = { env: { set: (name: string, value: string) => Promise<unknown> } };
+ type WithFiles = {
