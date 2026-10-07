@@ -35,8 +35,9 @@ puts together some other way.
   interface: at a compaction, when `recall` or `find` is called, when a
   tool is called (to refuse a tool call that hands on a ticket), when Claude
   Code shows a file again after a summary, each message you send (to tell
-  one sent again from a rewind), and when you type `/lossless-status` (to
-  count the tickets in it). `hooks/notice.sh` is handed each message
+  one sent again from a rewind), when you type `/lossless-status` (to
+  count the tickets in it), and when you type `/lossless-export` or
+  `/lossless-import` (for what it names). `hooks/notice.sh` is handed each message
   too, and a `/compact`, and keeps of them only the session id below.
 - At a summary, up to 20 of the files the conversation read with `Read`, of
   256 KB or less each, as they are on disk now, to say which changed since.
@@ -112,6 +113,12 @@ a place set before is still read (#116). Paths only, nothing of a result.
 Claude Code writes it, mode 644 where it was measured: other users of the
 machine can read those paths, which mode 700 on the places does not cover.
 
+And, only when you type `/lossless-export <directory>`, a copy of the results
+the conversation names, with their entries, in that new directory, made
+readable by you alone: it is not cleaned up, and holds what the results held
+(#116). `/lossless-import` reads such a directory and writes into where
+results are kept.
+
 And `~/.local/state/lossless-compaction/machine.json`, outside Claude Code's
 directory: this machine's id, a random one made the first time it is needed
 (ADR 0032). Nothing else is in it.
@@ -165,7 +172,9 @@ by the plugin.
 
 `mkdir`, `chmod`, `mv`, `ln`, `rm`, `grep` and `sh`, from `/bin` or
 `/usr/bin`: on the files under where it keeps results and, for `mkdir`, the
-directory that is to hold them; `ln` and `rm` on this machine's id under
+directory that is to hold them; `mkdir`, `chmod` and `mv` on the new
+directory you give `/lossless-export`, and `sh` to resolve where it is
+(`cd` there and `pwd -P`, in the nearest directory of it that is there); `ln` and `rm` on this machine's id under
 `~/.local/state/lossless-compaction/`, the first time it is made; `grep` on
 transcripts as above; and `sh` to read its own process id. Claude Code runs `hooks/notice.sh` with `sh` at each message you
 send and around a compaction. None of them connects to a network.

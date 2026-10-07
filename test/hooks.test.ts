@@ -10,7 +10,7 @@ import { KEPT } from '../src/keep.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles, conversation, enospc, sized } from './helpers.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
-import { ATTACHED_KEPT, FIND_TOOL, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
+import { ATTACHED_KEPT, EXPORT_COMMAND, FIND_TOOL, IMPORT_COMMAND, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
 import { KEY_VARIABLES, PLACE_VARIABLES, ROUTE_VARIABLES } from '../src/trust.ts';
 
@@ -135,11 +135,12 @@ test("where results are kept and where find sends both go through the repository
   assert.ok(user !== undefined && both?.includes('repo = null;') && !user.includes('repo = null'), 'the user file is read on its own');
   assert.ok(hooks.includes('placeTaints(taints, options)'), 'the place');
   assert.ok(hooks.includes('sendTaints(taints, options)'), 'the sending');
-  // Each of recall, find, the compaction, a subagent's compaction (ADR 0026), the clean-up, /lossless-store and a message
-  // sent again from a rewind (ADR 0024) takes the place from storeOf and gives up on its reason.
+  // Each of recall, find, the compaction, a subagent's compaction (ADR 0026), the clean-up, /lossless-store, a message
+  // sent again from a rewind (ADR 0024), /lossless-export and /lossless-import (#116) takes the place from storeOf and
+  // gives up on its reason.
   const givingUp = hooks.split("if (typeof store === 'string')").length - 1;
   // The compaction calls it `place` until the place is known to be private (it keeps the conversation after that).
-  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 7, 'seven callers');
+  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 9, 'nine callers');
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes("const store = await storeOf($, options);\n    if (typeof store === 'string') return;"), 'the clean-up too');
 });
@@ -1136,4 +1137,36 @@ test("the places written to under these settings are noted in the plugin's own s
   assert.ok(storing.includes('return withEarlier(store, [...(await earlierOf($, store.write)), ...defaults]);'));
   const noting = hooks.slice(hooks.indexOf('function earlierOf('), hooks.indexOf('/** The provider', at));
   assert.ok(noting.includes('() => $.store.get(PLACES_KEY),\n    (places) => $.store.set(PLACES_KEY, places),'), "in the plugin's own store, through notePlace (test/store.test.ts)");
+});
+
+test("/lossless-export and /lossless-import run only when you type them, check where they write before writing, and note what was read in as this conversation's (#116)", () => {
+  const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
+  assert.ok(start.includes('[EXPORT_COMMAND, ') && start.includes('[IMPORT_COMMAND, ') && start.includes('await $.command.register({ name, description });'), 'registered at the start, not mid-turn');
+  assert.equal(EXPORT_COMMAND, 'lossless-export');
+  assert.equal(IMPORT_COMMAND, 'lossless-import');
+  const at = (command: string) => hooks.indexOf(`on('command.run', { command: '${command}' }`);
+  const exporting = hooks.slice(at(EXPORT_COMMAND), at(IMPORT_COMMAND));
+  const importing = hooks.slice(at(IMPORT_COMMAND), hooks.indexOf(hookOn('tool.call', RECALL_TOOL)));
+  assert.ok(at(EXPORT_COMMAND) > 0 && at(IMPORT_COMMAND) > at(EXPORT_COMMAND));
+  for (const handler of [exporting, importing]) {
+    // Who typed it is looked at first: a channel, another agent or a scheduled run has nothing written.
+    assert.ok(handler.indexOf('if (!byPerson(e.origin))') > 0 && handler.indexOf('if (!byPerson(e.origin))') < handler.indexOf('storeOf('));
+    assert.ok(handler.includes('if (!plainPath('), 'a path from the root, with no . or .. (src/carry.ts)');
+    // Not on Windows, where no mode keeps a directory to you alone: refused once the place is known, before anything is written.
+    assert.ok(handler.indexOf('if (onWindows(store.write)) return { text: NOT_ON_WINDOWS };') > handler.indexOf('storeOf('));
+    // Stopped while some of the hook's own time is left, and what is left said.
+    assert.ok(handler.includes('() => next.budget.remainingMs > BUDGET_LEFT_MS'));
+    assert.ok(handler.includes('} catch {') && !handler.includes('error.message'), 'what an error says is not shown');
+  }
+  assert.ok(hooks.includes("const byPerson = (origin: { kind: string } | undefined): boolean => origin?.kind === 'composer' || origin?.kind === 'bridge';"));
+  // Where it writes is checked before anything is: a new directory, outside any repository, made private.
+  // Gone on with only where the directory holds the mark this command writes first.
+  assert.ok(exporting.includes('if (again && !(await $.fs.exists(`${to}/${EXPORT_MARK}`))) return'));
+  const order = ['const again = await $.fs.exists(to);', 'if (await insideRepositoryOf($, to))', 'await restoreFor($, store, ticketIds(messages), partIds(messages));', 'await ensurePrivate(filesOf($), runOf($), to)', 'if (!again) await filesOf($).write(`${to}/${EXPORT_MARK}`,', 'await writeOut(storingFilesOf($), store.read, ids, to,'];
+  const places = order.map((one) => exporting.indexOf(one));
+  assert.ok(places.every((place, i) => place > 0 && (i === 0 || place > (places[i - 1] as number))), JSON.stringify(places));
+  // Read in to the place written to, made private first; then the transcript's place and a witness, so that the clean-up counts it.
+  const reading = ['privateOf($, store)', 'await readIn(storingFilesOf($), listOf($), from, store.write,', 'await noteRootOf($, store, options);', 'await noteWitnessOf($, witnessCandidates(messages), options, true);'];
+  const read = reading.map((one) => importing.indexOf(one));
+  assert.ok(read.every((place, i) => place > 0 && (i === 0 || place > (read[i - 1] as number))), JSON.stringify(read));
 });

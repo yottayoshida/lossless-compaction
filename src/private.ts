@@ -13,7 +13,7 @@ import type { FileStat, Files } from './types.ts';
 /** Runs a command by its argument vector and resolves with its exit code; rejects when it cannot be started. */
 export type Run = Start<{ exitCode: number }>;
 
-const WINDOWS = /^[A-Za-z]:[\\/]/;
+export const WINDOWS = /^[A-Za-z]:[\\/]/;
 
 async function statOf(files: Files, path: string): Promise<FileStat | null> {
   try {
