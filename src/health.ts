@@ -149,7 +149,7 @@ export function storeReport(
     lines.push(
       `  kept from: tool results ${tallyText(one.from.results)}, kept conversations ${tallyText(one.from.parts)}, ` +
         `${PLUGIN}'s own tools ${tallyText(one.from.own)}` +
-        (one.from.unknown.count > 0 ? `, no readable entry ${tallyText(one.from.unknown)}` : ''),
+        (one.from.unknown.count > 0 ? `, no readable entry ${tallyText(one.from.unknown)} (/lossless-store check looks at each)` : ''),
     );
     const trashed = trashedOf(one);
     lines.push(

@@ -966,7 +966,7 @@ lossless-compaction: Results are kept in one place, set by storeDir:
 
 /Users/you/results
   results: 3 (4.9 KB), 2026-09-30 to 2026-10-02; their entries: 2 (68 B)
-  kept from: tool results 1 (42 B), kept conversations 1 (4.9 KB), lossless-compaction's own tools 0 (0 B), no readable entry 1 (22 B)
+  kept from: tool results 1 (42 B), kept conversations 1 (4.9 KB), lossless-compaction's own tools 0 (0 B), no readable entry 1 (22 B) (/lossless-store check looks at each)
   trash: 3 (60 B) files, by day moved there: 2026-09-25 2 (58 B), 2026-10-01 1 (2 B)
   tmp/: 2 (35 B) files, 1 over a day old, left by a write that stopped; those can be removed by hand
 
@@ -1002,6 +1002,39 @@ machines the store is used from:
   a text that is the one stored, stops nothing: the text is read as a kept
   part's ([ADR 0033](adr/0033-an-entry-that-does-not-read-is-read-through-its-text.md)). It is not a tool: the agent
   is not offered it.
+- `/lossless-store check` names, once each, every id a place keeps whose
+  files are not whole — any copy of it, in place or in the trash — of every
+  place results are read from, with what that does: a link where a text or
+  an entry is kept, and a text that no longer has the hash it is named by
+  or does not read, which `recall` refuses; an entry with no text, and a
+  text with no entry, under which it finds nothing in that place; an entry
+  that does not read or names no tool, whose text `recall` gives back and
+  `/lossless-export` leaves out; an entry that gives another size than its
+  text, or none, whose text `recall` gives back and whose ticket a
+  compaction does not take for one it wrote; and a copy in the trash that is
+  not whole beside a whole text and entry in place, which does nothing now,
+  `recall` reading the one in place. A text and its entry that are whole and
+  stand apart, one in place and one in the trash, are counted, not named:
+  `recall` puts them back when asked for in the place results are kept in,
+  and not in an earlier one (#116); of an earlier place the answer says that
+  `recall` puts back nothing from its trash. A file under a minute old,
+  which a write may be partway through, is counted and not judged; a
+  clean-up or a `recall` moving files while it reads can make one look
+  apart or alone, which a second run tells. Where the ten seconds a command
+  has of its own do not reach the end, it says where to go on from:
+  `/lossless-store check from <place>:<start of an id>`. Each id is named by
+  its first 16 characters, at most fifty of a kind: whole, an id the command
+  printed would stand in the conversation and be taken by the clean-up for
+  one named. A place, or a directory of it, that is there and cannot be
+  listed is said so and not checked. It reads every stored text to hash it,
+  shows none of it, and writes nothing (#117). Measured on 2026-10-07 with
+  Claude Code 2.1.291: one run over two places of 5,549 results and 72 MB
+  each, 11,098 in all, took 8.8 to 10.1 s in three runs, of files read
+  before; a run over one of them, about 5,600 in all, took 41 s with the
+  machine busier (load 6, an antivirus reading what was read). Waiting on
+  the disk is not counted against the ten seconds, so a slow disk makes the
+  answer late, not partial. A first run on files not read since was not
+  timed.
 - A clean-up that stops records the kind of stop in `gc.json`, and the ids
   and causes of the stored things that stopped it, every one it reaches in
   that try, up to twenty with a count of the rest; one behind a part that

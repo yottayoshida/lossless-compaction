@@ -75,6 +75,7 @@ import {
 import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src/witness.ts';
 import { idIn, machineFileFrom, machineIdOf, markName, marksIn, noteMachine, readMarks, readableSessions, sharedWith, takeOffMarks, unreadMarks } from '../src/machine.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
+import { checkAsked, checkPlaces, checkReport } from '../src/check.ts';
 
 const FALLBACK_WINDOW = 200_000;
 
@@ -899,7 +900,8 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({
         name: STORE_COMMAND,
-        description: `Says how much ${PLUGIN} keeps, what is in its trash and how its clean-up went, without reading a result`,
+        description: `Says how much ${PLUGIN} keeps, what is in its trash and how its clean-up went, without reading a result; with check, reads each to name those whose files are not whole`,
+        argumentHint: '[check]',
         immediate: true,
       });
     } catch (error) {
@@ -934,10 +936,23 @@ export const register: Register = (on, options) => {
   });
 
   // Spelled out, not imported: a test holds it to STORE_COMMAND.
-  on('command.run', { command: 'lossless-store' }, async ($) => {
+  on('command.run', { command: 'lossless-store' }, async ($, e, next) => {
     try {
       const store = await storeOf($, options);
       if (typeof store === 'string') return { text: `no place results are kept in can be read: ${store}` };
+      const asked = e.args.trim();
+      const check = checkAsked(asked);
+      if (check !== null) {
+        // Every place read, as recall reads them, and whether recall puts back from its trash; each text read and
+        // hashed in src/check.ts, none shown, with the time the hook has left (#117).
+        const began = Date.now();
+        const read = await plainDirsOf($, store.read);
+        const owned = ownedOf(store);
+        const places = store.read.map((dir) => ({ dir, there: read.includes(dir), putsBack: owned.includes(dir) }));
+        const done = await checkPlaces(filesOf($), listOf($), places, Date.now(), () => next.budget.remainingMs, check.from);
+        return { text: checkReport(done.checked, done.next, Date.now() - began) };
+      }
+      if (asked !== '') return { text: `/${STORE_COMMAND} takes check, which reads every result kept and names what is not whole, or nothing after it` };
       const now = Date.now();
       const files = filesOf($);
       const list = listOf($);

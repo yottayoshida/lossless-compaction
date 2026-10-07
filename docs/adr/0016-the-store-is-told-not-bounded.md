@@ -32,7 +32,10 @@ when one was tried and when one ended, and is written over at every try.
   what the host lists of the directories, with sizes and times, from the
   index entries (`{bytes, tool}`), and from `gc.json` and `roots/`, in every
   place results are read from. It reads no stored result, and names no path
-  but the places results are kept in.
+  but the places results are kept in. (Amended by #117: `/lossless-store
+  check` reads each stored text to hash it, shows none of it, and names
+  each id whose files are not whole, with what that does, by the first 16
+  characters of the id.)
 - The clean-up counts its tries since the last one that ended, and a try
   that stops records the kind of stop, from a closed list, and when. A try
   that a short session cut off is counted. No path and no text a command
