@@ -116,7 +116,7 @@ every request carries, which no compaction makes smaller, the first message,
 which always stays, and the rest (ADR 0023).
 
 ```text
-Not compacted · lossless-compaction: nothing to move out, 28425 of 167000 tokens in use: the conversation is left as it is; of what is in use, 12100 are sent with every request (the system prompt, tools, memory and the like), 15700 the first message and 625 the rest. /compact with instructions runs Claude Code's summary
+Not compacted · lossless-compaction: nothing to move out, 28,425 tokens in use, of the 167,000 at which Claude Code compacts on its own: the conversation is left as it is; of what is in use, 12,100 are sent with every request (the system prompt, tools, memory and the like), 15,700 the first message and 625 the rest. /compact with instructions runs Claude Code's summary
 ```
 
 - The line is the one Claude Code shows for a compaction a plugin skipped,
@@ -328,7 +328,9 @@ it, which is all a cut could take away.
 A conversation over the line for what is not the conversation, the
 system prompt and the tools' definitions, is handed back all the same, since
 a summary would not change that: cut as far as it goes, or as it is where
-results were moved out.
+results were moved out. As it was measured, in the line's form before #141
+(the line now gives its sizes in tokens with the thousands set apart,
+[usage](usage.md)):
 
 ```text
 lossless-compaction: no summary, messages 2-19 of 20 kept in 1 part: moved 0 of 7 tool results out (67214 -> 453 chars, about 6599 of 167000 tokens in use) in 79 ms; still over what may stay in use, which a summary would not change
@@ -1064,8 +1066,8 @@ compaction says why (ADR 0008):
   (Windows), they are written in place, and a write the disk refuses can
   still cut short a result another write stored at the same moment. Each
   move took about 4 ms on macOS; a stored result takes two.
-- What the system said is in the line the compaction prints:
-  `could not write: ENOSPC`. A result that could not be written stays in
+- What the system said is in the line the compaction prints, beside the
+  results that could not be written: `2 could not be written (ENOSPC)`. A result that could not be written stays in
   the conversation as it was.
 - When nothing could be kept before Claude Code's summary because a write
   failed, the compaction is skipped:

@@ -14,8 +14,8 @@
 // built-in summary, of the conversation as it was handed in when nothing was
 // moved out, or of what is left when something was.
 
-import { leftUndone, reportLine, tokensOf, undoneLine, type Config, type Count, type Outcome } from './compact.ts';
-import { cutLine, decide, isLong } from './cut.ts';
+import { leftUndone, noticeLine, noticeSize, reportLine, tokensOf, undoneLine, whatOf, type Config, type Count, type Outcome } from './compact.ts';
+import { cutLine, cutNotice, decide, isLong } from './cut.ts';
 import { PLUGIN } from './store.ts';
 
 /** What the hook does before trying anything: skip the compaction, keep a subagent's and hand it to the summary, or try. */
@@ -53,21 +53,21 @@ export function failedLine(failure: Failure, called = false): string {
 /**
  * The built-in summary, the conversation kept first: of the conversation as it
  * was handed in (`given`), or of what moving results out left of it
- * (`rebuilt`), which is then also what is kept. `line` is said first.
+ * (`rebuilt`), which is then also what is kept. `line` is said first, in the transcript, and `notice` over it (#141).
  */
-export type Summarize = { step: 'summarize'; line: string; of: 'given' | 'rebuilt' };
+export type Summarize = { step: 'summarize'; line: string; notice: string; of: 'given' | 'rebuilt' };
 
 /**
  * What to do once results were moved out, or tried to be:
  * - `skip`: leave the conversation as it is, saying `why` as the reason;
- * - `back`: hand back what the compaction rebuilt, saying `line`;
+ * - `back`: hand back what the compaction rebuilt, saying `line`, and `notice` over it;
  * - `cut`: keep the messages from `after` up to `at` in parts in place of a
  *   summary; when a part cannot be written, do `otherwise`;
  * - `summarize`: see `Summarize`.
  */
 export type Step =
   | { step: 'skip'; why: string }
-  | { step: 'back'; line: string }
+  | { step: 'back'; line: string; notice: string }
   | { step: 'cut'; after: 0 | 1; at: number; over: boolean; otherwise: Exclude<Step, { step: 'cut' }>; held?: number }
   | Summarize;
 
@@ -126,19 +126,28 @@ export function nextStep(tried: Tried): Step {
   const asked = summaryAskedFor(tried);
   const before: Exclude<Step, { step: 'cut' } | Summarize> | null =
     nothing && undone
-      ? { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts)}` }
+      ? { step: 'skip', why: `${PLUGIN}: ${undoneLine(tried.given ? tried.inUse : null, report.window, parts, report.windowOf)}` }
       : !nothing && outcome.enough && !asked
-        ? { step: 'back', line: reportLine(report) }
+        ? { step: 'back', line: reportLine(report), notice: noticeLine(report) }
         : null;
   if (before !== null && !long) return before;
   // Nothing could be moved out, too much is still in use, or a summary was asked for: handed over, unless src/cut.ts
   // keeps the oldest messages in place of a summary, down to the size moving results out aimed at (ADR 0019); src/cut.ts
   // leaves one with instructions to the summary.
+  // Nothing moved out goes to the summary as it was handed in: what was in use is said, and no size it came to (#141).
   const summarize: Summarize = nothing
-    ? { step: 'summarize', line: `built-in compaction: nothing could be moved out (${reportLine(report)})`, of: 'given' }
+    ? {
+        step: 'summarize',
+        line: `built-in compaction: nothing could be moved out: ${reportLine(report, 'given')}`,
+        notice: "nothing could be moved out: Claude Code's summary runs on the whole conversation",
+        of: 'given',
+      }
     : {
         step: 'summarize',
         line: `built-in compaction on what is left, ${outcome.enough ? 'as it was asked for with instructions' : 'too much is still in use'}: ${reportLine(report)}`,
+        notice: outcome.enough
+          ? `${whatOf(report)} · Claude Code's summary runs on what is left, as asked with instructions`
+          : [whatOf(report), ...(noticeSize(report) === '' ? [] : [`still ${noticeSize(report)}`]), "Claude Code's summary runs on what is left"].join(' · '),
         of: 'rebuilt',
       };
   const decision = decide({
@@ -154,7 +163,7 @@ export function nextStep(tried: Tried): Step {
     bySize: before === null,
   });
   if (decision.hand !== 'back') return before ?? summarize;
-  if (decision.at === 0) return before ?? { step: 'back', line: cutLine(report, null) };
+  if (decision.at === 0) return before ?? { step: 'back', line: cutLine(report, null), notice: cutNotice(report, null) };
   return { step: 'cut', after: decision.after, at: decision.at, over: decision.over, otherwise: before ?? summarize, ...(decision.length ? { held: tried.entries ?? 0 } : {}) };
 }
 

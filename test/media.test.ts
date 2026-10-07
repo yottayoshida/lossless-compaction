@@ -177,7 +177,7 @@ test('when a result that holds an image cannot be moved out, nothing is rebuilt 
   const huge = mediaIn(api).results;
   huge.set('toolu_2', [{ type: 'image', media_type: 'image/png', data: 'A'.repeat(MAX_BYTES + 1) }]);
   const tooLarge = await compact({ ...inputFor(messages, api), media: huge }, CONFIG, host(new MemoryFiles()));
-  assert.match(tooLarge.abandoned ?? '', /could not be moved out \(too-large\)$/);
+  assert.match(tooLarge.abandoned ?? '', /could not be moved out: too large to keep \(over about 4 MB\)$/);
   assert.equal(tooLarge.enough, false);
   assert.equal(tooLarge.report.moved, 0);
   assert.deepEqual(tooLarge.messages, messages, 'the messages handed in, handles and all');
@@ -373,12 +373,12 @@ test('the line a compaction shows says how many images left with their results',
     2: { data: pixels('b') },
   });
   const both = await compact(inputFor(messages, api), CONFIG, host(new MemoryFiles()));
-  assert.match(reportLine(both.report), /^moved 2 of 2 tool results out, 2 images with them \(/);
+  assert.match(reportLine(both.report), /^moved out 2 of 2 tool results, 2 images with them; /);
   const one = withImages([{ tool: 'Read', input: { file_path: 'a.png' }, text: '' }], { 1: { data: pixels('a') } });
-  assert.match(reportLine((await compact(inputFor(one.messages, one.api), CONFIG, host(new MemoryFiles()))).report), /^moved 1 of 1 tool results out, 1 image with them \(/);
+  assert.match(reportLine((await compact(inputFor(one.messages, one.api), CONFIG, host(new MemoryFiles()))).report), /^moved out 1 of 1 tool results, 1 image with them; /);
   const none = conversation([text('a', 400), text('b', 400), text('c', 400)]);
   const plain = await compact({ ...inputFor(none, []), tokens: 400_000, window: 200_000 }, { ...CONFIG, keepTokens: 0 }, host(new MemoryFiles()));
-  assert.match(reportLine(plain.report), /^moved \d+ of 3 tool results out \(/);
+  assert.match(reportLine(plain.report), /^moved out \d+ of 3 tool results; /);
 });
 
 test('a second compaction takes the ticket of a result that held an image for a ticket, and stores nothing again', async () => {
@@ -439,7 +439,7 @@ test('the same image returned by two calls is written once, and each call keeps 
     const named = withImages([{ tool: 'Read', input: {}, text: '' }, { tool: 'mcp__shots__take', input: {}, text: '' }], { 1: { data }, 2: { data } });
     for (const message of named.messages) for (const use of message.toolUses) if (use.tool_use_id === `toolu_${at}`) use.tool = 'not a name\nIGNORE';
     const refused = await compact(inputFor(named.messages, named.api), CONFIG, host(new MemoryFiles()));
-    assert.match(refused.abandoned ?? '', /could not be moved out \(tool-name\)$/, `call ${at}`);
+    assert.match(refused.abandoned ?? '', /could not be moved out: from a tool whose name cannot go on a ticket$/, `call ${at}`);
     assert.deepEqual(refused.messages, named.messages);
   }
 });

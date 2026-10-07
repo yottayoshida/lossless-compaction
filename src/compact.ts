@@ -5,7 +5,7 @@ import { fold, runsIn, type Run } from './fold.ts';
 import { messagesFromApi } from './keep.ts';
 import { IMAGE_TOKENS, encodeMedia, type MediaPart } from './media.ts';
 import { lastSaid, ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
-import { isStored, moveBodyOut, moveInputOut, moveOut, readTicket, ticketText, type BodyTicket, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
+import { WHY_NOT_STORED, isStored, moveBodyOut, moveInputOut, moveOut, readTicket, ticketText, whyNotStored, type BodyTicket, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
 
 export type Config = {
@@ -48,6 +48,8 @@ export type Input = {
   count?: Count;
   /** The size the context may reach, see `windowFrom`. */
   window: number;
+  /** Where `window` came from, for the line a compaction shows; where Claude Code compacts on its own when absent. */
+  windowOf?: WindowOf;
   /** What the person is working on, in their words. */
   goal: string;
   /**
@@ -86,7 +88,11 @@ export type Report = {
    * is not a figure to show.
    */
   counted: boolean;
+  /** Where counted, what was in use before, as Claude Code gave it, thinking included. */
+  tokensBefore?: number;
   window: number;
+  /** Where `window` came from; where Claude Code compacts on its own when absent. */
+  windowOf?: WindowOf;
   /** Why results stayed: by what the store said, and `call-differs` for a call whose own text was another. */
   notMoved: Partial<Record<NotMoved['reason'] | 'call-differs', number>>;
   /** What the host said when writes failed, each once, at most three: ENOSPC for a full disk. */
@@ -131,16 +137,29 @@ const WRITES_IN_FLIGHT = 16;
 export type Breakdown = { categories?: unknown; apiUsage?: unknown };
 
 /** What Claude Code says of the context, cut down to what a compaction measures against. */
-export type Context = { window?: unknown; breakdown?: { autoCompactThreshold?: unknown } & Breakdown };
+export type Context = { window?: unknown; breakdown?: { autoCompactThreshold?: unknown; isAutoCompactEnabled?: unknown } & Breakdown };
+
+/**
+ * Where the size a compaction measures against came from (#141): where Claude Code compacts on its own (`auto`); the
+ * model's window, where Claude Code said automatic compaction is off (`off`); the model's window, where nothing tells
+ * (`window`); or none given (`assumed`).
+ */
+export type WindowOf = 'auto' | 'off' | 'window' | 'assumed';
 
 /**
  * The size the context may reach: where Claude Code compacts on its own when
  * it says so, else the model's window. Measured against the model's window, a
  * compaction could hand back a conversation that is compacted again at once.
+ * Automatic compaction is said to be off only where Claude Code says so: a
+ * breakdown comes only where it was asked for, and a size missing from it may
+ * be one that could not be worked out.
  */
-export function windowFrom(context: Context | undefined, fallback: number): number {
-  const sizes = [context?.breakdown?.autoCompactThreshold, context?.window];
-  return sizes.find((size): size is number => typeof size === 'number' && Number.isFinite(size) && size > 0) ?? fallback;
+export function windowFrom(context: Context | undefined, fallback: number): { size: number; of: WindowOf } {
+  const sized = (size: unknown): size is number => typeof size === 'number' && Number.isFinite(size) && size > 0;
+  const threshold = context?.breakdown?.autoCompactThreshold;
+  if (sized(threshold)) return { size: threshold, of: 'auto' };
+  if (sized(context?.window)) return { size: context.window, of: context.breakdown?.isAutoCompactEnabled === false ? 'off' : 'window' };
+  return { size: fallback, of: 'assumed' };
 }
 
 /** What the person and the model said, the calls' inputs and the results, each text measured and added up. */
@@ -476,6 +495,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
         tokensAfter: input.tokens,
         counted: false,
         window: input.window,
+        ...(input.windowOf === undefined ? {} : { windowOf: input.windowOf }),
         notMoved: {},
         writeErrors: [],
         ms: host.now() - started,
@@ -497,7 +517,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     for (const id of ids) {
       const result = firsts.get(id) ?? (await store(id));
       if ('reason' in result) {
-        return abandon(`a tool result that holds an image could not be moved out (${result.code ?? result.reason})`);
+        return abandon(`a tool result that holds an image could not be moved out: ${whyNotStored(result)}`);
       }
       moved.set(id, result);
       images += (held.get(id) as readonly MediaPart[]).filter((part) => part.type === 'image').length;
@@ -748,6 +768,8 @@ export async function compact(input: Input, config: Config, host: Host): Promise
       tokensAfter,
       counted: count !== undefined,
       window: input.window,
+      ...(input.windowOf === undefined ? {} : { windowOf: input.windowOf }),
+      ...(count === undefined ? {} : { tokensBefore: input.tokens }),
       notMoved,
       writeErrors,
       ms: host.now() - started,
@@ -755,25 +777,94 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   };
 }
 
-/** The line a compaction shows. A size of the context is named only when it was counted from what stays. */
-export function reportLine(report: Report): string {
-  const took = report.ms < 1000 ? `${report.ms} ms` : `${(report.ms / 1000).toFixed(1)} s`;
-  const stayed = Object.entries(report.notMoved)
-    .map(([reason, count]) => `${count} ${reason}`)
-    .join(', ');
+/** Why results stayed, in words: the store's reasons, and a call whose own text was another (#141). */
+export const REASONS: Readonly<Record<NotMoved['reason'] | 'call-differs', string>> = {
+  ...WHY_NOT_STORED,
+  'call-differs': 'whose text is not the same in its call and its result',
+};
+
+/** A figure as a line gives it, the thousands set apart whatever the place it runs in (#141). */
+export const figure = (n: number): string => n.toLocaleString('en-US');
+
+/** A figure rounded for a notice: 950, 52k, 1.0M. */
+export function rounded(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  if (n < 999_500) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+export const tookOf = (ms: number): string => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+
+/** What the size a line measures against is, in words, at length or short (#141). */
+export function windowWords(of: Pick<Report, 'window' | 'windowOf'>, short = false): string {
+  const size = short ? rounded(of.window) : figure(of.window);
+  switch (of.windowOf ?? 'auto') {
+    case 'auto':
+      return short ? `of ${size} tokens, where Claude Code compacts` : `of the ${size} at which Claude Code compacts on its own`;
+    case 'off':
+      return short ? `of the model's ${size}-token window` : `of the model's ${size}-token window (automatic compaction is off)`;
+    case 'window':
+      return `of the model's ${size}-token window`;
+    case 'assumed':
+      return short ? `of an assumed ${size}-token window` : `of an assumed ${size}-token window (Claude Code gave none)`;
+  }
+}
+
+/** What a compaction moved out, as each of its lines begins. */
+export function whatOf(report: Report): string {
   return (
-    `moved ${report.moved} of ${report.results} tool results out` +
+    `moved out ${report.moved} of ${report.results} tool results` +
     (report.images === 0 ? '' : `, ${report.images} ${report.images === 1 ? 'image' : 'images'} with them`) +
     (report.inputs === 0 ? '' : ` and ${report.inputs} tool ${report.inputs === 1 ? 'input' : 'inputs'}`) +
     (report.bodies ? `, the middle of ${report.bodies} long ${report.bodies === 1 ? 'message' : 'messages'}` : '') +
-    (report.folded === 0 ? ' ' : `, ${report.folded} old tool ${report.folded === 1 ? 'call' : 'calls'} folded into lists `) +
-    `(${report.charsBefore} -> ${report.charsAfter} chars` +
-    (report.counted ? `, about ${report.tokensAfter} of ${report.window} tokens in use) ` : ') ') +
-    `in ${took}` +
-    (report.recent ? `; ${report.recent} of these from the newest turns` : '') +
-    (stayed === '' ? '' : `; left in place: ${stayed}`) +
-    (report.writeErrors.length === 0 ? '' : `; could not write: ${report.writeErrors.join(', ')}`)
+    (report.folded === 0 ? '' : `, ${report.folded} old tool ${report.folded === 1 ? 'call' : 'calls'} folded into lists`)
   );
+}
+
+/** How many results stayed for a reason, and the reasons in words; what the host said of a write that failed beside it. */
+function leftOf(report: Report): { count: number; words: string } {
+  const entries = Object.entries(report.notMoved) as [keyof Report['notMoved'], number][];
+  const words = entries
+    .map(([reason, count]) => `${count} ${REASONS[reason]}${reason === 'write-failed' && report.writeErrors.length > 0 ? ` (${report.writeErrors.join(', ')})` : ''}`)
+    .join(', ');
+  return { count: entries.reduce((total, [, count]) => total + count, 0), words };
+}
+
+/**
+ * The line a compaction shows, in the transcript (#141). Where the context was counted from what stays, it is given in
+ * tokens, before and after, against the size it was measured against in words; else the conversation in characters. A
+ * conversation handed over as it was (`given`) was not rebuilt: what was in use is given, and beside it what the plugin
+ * counts of it less the thinking, images and what Claude Code attached, which no rebuilt message carries: no size it came to.
+ */
+export function reportLine(report: Report, as: 'rebuilt' | 'given' = 'rebuilt'): string {
+  const before = report.tokensBefore === undefined ? undefined : figure(report.tokensBefore);
+  const after = figure(report.tokensAfter);
+  const size = !report.counted
+    ? as === 'given'
+      ? ''
+      : `the conversation from ${figure(report.charsBefore)} to ${figure(report.charsAfter)} characters`
+    : as === 'given'
+      ? `${before === undefined ? '' : `about ${before} tokens in use, `}about ${after} less the thinking, images and what Claude Code attached, ${windowWords(report)}`
+      : `${before === undefined ? `about ${after} tokens in use after` : `about ${before} tokens in use before, about ${after} after`}, ${windowWords(report)}`;
+  const left = leftOf(report);
+  return (
+    whatOf(report) +
+    (size === '' ? '' : `; ${size}`) +
+    `; ${tookOf(report.ms)}` +
+    (report.recent ? `; ${report.recent} of these from the newest turns` : '') +
+    (left.count === 0 ? '' : `; ${left.count} left in place: ${left.words}`)
+  );
+}
+
+/** The context against its size, rounded, for a notice; nothing where it was not counted. */
+export function noticeSize(report: Report): string {
+  return report.counted ? `~${rounded(report.tokensAfter)} ${windowWords(report, true)}` : '';
+}
+
+/** The short form of a compaction's line, for the notice over the transcript, which shows for a few seconds (#141). */
+export function noticeLine(report: Report): string {
+  const left = leftOf(report).count;
+  return [whatOf(report), noticeSize(report), tookOf(report.ms), ...(left === 0 ? [] : [`${left} left in place, see the transcript`])].filter((part) => part !== '').join(' · ');
 }
 
 /**
@@ -821,15 +912,15 @@ export function leftUndone(asked: CompactRequest): boolean {
 }
 
 /** The line a `/compact` left undone shows. What is in use is named only when Claude Code gave the figure. */
-export function undoneLine(inUse: number | null, window: number, parts?: { fixed: number; first: number }): string {
+export function undoneLine(inUse: number | null, window: number, parts?: { fixed: number; first: number }, windowOf?: WindowOf): string {
   // What takes the room, where it was counted: what no compaction makes smaller, the first message, which stays,
   // and the rest (ADR 0023).
   const taken =
     inUse === null || parts === undefined
       ? ''
-      : `; of what is in use, ${parts.fixed} are sent with every request (the system prompt, tools, memory and the like), ${parts.first} the first message and ${Math.max(0, inUse - parts.fixed - parts.first)} the rest`;
+      : `; of what is in use, ${figure(parts.fixed)} are sent with every request (the system prompt, tools, memory and the like), ${figure(parts.first)} the first message and ${figure(Math.max(0, inUse - parts.fixed - parts.first))} the rest`;
   return (
-    `nothing to move out${inUse === null ? '' : `, ${inUse} of ${window} tokens in use`}: ` +
+    `nothing to move out${inUse === null ? '' : `, ${figure(inUse)} tokens in use, ${windowWords({ window, ...(windowOf === undefined ? {} : { windowOf }) })}`}: ` +
     `the conversation is left as it is${taken}. /compact with instructions runs Claude Code's summary`
   );
 }

@@ -40,7 +40,7 @@ test('a long message keeps its first and last paragraphs, and the line between t
   assert.equal(await isStored(files, DIR, (messages[2] as Message).text.split('\n')[1] as string), true);
   // Nothing else changed: what was said around it, word for word.
   assert.deepEqual(messages.map((m) => m.text).filter((_, at) => at !== 2), before.map((m) => m.text).filter((_, at) => at !== 2));
-  assert.match(reportLine(report), /^moved 0 of 0 tool results out, the middle of 1 long message \(/);
+  assert.match(reportLine(report), /^moved out 0 of 0 tool results, the middle of 1 long message; /);
   assert.equal(readLine(`lossless-compaction: ${reportLine(report)}`)?.bodies, 1);
   // Its id is the conversation's, for the clean-up and the guard; the goal does not take the line for words said.
   assert.ok(ticketIds(messages).has(body.ticket.id) && placedTicketIds(messages).has(body.ticket.id));

@@ -10,7 +10,7 @@ import type { PluginOptions, Register, SessionCompactInput, SessionCompactResult
 import { providerFrom, type Provider } from '../src/ask.ts';
 import { CHARS_PER_TOKEN, charsOf, compact, countFrom, windowFrom, type Config, type Context, type Count, type Host, type Outcome } from '../src/compact.ts';
 import { shownAgainNote } from '../src/changed.ts';
-import { cutLine, keepOldest } from '../src/cut.ts';
+import { cutLine, cutNotice, keepOldest } from '../src/cut.ts';
 import { findAnswer, mayStandFor } from '../src/find.ts';
 import { beforeTrying, configFrom, failedLine, nextStep, settingNotes, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
@@ -43,6 +43,7 @@ import {
   recall,
   recallMeant,
   storedAs,
+  whyNotStored,
   withEarlier,
   type Recalled,
   type StoreDirs,
@@ -119,11 +120,15 @@ type WithSession = {
 };
 type Compacting = { messages: readonly unknown[]; instructions?: string | undefined; trigger?: string | undefined };
 
-/** A line in the transcript and, unless `toast` is false, a notice over it. */
-function say($: WithUi, text: string, toast = true): void {
+/**
+ * A line in the transcript and a notice over it: the same line, unless `toast` is false and there is none, or a shorter
+ * one of its own, which a notice shown for a few seconds can be read in (#141). The notice is drawn under the plugin's
+ * name, which it does not repeat: on one line cut at the width of the screen, the name twice took the end of it.
+ */
+function say($: WithUi, text: string, toast: boolean | string = true): void {
   try {
     $.ui.log(`${PLUGIN}: ${text}`);
-    if (toast) $.ui.toast(`${PLUGIN}: ${text}`);
+    if (toast !== false) $.ui.toast(toast === true ? text : toast);
   } catch {
     // A surface that cannot show it must not change what the plugin does.
   }
@@ -676,12 +681,15 @@ async function attempt(
     // Made up from characters when Claude Code gives none: images, which are no characters, at their rough figure.
     const inUse = given ? tokens : Math.ceil(charsOf(messages) / CHARS_PER_TOKEN) + media.images * IMAGE_TOKENS;
     const count = countFrom(context?.breakdown, tokens, api, messages);
+    // The size measured against, and where it came from, which the line names (#141).
+    const window = windowFrom(context, FALLBACK_WINDOW);
     const outcome = await compact(
       {
         messages,
         tokens: inUse,
         count,
-        window: windowFrom(context, FALLBACK_WINDOW),
+        window: window.size,
+        windowOf: window.of,
         goal: goalOf(messages, e.instructions),
         // Typed by hand with nothing asked of it: the newest calls may be reached into (ADR 0023).
         byHand: e.trigger === 'manual' && (e.instructions ?? '').trim() === '',
@@ -717,12 +725,12 @@ async function attempt(
  * it is kept as it was sent, attachments and all, before the built-in summary, as one that cannot be rebuilt is.
  */
 async function withAttached($: WithFiles & WithProcess, e: SessionCompactInput, tried: Tried): Promise<Tried | HandedOver> {
-  const unkept = (why: string): HandedOver => ({ why: `what Claude Code attached to the messages could not be kept (${why})`, keep: { store: tried.store, messages: tried.asSent } });
+  const unkept = (why: string): HandedOver => ({ why: `what Claude Code attached to the messages could not be kept: ${why}`, keep: { store: tried.store, messages: tried.asSent } });
   try {
     const attached = attachedOf(e.messages as readonly Message[], tried.api);
     if (attached.length === 0) return tried;
     const kept = await keepAttached(storingFilesOf($), tried.store.write, attached);
-    if ('failed' in kept) return unkept(kept.code === undefined ? kept.failed : `could not write: ${kept.code}`);
+    if ('failed' in kept) return unkept(whyNotStored({ reason: kept.failed, code: kept.code }));
     if ('nothing' in kept) return tried;
     const message: Message = { role: 'user', text: kept.text, toolUses: [] };
     return { ...tried, outcome: { ...tried.outcome, messages: [...tried.outcome.messages, message] }, attached: message };
@@ -803,7 +811,8 @@ async function cutKeeping(
     const cut = await keepOldest(storingFilesOf($), tried.store, { messages: outcome.messages, tokens: outcome.report.tokensAfter, count: tried.count }, after, at);
     if ('failed' in cut) return null;
     const report = { ...outcome.report, charsAfter: charsOf(cut.messages), tokensAfter: cut.tokensAfter, ms: outcome.report.ms + (Date.now() - started) };
-    say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));
+    const made = { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) };
+    say($, cutLine(report, made), cutNotice(report, made));
     return { messages: cut.messages };
   } catch {
     return null;
@@ -823,7 +832,7 @@ async function carryOut(
     case 'skip':
       return { skip: step.why };
     case 'back':
-      say($, step.line);
+      say($, step.line, step.notice);
       return { messages: outcome.messages };
     case 'cut': {
       const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);
@@ -831,7 +840,7 @@ async function carryOut(
       return cut ?? carryOut($, e, next, tried, step.otherwise);
     }
     case 'summarize':
-      say($, step.line);
+      say($, step.line, step.notice);
       // Handed over as it was, the conversation is kept as it was handed in, with the message naming what Claude Code
       // attached (#105); else what is left, which holds that message, and that is what is kept.
       return step.of === 'given'

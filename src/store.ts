@@ -11,6 +11,24 @@ import type { Files, Message } from './types.ts';
 export { MAX_BYTES, NOT_AN_ID, NOT_STORED, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
 
 export const PLUGIN = 'lossless-compaction';
+
+/**
+ * Why a text could not be stored, in words: what a line the person reads says in place of the store's own name for it
+ * (#141). No phrase holds one of those names, which a line shows nowhere.
+ */
+export const WHY_NOT_STORED: Readonly<Record<NotMoved['reason'], string>> = {
+  'tool-name': 'from a tool whose name cannot go on a ticket',
+  'too-large': 'too large to keep (over about 4 MB)',
+  symlink: 'where the store has a link in its place',
+  'not-a-file': 'where the store has something other than a file in its place',
+  differs: 'read back unlike what was written',
+  'write-failed': 'could not be written',
+};
+
+/** Why one text could not be stored, with what the host said where it named it: ENOSPC for a full disk. */
+export function whyNotStored(why: { reason: NotMoved['reason']; code?: string | undefined }): string {
+  return `${WHY_NOT_STORED[why.reason]}${why.code === undefined ? '' : ` (${why.code})`}`;
+}
 /** The name the plugin carried up to 0.3.0. What was written under it is still read (ADR 0004). */
 export const OLD_PLUGIN = 'jev-lossless-compaction';
 export const RECALL = 'recall';
