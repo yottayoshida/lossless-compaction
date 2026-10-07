@@ -59,7 +59,7 @@ What the plugin does not do, and what a repository or a version can change.
   two are under 40 characters together, only side by side (ADR 0024).
 - **Old small calls fold into a list after that.** Calls of `Bash`, `Read`,
   `Grep`, `Glob`, the tools that write, `WebFetch` and `WebSearch` whose
-  inputs and results are all short and hold no ticket, older than the newest
+  inputs and results are all under `minChars` and hold no ticket, older than the newest
   `keepTokens` (at a `/compact` typed without instructions, older than the
   last thing you said), leave with their results, kept as a part; a list of what was
   called stands where they stood, and what was said stays. A call that holds
