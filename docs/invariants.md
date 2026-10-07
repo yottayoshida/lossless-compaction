@@ -162,8 +162,11 @@ is cut for its length well before that, where a compaction comes in time
   ([what a summary replaces](limits.md#what-a-summary-replaces)).
 - **Half of a character.** A lone surrogate, which no file can hold, is kept
   as U+FFFD in a kept part, and keeps a result from being moved out at all.
-- **A crash of the machine.** The host gives a plugin no way to force a write
-  to the disk; what is promised is what reads back.
+- **A crash of the machine.** The plugin does not ask the disk to keep what
+  it writes: what is promised is what reads back. It could start `sync`,
+  which returned in about 50 ms after a compaction's writes and does not
+  have the drive write out its own cache; whether that would keep anything
+  through a power cut was not measured ([measurements](measurements.md#what-one-sync-costs-after-a-compactions-writes)).
 - **Transcripts the clean-up does not know of.** It counts those in the
   places recorded at a compaction. One copied from another machine, one of a
   configuration that has not compacted, one that is a link inside a project

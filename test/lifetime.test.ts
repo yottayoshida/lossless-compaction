@@ -257,6 +257,50 @@ test('a trash that is there and cannot be listed stops a collection before anyth
   assert.deepEqual(await collect(list(fresh), commands(fresh).exec, DIR, new Set(), NOW), { trashed: 1, restored: 0, removed: 0 });
 });
 
+test('a collection that runs to its end removes what a write left in tmp/ a day ago or more, and nothing else there; one that stops leaves it (#119)', async () => {
+  const files = new MemoryFiles();
+  await storeWith(files, [output('old, named by none', 40)], 3 * DAY);
+  const tmp = `${DIR}/tmp`;
+  const old = `${tmp}/${hex('a')}.txt.0f1e2d3c-4b5a-4968-8776-655443322110.part`;
+  const young = `${tmp}/${hex('a')}.json.11111111-2222-4333-8444-555555555555.part`;
+  const notOurs = `${tmp}/notes.txt`;
+  const linked = `${tmp}/${hex('b')}.txt.22222222-3333-4444-8555-666666666666.part`;
+  for (const path of [old, young, notOurs, '/elsewhere/kept.txt']) await files.write(path, 'left');
+  files.links.set(linked, '/elsewhere/kept.txt');
+  files.mtimes.set(old, NOW - DAY);
+  files.mtimes.set(young, NOW - DAY + 1);
+  files.mtimes.set(notOurs, NOW - 30 * DAY);
+  files.mtimes.set(linked, NOW - 30 * DAY);
+  // A collection that stops moves nothing, and removes nothing from tmp/ either.
+  assert.ok('stop' in (await collect(list(files), commands(files, { refuse: ['mv'] }).exec, DIR, new Set(), NOW)));
+  assert.ok(files.files.has(old));
+  assert.deepEqual(await collect(list(files), commands(files).exec, DIR, new Set(), NOW), { trashed: 1, restored: 0, removed: 0 });
+  assert.ok(!files.files.has(old), 'a write left a day ago stays');
+  assert.ok(files.files.has(young), 'a write that may still be going was removed');
+  assert.ok(files.files.has(notOurs) && files.links.has(linked) && files.files.has('/elsewhere/kept.txt'), 'what is not a write of its own was removed');
+  // A first write that stopped before it made blobs/ left its part all the same: it goes.
+  const first = new MemoryFiles();
+  await first.write(old, 'left');
+  first.mtimes.set(old, NOW - DAY);
+  assert.deepEqual(await collect(list(first), commands(first).exec, DIR, new Set(), NOW), { trashed: 0, restored: 0, removed: 0 });
+  assert.ok(!first.files.has(old), 'a store with no blobs/ keeps what a write left');
+  // A tmp/ that is a link is no place a write puts anything: nothing is removed through it.
+  const through = new MemoryFiles();
+  await storeWith(through, [output('kept', 40)], 0);
+  const there = `/elsewhere/tmp/${hex('c')}.txt.44444444-3333-4444-8555-666666666666.part`;
+  await through.write(there, 'not ours');
+  through.mtimes.set(there, NOW - 30 * DAY);
+  through.links.set(tmp, '/elsewhere/tmp');
+  // As the host and rm do: a path through the link lands where it leads.
+  const leads = (path: string) => (path === tmp || path.startsWith(`${tmp}/`) ? `/elsewhere/tmp${path.slice(tmp.length)}` : path);
+  through.dirs.add('/elsewhere/tmp');
+  const listThrough = (path: string) => through.list(leads(path));
+  const { exec: plain } = commands(through);
+  const execThrough: Exec = (argv, timeoutMs) => plain(argv[0]?.endsWith('/rm') ? argv.map(leads) : argv, timeoutMs);
+  await collect(listThrough, execThrough, DIR, new Set(), NOW);
+  assert.ok(through.files.has(there), 'removed through a link where tmp/ stands');
+});
+
 test('a collection moves what no transcript names to the trash, and a week later removes it', async () => {
   const files = new MemoryFiles();
   const [kept, dropped] = await storeWith(files, [output('kept', 40), output('dropped', 40)], 3 * DAY);

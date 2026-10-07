@@ -14,7 +14,7 @@
 
 import { readFoldedReadLine } from './changed.ts';
 import { ticketIdsIn } from './guard.ts';
-import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
+import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, isTmpPartName, rootPath, rootsDir, tmpDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { exitOf } from './commands.ts';
 import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall, storedText } from './store.ts';
 import type { DirEntry, Exec, Files, Message } from './types.ts';
@@ -515,6 +515,23 @@ const blobNames = async (list: List, dir: string) => new Set(((await listed(list
 const entryNames = async (list: List, dir: string) => new Set(((await listed(list, indexDir(dir))) ?? []).map((entry) => entry.name));
 
 /**
+ * Removes what a write left in `tmp/` when it stopped partway: one of its own, by its name, a day old or more, which
+ * no write still going takes so long to move (#119). Not through a link in the place of `tmp/`, where a write puts
+ * nothing. One that cannot be removed stays, and stops nothing.
+ */
+async function sweepTmp(list: List, exec: Exec, dir: string, now: number): Promise<void> {
+  if (!sweepsTmp((await listed(list, dir)) ?? [])) return;
+  const leftovers = ((await listed(list, tmpDir(dir))) ?? []).filter((entry) => isLeftover(entry, now)).map((entry) => `${tmpDir(dir)}/${entry.name}`);
+  if (leftovers.length > 0) await runIn(exec, 'rm', ['-f'], leftovers);
+}
+
+/** Whether the store's directory, as listed, holds a `tmp/` a clean-up sweeps: a plain directory, not a link. */
+export const sweepsTmp = (top: readonly DirEntry[]) => top.some((entry) => entry.name === 'tmp' && entry.kind === 'dir' && !entry.isLink);
+
+/** Whether an entry of `tmp/` is what a write left that a clean-up removes: a plain file of the name a write gives, a day old or more. */
+export const isLeftover = (entry: DirEntry, now: number) => entry.kind === 'file' && !entry.isLink && isTmpPartName(entry.name) && now - entry.mtimeMs >= DAY;
+
+/**
  * One collection of `dir` against the ids in use. What it reports is counted
  * on disk afterwards, not taken from what was asked: a command's exit code of
  * 1 says neither that it worked nor that it did not. A collection stopped
@@ -523,7 +540,11 @@ const entryNames = async (list: List, dir: string) => new Set(((await listed(lis
  */
 export async function collect(list: List, exec: Exec, dir: string, live: ReadonlySet<string>, now: number): Promise<Collected> {
   const blobs = await listed(list, blobsDir(dir));
-  if (blobs === null) return { trashed: 0, restored: 0, removed: 0 };
+  if (blobs === null) {
+    // Nothing kept yet, or the first write stopped before it made blobs/: what it left in tmp/ goes all the same.
+    await sweepTmp(list, exec, dir, now);
+    return { trashed: 0, restored: 0, removed: 0 };
+  }
   const trashed = await trashIn(list, dir);
   if (trashed === null) return { stop: `the trash of ${dir} could not be listed`, kind: 'trash' };
   const plan = planGc(blobs, trashed, live, now);
@@ -557,6 +578,7 @@ export async function collect(list: List, exec: Exec, dir: string, live: Readonl
   if (plan.toRemove.length > 0 && !(await runIn(exec, 'rm', ['-f'], plan.toRemove.flatMap((item) => trashedAt(dir, item))))) {
     return { stop: 'the trash could not be emptied', kind: 'trash' };
   }
+  await sweepTmp(list, exec, dir, now);
   const after = await blobNames(list, dir);
   const left = new Set(((await trashIn(list, dir)) ?? []).map((item) => `${item.day}/${item.id}`));
   return {

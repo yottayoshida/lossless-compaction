@@ -968,7 +968,7 @@ lossless-compaction: Results are kept in one place, set by storeDir:
   results: 3 (4.9 KB), 2026-09-30 to 2026-10-02; their entries: 2 (68 B)
   kept from: tool results 1 (42 B), kept conversations 1 (4.9 KB), lossless-compaction's own tools 0 (0 B), no readable entry 1 (22 B) (/lossless-store check looks at each)
   trash: 3 (60 B) files, by day moved there: 2026-09-25 2 (58 B), 2026-10-01 1 (2 B)
-  tmp/: 2 (35 B) files, 1 over a day old, left by a write that stopped; those can be removed by hand
+  tmp/: 2 (35 B) files, 1 a day old or more, left by a write that stopped; a clean-up that runs to its end removes those
 
 Read as well, never cleaned up: 2 places, written to before under your settings or the default ones beside storeDir (docs/limits.md, "The files"):
 
@@ -1079,7 +1079,10 @@ compaction says why (ADR 0008):
   empty is written again the next time.
 - A part of a kept conversation written before a later one failed stays
   until the clean-up; a file in `tmp/` that a process left when it stopped
-  partway stays until removed by hand.
+  partway stays until the first clean-up that runs to its end once it is a
+  day old removes it — by its name, a write's own; clean-ups run once a week
+  — and, where no clean-up runs or every one stops, until removed by hand. A
+  file of another name there stays until removed by hand.
 - There is no limit on how much is kept, by default or by setting: past a
   limit nothing could be moved out, and the summary that followed could not
   be undone. How much stays is what the conversations Claude Code keeps
@@ -1230,7 +1233,8 @@ too, so they are counted without the plugin keeping a list of its own.
 - Any 64-hex string counts, a git object id or another hash as well; that
   keeps more, never less.
 - The trash and the removal run `mkdir`, `mv` and `rm` from `/bin` or
-  `/usr/bin` on the files under `blobs/`, `index/` and `trash/` only; a
+  `/usr/bin` on the files under `blobs/`, `index/` and `trash/`, and `rm`
+  on what a write left in `tmp/`, only; a
   write runs `mv` from `tmp/` into `blobs/` and `index/`, `mkdir -p` on those
   two, `rm` on a part of its own in `tmp/` that it could not move, and
   `touch -c -h` on a result in `blobs/` it stores again. A guard that sits in

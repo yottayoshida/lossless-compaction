@@ -6,7 +6,7 @@
 // clean-up's own record. No stored result is opened.
 
 import { DATE, DAY, blobIdOf, blobsDir, entryIdOf, entryPath, indexDir, tmpDir, trashDayDir, trashDir, trashedIdOf } from './layout.ts';
-import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind, type Unread } from './lifetime.ts';
+import { isLeftover, listed, sweepsTmp, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind, type Unread } from './lifetime.ts';
 import type { Mark } from './machine.ts';
 import { PART, PLUGIN, isOwnTool } from './store.ts';
 import type { DirEntry, Files } from './types.ts';
@@ -24,8 +24,11 @@ export type Counted =
       trash: (Tally & { day: string })[];
       /** The trash is there and could not be listed: what it holds is not known, and a clean-up stops on it. */
       trashUnlisted?: true;
-      /** What a write left in `tmp/`, and of it, what is over a day old. */
-      tmp: Tally & { stale: number };
+      /**
+       * What is in `tmp/`; of it, what a write of the plugin's left a day ago or more, which a clean-up removes, and
+       * what else there is a day old or more, which it does not.
+       */
+      tmp: Tally & { stale: number; strays: number };
     }
   | { dir: string; missing: true };
 
@@ -78,6 +81,9 @@ export async function countStore(files: Files, list: List, dir: string, now: num
     trash.push({ day: day.name, ...tally(trashed) });
   }
   const tmp = filesIn(await listed(list, tmpDir(dir)));
+  // Told apart as a clean-up tells them: one sweeps a plain tmp/ alone, so through a link nothing is a write's own.
+  const swept = sweepsTmp(top);
+  const removed = tmp.filter((entry) => swept && isLeftover(entry, now));
   return {
     dir,
     results: { ...tally(blobs), oldest: times.length > 0 ? Math.min(...times) : null, newest: times.length > 0 ? Math.max(...times) : null },
@@ -85,7 +91,11 @@ export async function countStore(files: Files, list: List, dir: string, now: num
     entries: tally(entries),
     trash: trash.sort((a, b) => a.day.localeCompare(b.day)),
     ...(trashUnlisted ? { trashUnlisted: true as const } : {}),
-    tmp: { ...tally(tmp), stale: tmp.filter((entry) => now - entry.mtimeMs > DAY).length },
+    tmp: {
+      ...tally(tmp),
+      stale: removed.length,
+      strays: tmp.filter((entry) => now - entry.mtimeMs >= DAY && !removed.includes(entry)).length,
+    },
   };
 }
 
@@ -162,7 +172,13 @@ export function storeReport(
       `  trash: ${one.trashUnlisted === true ? 'there, and could not be listed' : one.trash.length === 0 ? 'empty' : `${tallyText(trashed)} files, by day moved there: ${one.trash.map((day) => `${day.day} ${tallyText(day)}`).join(', ')}`}`,
     );
     lines.push(
-      `  tmp/: ${one.tmp.count === 0 ? 'empty' : `${tallyText(one.tmp)} files` + (one.tmp.stale > 0 ? `, ${one.tmp.stale} over a day old, left by a write that stopped; those can be removed by hand` : '')}`,
+      `  tmp/: ${
+        one.tmp.count === 0
+          ? 'empty'
+          : `${tallyText(one.tmp)} files` +
+            (one.tmp.stale > 0 ? `, ${one.tmp.stale} a day old or more, left by a write that stopped; a clean-up that runs to its end removes those` : '') +
+            (one.tmp.strays > 0 ? `, ${one.tmp.strays} a day old or more that no write of the plugin left; those stay until removed by hand` : '')
+      }`,
     );
   }
   if (earlier.length > 0) {

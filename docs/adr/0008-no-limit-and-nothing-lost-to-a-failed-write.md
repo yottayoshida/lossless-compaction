@@ -62,4 +62,5 @@ be kept, and Claude Code's summary ran anyway.
   result written at the same moment.
 - A part of a kept conversation that failed halfway stays until the
   clean-up; a temporary file a crashed process left in `tmp/` stays until
-  removed by hand.
+  removed by hand. (Amended by #119: a clean-up that runs to its end removes
+  one a day old or more, by the name a write gives it.)
