@@ -130,6 +130,23 @@ with `provider` left on `auto`, an account id entered there sends the key to
 Cloudflare, and none sends it to TypeSafe. A key in the environment
 (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only once `provider` is
 set there to `typesafe` or `cloudflare`, or an account id is entered.
+[Getting a key](#getting-a-key) says where to make one.
+
+When the provider refuses the key, `find` tells the agent what to set and
+where, and the person sees it once in the session: a line says that Jev
+refused the key (HTTP 401), to set it with `/plugin configure`, that
+`/lossless-status` says where the key came from, and where to get one. A
+refusal of access (HTTP 403) is told the same way, as the key, what it may
+reach or the account: Cloudflare answers so for an account not allowed the
+model, a model its plan does not cover, terms not agreed to or an account
+blocked ([its errors](https://developers.cloudflare.com/workers-ai/platform/errors/)). So
+are a provider that asks for payment (HTTP 402) and one limiting requests
+(HTTP 429), which on Cloudflare can be a day's free allocation used up; a
+provider that fails is named to the agent alone. An answer of these that is
+not in JSON, as the providers' are, a proxy's page say, is put on neither
+the key nor the provider, and you are told nothing of it. Every
+answer that says Jev could not be asked ends saying `recall` still reads a
+result by its id.
 
 With a key set, each call to `find` sends the provider:
 
@@ -165,6 +182,24 @@ Shapes of secrets are blanked before anything is sent, which is a courtesy
 and not a guarantee. A result that holds an image is not offered, and nothing
 of it is sent. Without a key `find` looks on this machine, and nothing is
 sent.
+
+## Getting a key
+
+For TypeSafe, sign in to its console from [typesafe.ai](https://typesafe.ai)
+and make a key there. For Jev on Cloudflare Workers AI, open Workers AI in
+the Cloudflare dashboard and choose **Use REST API**, then **Create a
+Workers AI API Token**: the token needs `Workers AI - Read` and
+`Workers AI - Edit`, and the account id is under **Get Account ID** on the
+same page ([Cloudflare's guide](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)).
+Enter the key, and for Cloudflare the account id, with
+`/plugin configure lossless-compaction@lossless-compaction` in your user
+settings.
+
+What a call costs is the provider's to say:
+[TypeSafe](https://typesafe.ai),
+[Workers AI](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+Each call to `find` sends what is listed above: the question, and a digest
+of every result, long input and kept part moved out of the conversation.
 
 ## Settings
 

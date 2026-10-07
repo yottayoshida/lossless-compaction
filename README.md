@@ -41,7 +41,7 @@ asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#f
   nothing is sent anywhere ([how it works](docs/how-it-works.md)).
 - **Gives a result back as it was.** The agent calls `recall` with the id on
   a ticket. It can also ask `find` in words; with a key,
-  [Jev](https://typesafe.ai) chooses ([usage](docs/usage.md)).
+  [Jev](https://typesafe.ai) chooses ([getting a key](docs/usage.md#getting-a-key)).
 - **Saves the conversation before a summary.** When Claude Code's summary
   does run, the plugin keeps what it replaces first, for `recall` to read:
   not images, documents or thinking ([what is kept](docs/limits.md#what-a-summary-replaces)).
