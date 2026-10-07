@@ -62,10 +62,11 @@ of them names (ADR 0038).
 
 **I5. A clean-up that cannot tell what is named moves nothing.** A search of
 the transcripts that ends with an error, is cut short, or does not print the
-id it is known to hold; a place that cannot be listed; a project directory
-that is a link; every recorded place gone; a kept part that cannot be read;
-something named, by a transcript or by a part, that is in the trash and
-cannot be put back; a conversation the plugin compacted with tickets that is
+id it is known to hold; a place that cannot be listed, or that is a link
+whose end cannot be told; a project directory that is a link; every recorded
+place gone; a kept part that cannot be read; a trash that is there and cannot
+be listed; something named, by a transcript or by a part, that is in the
+trash and cannot be put back; a conversation the plugin compacted with tickets that is
 still there under its session id, whose own transcript does not hold the
 newest ticket noted for it (ADR 0027); a store marked by a session of
 another machine whose transcript this one cannot read, or whose marks
@@ -76,9 +77,13 @@ in the trash — names every one it reaches in that try, with why, and
 `/lossless-store` says how the clean-up goes on for each (#114). An entry
 that does not read, over a text that is the one stored under its id, does
 not stop it: the text is read as a part's, which keeps more, never less
-(ADR 0033).
+(ADR 0033). Nor does a recorded place that is itself a link: it is read
+where it leads (ADR 0039).
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
+- `a trash that is there and cannot be listed stops a collection before anything moves; one not made yet is an empty one`
+- `a recorded place that is there and leads nowhere the host can tell stops it all`
+- `a recorded place that is a link is read where it leads, once where it is recorded both ways, and a clean-up keeps what only its transcripts name (ADR 0039)`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
 - `a project directory that is a link stops it all: a search does not follow it`
 - `with every recorded place gone, nothing is collected: an empty set would name nothing in use`

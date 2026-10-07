@@ -220,17 +220,21 @@ export async function listed(list: List, path: string): Promise<DirEntry[] | nul
 
 /**
  * The place this session's transcript is kept in: `<config>/projects`, when
- * one directory under it holds `<session>.jsonl`. Null when none does, so a
- * layout other than the one measured records nothing and nothing is collected.
+ * one directory under it holds `<session>.jsonl`, looked for where it lands
+ * when it is a link. Null when none does, so a layout other than the one
+ * measured records nothing and nothing is collected. It is recorded as named,
+ * a link included: a clean-up reads it where it leads then, so a link turned
+ * to another place is followed (ADR 0039).
  */
 export async function rootFor(files: Files, list: List, configDir: string, sessionId: string): Promise<string | null> {
-  return (await transcriptOf(files, list, configDir, sessionId)) === null ? null : `${configDir}/projects`;
+  const given = `${configDir}/projects`;
+  const lands = (await files.realPath?.(given)) ?? given;
+  return (await transcriptOf(files, list, lands, sessionId)) === null ? null : given;
 }
 
-/** This session's transcript, `<config>/projects/<project>/<session>.jsonl`, where one directory holds it; else null. */
-async function transcriptOf(files: Files, list: List, configDir: string, sessionId: string): Promise<string | null> {
+/** This session's transcript, `<root>/<project>/<session>.jsonl`, where one directory holds it; else null. */
+async function transcriptOf(files: Files, list: List, root: string, sessionId: string): Promise<string | null> {
   if (!/^[0-9A-Za-z_-]{1,128}$/.test(sessionId)) return null;
-  const root = `${configDir}/projects`;
   for (const entry of (await listed(list, root)) ?? []) {
     if (entry.kind !== 'dir' || entry.isLink) continue;
     const path = `${root}/${entry.name}/${sessionId}.jsonl`;
@@ -268,16 +272,22 @@ export async function liveIds(
 ): Promise<{ ids: Set<string>; roots: string[] } | Stop> {
   const ids = new Set<string>();
   const kept: string[] = [];
-  for (const root of roots) {
+  for (const recorded of roots) {
     // Only a place that is not there is skipped; one that cannot be looked at stops it all.
-    if (!(await exists(root))) continue;
+    if (!(await exists(recorded))) continue;
     let there;
     try {
-      there = await files.stat(root);
+      there = await files.stat(recorded);
     } catch {
-      return { stop: `${root} could not be looked at`, kind: 'place' };
+      return { stop: `${recorded} could not be looked at`, kind: 'place' };
     }
-    if (there.kind !== 'dir' || there.isLink === true) return { stop: `${root} is not a directory`, kind: 'place' };
+    // What the place leads to: a link to a directory is one.
+    if (there.kind !== 'dir') return { stop: `${recorded} is not a directory`, kind: 'place' };
+    // A place that is a link is read where it leads, and a place recorded twice, under a link and where it leads,
+    // once (ADR 0039): each search is handed a project under it, which it reads whatever the place is.
+    const root = files.realPath === undefined ? recorded : await files.realPath(recorded).catch(() => null);
+    if (root === null) return { stop: `${recorded} could not be resolved`, kind: 'place' };
+    if (kept.includes(root)) continue;
     const projects = await listed(list, root);
     if (projects === null) return { stop: `${root} could not be listed`, kind: 'place' };
     kept.push(root);
@@ -350,10 +360,14 @@ export function planGc(blobs: readonly DirEntry[], trashed: readonly Trashed[], 
   return { toTrash, toRestore, toRemove };
 }
 
-/** What is in `<dir>/trash`, by day; null when it cannot be read. */
+/** What is in `<dir>/trash`, by day: none where there is no trash yet, null where there is one and it cannot be read. */
 export async function trashIn(list: List, dir: string): Promise<Trashed[] | null> {
   const days = await listed(list, trashDir(dir));
-  if (days === null) return [];
+  if (days === null) {
+    // A trash that is there and cannot be listed is not an empty one: what is named in it would go unseen (#119).
+    const top = await listed(list, dir);
+    return top !== null && !top.some((entry) => entry.name === 'trash') ? [] : null;
+  }
   const items: Trashed[] = [];
   for (const day of days) {
     if (day.kind !== 'dir' || day.isLink || !DATE.test(day.name)) continue;

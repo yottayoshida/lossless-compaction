@@ -86,7 +86,7 @@ type WithFiles = {
   fs: {
     read: (path: string) => Promise<string>;
     write: (path: string, text: string) => Promise<void>;
-    stat: (path: string) => Promise<FileStat>;
+    stat: (path: string, options?: { resolve: boolean }) => Promise<FileStat & { realPath?: string | undefined }>;
     list: (path: string) => Promise<DirEntry[]>;
     exists: (path: string) => Promise<boolean>;
   };
@@ -134,6 +134,14 @@ function filesOf($: WithFiles): Files {
     read: (path) => $.fs.read(path),
     write: (path, text) => $.fs.write(path, text),
     stat: (path) => $.fs.stat(path),
+    // Where a path lands, as the host resolves it; a place transcripts are kept in is read there (ADR 0039).
+    realPath: async (path) => {
+      try {
+        return (await $.fs.stat(path, { resolve: true })).realPath ?? null;
+      } catch {
+        return null;
+      }
+    },
   };
 }
 

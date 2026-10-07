@@ -100,3 +100,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0038](0038-clean-ups-at-once-remove-only-from-settled-days.md): why
   clean-ups that run at once are not kept apart, and a copy in the trash is
   removed only from a day no clean-up is still moving into.
+- [0039](0039-a-place-that-is-a-link-is-read-where-it-leads.md): why a
+  place transcripts are kept in that is a link is read where it leads, not
+  taken for one that cannot be read.

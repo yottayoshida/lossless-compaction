@@ -15,8 +15,21 @@ export class MemoryFiles implements Files {
   /** Set to change what a write stores, as a broken disk would. */
   corrupt: ((text: string) => string) | undefined;
 
+  /** `path` as the host resolves it: a link it is, or a link to a directory it goes through, replaced by where it leads. */
   #real(path: string): string {
-    return this.links.get(path) ?? path;
+    let at = path;
+    for (let hops = 0; hops < 8; hops += 1) {
+      const link = [...this.links.keys()].find((one) => at === one || at.startsWith(`${one}/`));
+      if (link === undefined) return at;
+      at = `${this.links.get(link)}${at.slice(link.length)}`;
+    }
+    return at;
+  }
+
+  /** Where `path` lands, as the host's `fs.stat` with `resolve` answers: null where it leads nowhere. */
+  async realPath(path: string): Promise<string | null> {
+    const at = this.#real(path);
+    return this.files.has(at) || this.dirs.has(at) ? at : null;
   }
 
   async read(path: string): Promise<string> {
@@ -37,31 +50,29 @@ export class MemoryFiles implements Files {
 
   async stat(path: string): Promise<FileStat> {
     this.looked.push(path);
-    const target = this.links.get(path);
-    if (target !== undefined) {
-      const text = this.files.get(target);
-      return text === undefined
-        ? { kind: 'other', size: 0, isLink: true }
-        : { kind: 'file', size: text.length, isLink: true };
-    }
-    const text = this.files.get(path);
-    if (text !== undefined) return { kind: 'file', size: text.length, isLink: false };
-    if (this.dirs.has(path)) return { kind: 'dir', size: 0, isLink: false };
+    // What the path leads to, and whether it is itself a link: one that leads nowhere is `other`.
+    const at = this.#real(path);
+    const isLink = this.links.has(path);
+    const text = this.files.get(at);
+    if (text !== undefined) return { kind: 'file', size: text.length, isLink };
+    if (this.dirs.has(at)) return { kind: 'dir', size: 0, isLink };
+    if (isLink) return { kind: 'other', size: 0, isLink: true };
     throw new Error(`nothing at ${path}`);
   }
 
   /** When each file was last written, in ms; a file not in it is as old as can be. */
   readonly mtimes = new Map<string, number>();
 
-  /** The entries directly in `path`, as the host's `fs.list` gives them: a link is `other`, not followed. */
+  /** The entries directly in `path`, as the host's `fs.list` gives them: a link in it is `other`, not followed; a path through one is. */
   async list(path: string): Promise<DirEntry[]> {
-    if (!this.dirs.has(path)) throw new Error(`no directory at ${path}`);
+    const dir = this.#real(path);
+    if (!this.dirs.has(dir)) throw new Error(`no directory at ${path}`);
     const names = new Map<string, DirEntry>();
-    const child = (full: string) => (full.startsWith(`${path}/`) ? full.slice(path.length + 1).split('/')[0] : undefined);
+    const child = (full: string) => (full.startsWith(`${dir}/`) ? full.slice(dir.length + 1).split('/')[0] : undefined);
     for (const full of [...this.files.keys(), ...this.dirs, ...this.links.keys()]) {
       const name = child(full);
       if (name === undefined || names.has(name)) continue;
-      const at = `${path}/${name}`;
+      const at = `${dir}/${name}`;
       const kind = this.links.has(at) ? 'other' : this.files.has(at) ? 'file' : 'dir';
       const text = this.links.has(at) ? undefined : this.files.get(at);
       // In bytes, as the host gives it.
