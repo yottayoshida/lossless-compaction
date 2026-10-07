@@ -1,7 +1,7 @@
 // A witness: the newest ticket of a conversation the plugin compacted (ADR 0027).
 //
-// A clean-up keeps what the transcripts name and moves the rest to the trash. It reads the transcripts with one
-// search; were Claude Code to write them otherwise — another file name, another spelling of an id, inside a
+// A clean-up keeps what the transcripts name and moves the rest to the trash. It reads the transcripts with `grep`;
+// were Claude Code to write them otherwise — another file name, another spelling of an id, inside a
 // directory, or only what it writes from now on — the search would find none of those tickets, and the clean-up
 // would take their results for unused. A witness is how that is told from a conversation that is gone: before
 // anything moves, each conversation's own transcript, `<session>.jsonl`, is looked at for its witness. Not found

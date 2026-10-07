@@ -9,7 +9,7 @@
 
 A clean-up keeps what the transcripts under `<config>/projects/` name and
 moves the rest to the trash, removing it a week later (ADR 0006). It reads
-them with one search: every 64-character lowercase hexadecimal string in a
+them with `grep`: every 64-character lowercase hexadecimal string in a
 file named `*.jsonl`. A sentinel file holding one known id tells a search
 that did not reach its end. Nothing told the search that reads every
 file to the end and finds no ticket, because Claude Code writes its

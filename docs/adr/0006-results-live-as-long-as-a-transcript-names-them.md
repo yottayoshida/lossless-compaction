@@ -46,7 +46,8 @@ Measured on Claude Code 2.1.286 (`claude -p`):
    only from variables no repository set (ADR 0005).
 3. At most once a week, after a session starts, without holding it up, every
    64-hex string in the recorded places is read, one search per project
-   directory. A result over a day old (by the time its file was written, not
+   directory. (Amended by ADR 0042: a set of a project directory's transcripts
+   at a time, at most 400 files and 256 MiB a search.) A result over a day old (by the time its file was written, not
    last used) that none of them names moves to `trash/<day>/`, its entry
    first. A result the trash has held over seven days by its directory's day
    — a move keeps a file's own time — and still named by none is removed;
@@ -56,7 +57,8 @@ Measured on Claude Code 2.1.286 (`claude -p`):
    about to read. A collection that cannot read every recorded place to the
    end stops before anything moves, and says why: a place that is there but
    cannot be looked at, a project directory that is a link, all places gone,
-   a search whose output was cut, or one that did not print the id of a file
+   a search whose output was cut (amended by ADR 0042: read again in halves,
+   and only one transcript alone cut stops it), or one that did not print the id of a file
    of the plugin's own that every search also reads (a grep ended by a
    signal exits 1, as one that found nothing does). Only a place that is not
    there is skipped. What a collection reports is counted on disk afterwards;

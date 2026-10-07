@@ -19,6 +19,7 @@ import {
   restoreThroughParts,
   RETRY_MS,
   SENTINEL_ID,
+  SET_FILES,
   noteTried,
   partIds,
   rootFor,
@@ -219,7 +220,7 @@ test('a recorded place that is a link is read where it leads, once where it is r
   assert.ok(!('stop' in live), JSON.stringify(live));
   assert.deepEqual(live.roots, [elsewhere]);
   assert.ok(live.ids.has(named));
-  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep') && argv.includes('-rahoE')).length, 1, 'searched once');
+  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep') && argv.includes('-aohE')).length, 1, 'searched once');
   assert.deepEqual(await collect(list(files), exec, DIR, live.ids, NOW), { trashed: 1, restored: 0, removed: 0 });
   assert.ok(files.files.has(`${DIR}/blobs/${named}.txt`), 'what only the transcripts behind the link name went to the trash');
   assert.ok(!files.files.has(`${DIR}/blobs/${unnamed}.txt`));
@@ -931,12 +932,12 @@ test('a search that does not come back in its time is not run again with the oth
   // The small search a grep is chosen by comes back; the search of a project does not, as one out of its time.
   const outOfTime: Exec = async (argv, timeoutMs) => {
     started.push([...argv]);
-    if (argv.includes('-rahoE')) throw new Error('still running after 300000 ms');
+    if (argv.includes('-aohE')) throw new Error('still running after 300000 ms');
     return plain(argv, timeoutMs);
   };
   const live = await liveIds(files, list(files), outOfTime, existsIn(files), [ROOT], SENTINEL);
   assert.ok('stop' in live && live.kind === 'unread' && /did not run to the end/.test(live.stop), JSON.stringify(live));
-  assert.equal(started.filter((argv) => argv.includes('-rahoE')).length, 1, 'searched exactly once');
+  assert.equal(started.filter((argv) => argv.includes('-aohE')).length, 1, 'searched exactly once');
 
   // Where /usr/bin/grep cannot start, /bin/grep is chosen, and reads the project.
   const binOnly: Exec = async (argv, timeoutMs) => {
@@ -951,4 +952,160 @@ test('a search that does not come back in its time is not run again with the oth
   const { exec: none } = commands(files, { refuse: ['grep'] });
   assert.match(JSON.stringify(await liveIds(files, list(files), none, existsIn(files), [ROOT], SENTINEL)), /no grep could be run \(\/usr\/bin\/grep: cannot start .*; \/bin\/grep: cannot start/);
   assert.equal((await liveIds(files, list(files), none, existsIn(files), ['/gone/projects'], SENTINEL) as { kind?: string }).kind, 'place');
+});
+
+/** Ids for the tests of sets: as many as asked, each a different 64-hex string. */
+const idsFor = (count: number) => Array.from({ length: count }, (_, i) => (i + 1).toString(16).padStart(4, '0').repeat(16));
+
+test('a project directory is read a set at a time however large it grows: no search is handed more than a set may hold, and none runs past its time (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const ids = idsFor(5);
+  for (const [at, id] of ids.entries()) await files.write(`${ROOT}/-big/s${at}.jsonl`, `"${id}"`);
+  await writeSentinel(files, DIR);
+  // The host says each transcript is 100 MiB; a search handed more than 300 MiB of them does not end in its time.
+  const sized: List = async (path) => (await files.list(path)).map((entry) => (entry.name.endsWith('.jsonl') ? { ...entry, size: 100 * 1024 * 1024 } : entry));
+  const { exec: plain } = commands(files);
+  const searches: string[][] = [];
+  const timed: Exec = async (argv, timeoutMs) => {
+    if (argv.includes('-aohE') || argv.includes('-rahoE')) {
+      searches.push([...argv]);
+      const operands = argv.slice(argv.indexOf('--') + 1);
+      const read = [...files.files.keys()].filter((path) => path.endsWith('.jsonl') && path !== SENTINEL && operands.some((operand) => path === operand || path.startsWith(`${operand}/`)));
+      if (read.length * 100 > 300) throw new Error('still running after 300000 ms');
+    }
+    return plain(argv, timeoutMs);
+  };
+  const live = await liveIds(files, sized, timed, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual([...live.ids].sort(), [...ids].sort());
+  // 256 MiB a set: two of 100 MiB, two, then one.
+  assert.equal(searches.length, 3);
+});
+
+test('a search whose output the host cut is read again in halves, and a transcript whose ids alone are cut stops it (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const ids = idsFor(4);
+  for (const [at, id] of ids.entries()) await files.write(`${ROOT}/-proj/s${at}.jsonl`, `"${id}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  // The host keeps two lines of what a command prints and says it cut the rest.
+  const cutting: Exec = async (argv, timeoutMs) => {
+    const ran = await plain(argv, timeoutMs);
+    const lines = ran.stdout.split('\n').filter((line) => line !== '');
+    return lines.length > 2 ? { ...ran, stdout: `${lines.slice(0, 2).join('\n')}\n`, truncated: true } : ran;
+  };
+  const live = await liveIds(files, list(files), cutting, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual([...live.ids].sort(), [...ids].sort());
+  // One transcript holding three ids prints more than the host keeps with the sentinel's: it stops, naming the transcript.
+  await files.write(`${ROOT}/-proj/s0.jsonl`, `"${ids[0]}" "${ids[1]}" "${ids[2]}"`);
+  const cut = await liveIds(files, list(files), cutting, existsIn(files), [ROOT], SENTINEL);
+  assert.ok('stop' in cut && cut.kind === 'too-many' && cut.stop.includes(`${ROOT}/-proj/s0.jsonl`), JSON.stringify(cut));
+});
+
+test('a transcript removed after it was listed is passed over, and one still there that cannot be read stops it (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const [a, b, c] = idsFor(3) as [string, string, string];
+  await files.write(`${ROOT}/-proj/a.jsonl`, `"${a}"`);
+  await files.write(`${ROOT}/-proj/b.jsonl`, `"${b}"`);
+  await files.write(`${ROOT}/-proj/c.jsonl`, `"${c}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  // b goes as the search runs, as Claude Code removes an old transcript: grep reads the others and exits 2.
+  let removed = false;
+  const removing: Exec = async (argv, timeoutMs) => {
+    if (!removed && argv.includes('-aohE')) {
+      removed = true;
+      files.files.delete(`${ROOT}/-proj/b.jsonl`);
+      return { ...(await plain(argv, timeoutMs)), exitCode: 2 };
+    }
+    return plain(argv, timeoutMs);
+  };
+  const live = await liveIds(files, list(files), removing, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual([...live.ids].sort(), [a, c].sort());
+  // Every one still listed, and grep cannot read one of them: it stops, as before.
+  const unreadable: Exec = async (argv, timeoutMs) => (argv.includes('-aohE') ? { ...(await plain(argv, timeoutMs)), exitCode: 2 } : plain(argv, timeoutMs));
+  const stopped = await liveIds(files, list(files), unreadable, existsIn(files), [ROOT], SENTINEL);
+  assert.ok('stop' in stopped && stopped.kind === 'unread', JSON.stringify(stopped));
+});
+
+test('the transcripts read are those grep -r read: in directories below and hidden ones, not through a link nor in other names; a directory below that cannot be listed stops it (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const [top, below, hidden, other, linked] = idsFor(5) as [string, string, string, string, string];
+  await files.write(`${ROOT}/-proj/s.jsonl`, `"${top}"`);
+  await files.write(`${ROOT}/-proj/s/subagents/agent-1.jsonl`, `"${below}"`);
+  await files.write(`${ROOT}/-proj/.hidden/h.jsonl`, `"${hidden}"`);
+  await files.write(`${ROOT}/-proj/notes.txt`, `"${other}"`);
+  await files.write('/elsewhere/x.jsonl', `"${linked}"`);
+  files.links.set(`${ROOT}/-proj/linked`, '/elsewhere');
+  await writeSentinel(files, DIR);
+  const { exec } = commands(files);
+  const live = await liveIds(files, list(files), exec, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual([...live.ids].sort(), [top, below, hidden].sort());
+  const refusing: List = async (path) => (path === `${ROOT}/-proj/s` ? Promise.reject(new Error('EACCES')) : files.list(path));
+  const stopped = await liveIds(files, refusing, exec, existsIn(files), [ROOT], SENTINEL);
+  assert.ok('stop' in stopped && stopped.kind === 'unread' && stopped.stop.includes(`${ROOT}/-proj/s could not be listed`), JSON.stringify(stopped));
+});
+
+test('a session directory removed while a clean-up reads is passed over (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const [kept, main, sub] = idsFor(3) as [string, string, string];
+  await files.write(`${ROOT}/-proj/a.jsonl`, `"${kept}"`);
+  await files.write(`${ROOT}/-proj/s.jsonl`, `"${main}"`);
+  await files.write(`${ROOT}/-proj/s/subagents/agent-1.jsonl`, `"${sub}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  // Session s goes, its directory with it, after it was listed: grep reads what is left and exits 2.
+  let removed = false;
+  const removing: Exec = async (argv, timeoutMs) => {
+    if (!removed && argv.includes('-aohE')) {
+      removed = true;
+      for (const path of [...files.files.keys()]) if (path.startsWith(`${ROOT}/-proj/s`)) files.files.delete(path);
+      for (const path of [...files.dirs]) if (path.startsWith(`${ROOT}/-proj/s/`) || path === `${ROOT}/-proj/s`) files.dirs.delete(path);
+      return { ...(await plain(argv, timeoutMs)), exitCode: 2 };
+    }
+    return plain(argv, timeoutMs);
+  };
+  const live = await liveIds(files, list(files), removing, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live));
+  assert.deepEqual([...live.ids], [kept]);
+});
+
+test('a directory still listed that cannot be listed again after grep could not read in it stops the clean-up (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  await files.write(`${ROOT}/-proj/s/subagents/agent-1.jsonl`, `"${idsFor(1)[0]}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  const failing: Exec = async (argv, timeoutMs) => (argv.includes('-aohE') ? { ...(await plain(argv, timeoutMs)), exitCode: 2 } : plain(argv, timeoutMs));
+  // Listed once, as it is found; refused when listed again.
+  let seen = 0;
+  const once: List = async (path) => {
+    if (path === `${ROOT}/-proj/s/subagents` && (seen += 1) > 1) throw new Error('EACCES');
+    return files.list(path);
+  };
+  const stopped = await liveIds(files, once, failing, existsIn(files), [ROOT], SENTINEL);
+  assert.ok('stop' in stopped && stopped.kind === 'unread', JSON.stringify(stopped));
+});
+
+test('a project of many small transcripts is read in sets of at most SET_FILES, so that no command line is too long to start (#118, ADR 0042)', async () => {
+  const files = new MemoryFiles();
+  const ids = idsFor(SET_FILES + 1);
+  for (const [at, id] of ids.entries()) await files.write(`${ROOT}/-runs/r${at}.jsonl`, `"${id}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  let searches = 0;
+  // Handed more files than a set holds, the command cannot start, as one past the system's limit on arguments.
+  const bounded: Exec = async (argv, timeoutMs) => {
+    if (argv.includes('-aohE')) {
+      searches += 1;
+      if (argv.length - argv.indexOf('--') - 2 > SET_FILES) throw new Error('spawn E2BIG');
+    }
+    return plain(argv, timeoutMs);
+  };
+  const live = await liveIds(files, list(files), bounded, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in live), JSON.stringify(live).slice(0, 200));
+  assert.equal(live.ids.size, SET_FILES + 1);
+  assert.equal(searches, 2);
 });

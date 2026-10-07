@@ -15,7 +15,7 @@ const PROJECT = `${ROOT}/-home-u-work`;
 const SESSION = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
 const TRANSCRIPT = `${PROJECT}/${SESSION}.jsonl`;
 
-/** grep as the store runs it: `-rahoE` over directories for the clean-up, `-F -q` on one file for a witness; mkdir, mv and rm. */
+/** grep as the store runs it: `-aohE` over sets of transcripts for the clean-up, `-F -q` on one file for a witness; mkdir, mv and rm. */
 function commands(files: MemoryFiles) {
   const ran: string[][] = [];
   const exec: Exec = async (argv) => {

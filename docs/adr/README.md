@@ -106,3 +106,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0040](0040-a-ticket-counts-a-results-lines-and-quotes-nothing.md): why a
   result's ticket says how many lines it held and quotes nothing of it: a
   quote of its first line was measured, and answers were lost to it.
+- [0042](0042-transcripts-are-read-a-set-at-a-time.md): why a clean-up
+  reads a project directory's transcripts a set at a time, and keeps nothing
+  of what it read between collections.
