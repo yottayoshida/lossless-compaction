@@ -1157,6 +1157,20 @@ too, so they are counted without the plugin keeping a list of its own.
 - A collection stopped while moving leaves what it moved in the trash, where
   `recall` and the next collection put it back when it is named. What it
   reports is counted on disk afterwards.
+- Sessions started together can each start a clean-up, and nothing keeps one
+  out while another runs. What a clean-up removes is chosen so that this
+  takes nothing any of them names: a result both in place and in the trash
+  has its copy in the trash removed only from a day two or more days past,
+  which no clean-up is still moving into; a newer copy stays until a later
+  clean-up, or a week after it is named by none (ADR 0038).
+- Storing a text that is already stored renews its file's time (`touch`,
+  from `/bin` or `/usr/bin`), so its day before the trash is counted from
+  this use; where no command can be started (Windows), from the first. The
+  days `/lossless-store` gives a result, and the oldest result the line at
+  the start of a session counts from, are the last time it was stored.
+- A collection takes its time when it is handed it, after the search: one
+  that spends more than a day from then to its last move — a machine asleep
+  in the middle of it — can meet another's removal of a copy.
 - A collection that a short session cuts off is tried again a day later;
   only one that went to the end waits a week.
 - A session that can read where results are kept — as `/lossless-store`
@@ -1211,12 +1225,16 @@ too, so they are counted without the plugin keeping a list of its own.
 - The trash and the removal run `mkdir`, `mv` and `rm` from `/bin` or
   `/usr/bin` on the files under `blobs/`, `index/` and `trash/` only; a
   write runs `mv` from `tmp/` into `blobs/` and `index/`, `mkdir -p` on those
-  two, and `rm` on a part of its own in `tmp/` that it could not move. A
-  guard that sits in `PATH` does not see them.
+  two, `rm` on a part of its own in `tmp/` that it could not move, and
+  `touch -c -h` on a result in `blobs/` it stores again. A guard that sits in
+  `PATH` does not see them.
 - A copy of 0.4.0 or earlier, on the same store, does not put back from the
   trash: a result moved there while it ran is read again once a current copy
   puts it back, which the next collection does for any result a transcript
   names.
+- A copy of 0.7.1 or earlier, on the same store and cleaning up at the same
+  time as a current one, removes a copy in the trash from any day, as it
+  did, and can remove what the current one names (ADR 0038).
 
 Before a compaction writes anything, the plugin makes the directory it writes
 to readable by its owner alone: it runs `mkdir -m 700` when the directory is

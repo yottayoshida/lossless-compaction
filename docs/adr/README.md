@@ -97,3 +97,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0037](0037-find-without-a-key.md): why `find` is registered with no key,
   looks on the machine and sends nothing, and lists every result for the
   agent to choose from where Jev would have chosen.
+- [0038](0038-clean-ups-at-once-remove-only-from-settled-days.md): why
+  clean-ups that run at once are not kept apart, and a copy in the trash is
+  removed only from a day no clean-up is still moving into.

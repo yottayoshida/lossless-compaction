@@ -27,6 +27,8 @@ export type Mover = {
   remove(path: string): Promise<void>;
   /** Makes a directory and those above it, as far as it can: a move makes none. */
   makeDir(path: string): Promise<void>;
+  /** Sets a file's time to now, as far as it can, and makes none where there is none. */
+  renew?(path: string): Promise<void>;
 };
 
 /** One entry of a directory, as it stands: a link is not followed. */
