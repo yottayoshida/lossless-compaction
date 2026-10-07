@@ -1127,7 +1127,9 @@ too, so they are counted without the plugin keeping a list of its own.
   the week after the first was.
 - At most once a week, after a session starts and without holding it up, the
   plugin reads every 64-hex string out of those transcripts (`grep` from
-  `/usr/bin`, else `/bin`; measured: 81 s for 2.9 GB). A result over a day
+  `/usr/bin`, or from `/bin` where that one cannot be started or does not
+  answer, within 30 s, a search of a file of the plugin's own made first;
+  measured: 81 s for 2.9 GB). A result over a day
   old that none of them names moves, with its index entry, to
   `trash/<day>/`. One the trash has held over a week, still named by none,
   is removed; one named again goes back.
@@ -1145,7 +1147,8 @@ too, so they are counted without the plugin keeping a list of its own.
   is back within the week.
   One that is there but cannot be looked at or read in full, a project
   directory that is a link (a search does not follow it), a search that does
-  not reach its end — every search also reads a file of the plugin's own that
+  not reach its end, or not within its five minutes (it is not run again
+  with the other `grep`, #118) — every search also reads a file of the plugin's own that
   holds one known id, and one that does not print it did not finish — a
   search whose output is too long, all recorded places gone, a trash that is
   there and cannot be listed, or commands that cannot be run, stop the

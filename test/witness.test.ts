@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { collect, liveIds, sentinelOf, writeSentinel } from '../src/lifetime.ts';
+import { GREP, collect, liveIds, sentinelOf, writeSentinel } from '../src/lifetime.ts';
 import { DAY } from '../src/layout.ts';
 import { bodyTicketText, idOf, partTicketText, ticketText } from '../src/store.ts';
 import type { DirEntry, Exec, Message } from '../src/types.ts';
@@ -89,7 +89,7 @@ async function cleanUp(files: MemoryFiles) {
   await writeSentinel(files, DIR);
   const live = await liveIds(files, list(files), exec, exists(files), [ROOT], sentinelOf(DIR));
   if ('stop' in live) return live;
-  const unseen = await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT]);
+  const unseen = await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT], live.grep);
   if (unseen !== null) return unseen;
   return collect(list(files), exec, DIR, live.ids, NOW);
 }
@@ -178,19 +178,19 @@ test('a witness lets go where its conversation is gone, or reads as no witness; 
   await files.write(TRANSCRIPT, line(old));
   await noteWitness(files, DIR, SESSION, [old], held(files), NOW - DAY);
   // Written in its transcript: it passes, and stays.
-  assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT]), null);
+  assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT], GREP[0]), null);
   assert.deepEqual(witnesses(files), [old]);
   // The transcript removed, its subagents' and tool results' folders and a hidden file left: the conversation is gone.
   files.files.delete(TRANSCRIPT);
   await files.write(`${PROJECT}/${SESSION}/subagents/agent-1.jsonl`, 'x');
   await files.write(`${PROJECT}/${SESSION}/tool-results/r.txt`, 'x');
   await files.write(`${PROJECT}/${SESSION}/.DS_Store`, 'x');
-  assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT]), null);
+  assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT], GREP[0]), null);
   assert.deepEqual(witnesses(files), [], 'let go');
   // What does not read as a witness goes, and stops nothing.
   for (const text of ['', `{"session":"../x","id":"${old}"}`, `{"session":"${SESSION}","id":"short"}`]) {
     await files.write(`${DIR}/witness/w.json`, text);
-    assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT]), null, text);
+    assert.equal(await checkWitnesses(files, list(files), exec, remove, DIR, [ROOT], GREP[0]), null, text);
     assert.equal(files.files.has(`${DIR}/witness/w.json`), false, text);
   }
 });
@@ -202,12 +202,12 @@ test('a place that cannot be listed, or a transcript no grep could be run on, st
   await files.write(TRANSCRIPT, line(old));
   await noteWitness(files, DIR, SESSION, [old], held(files), NOW - DAY);
   const refusing = (path: string): Promise<DirEntry[]> => (path === PROJECT ? Promise.reject(new Error('EACCES')) : files.list(path));
-  assert.equal((await checkWitnesses(files, refusing, exec, remove, DIR, [ROOT]))?.kind, 'place');
+  assert.equal((await checkWitnesses(files, refusing, exec, remove, DIR, [ROOT], GREP[0]))?.kind, 'place');
   const noGrep: Exec = async (argv) => {
     if (String(argv[0]).endsWith('grep')) throw new Error('cannot start grep');
     return exec(argv, 1000);
   };
-  assert.equal((await checkWitnesses(files, list(files), noGrep, remove, DIR, [ROOT]))?.kind, 'unread');
+  assert.equal((await checkWitnesses(files, list(files), noGrep, remove, DIR, [ROOT], GREP[0]))?.kind, 'unread');
   assert.deepEqual(witnesses(files), [old], 'kept: nothing could be told');
 });
 
@@ -249,4 +249,26 @@ test('the witness of a compaction is a ticket it put in, where it put any, befor
   // A resume that does not show it — never written to its transcript — notes the newest it shows.
   assert.equal(await noteWitness(files, DIR, SESSION, [later as string, old as string], held(files), NOW, { keepStanding: true }), later);
   assert.deepEqual(witnesses(files), [later]);
+});
+
+test('a transcript the grep does not read to the end in its time stops the clean-up, and no other grep is tried (#118)', async () => {
+  const files = new MemoryFiles();
+  const { exec, remove } = commands(files);
+  const old = await kept(files, 'o'.repeat(4000), 30 * DAY);
+  await files.write(TRANSCRIPT, line(old));
+  await noteWitness(files, DIR, SESSION, [old], held(files), NOW - DAY);
+  const started: string[] = [];
+  const outOfTime: Exec = async (argv) => {
+    if (String(argv[0]).endsWith('grep')) {
+      started.push(String(argv[0]));
+      throw new Error('still running after 30000 ms');
+    }
+    return exec(argv, 1000);
+  };
+  assert.equal((await checkWitnesses(files, list(files), outOfTime, remove, DIR, [ROOT], GREP[0]))?.kind, 'unread');
+  assert.deepEqual(started, [GREP[0]], 'one grep, once');
+  // One that cannot read the transcript (2) stops it too: what it holds cannot be told.
+  const unreadable: Exec = async (argv) => (String(argv[0]).endsWith('grep') ? { exitCode: 2, stdout: '', truncated: false } : exec(argv, 1000));
+  assert.equal((await checkWitnesses(files, list(files), unreadable, remove, DIR, [ROOT], GREP[0]))?.kind, 'unread');
+  assert.deepEqual(witnesses(files), [old], 'kept: nothing could be told');
 });

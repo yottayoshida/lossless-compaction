@@ -168,7 +168,7 @@ test('the ids in transcripts are read per project; a place that is gone is dropp
   assert.match(await stopsWith({ grepExit: 1 }), /did not read all/);
   assert.match(await stopsWith({ dropSentinel: true }), /did not read all/);
   assert.match(await stopsWith({ truncated: true }), /more than one search/);
-  assert.match(await stopsWith({ refuse: ['grep'] }), /grep did not run to the end.*cannot start/);
+  assert.match(await stopsWith({ refuse: ['grep'] }), /no grep could be run/);
   // Each with its kind, which is what is recorded (ADR 0016).
   const kindOf = async (options: Parameters<typeof commands>[1]) =>
     (JSON.parse(await stopsWith(options)) as { kind?: string }).kind;
@@ -219,7 +219,7 @@ test('a recorded place that is a link is read where it leads, once where it is r
   assert.ok(!('stop' in live), JSON.stringify(live));
   assert.deepEqual(live.roots, [elsewhere]);
   assert.ok(live.ids.has(named));
-  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep')).length, 1, 'searched once');
+  assert.equal(ran.filter((argv) => argv[0]?.endsWith('/grep') && argv.includes('-rahoE')).length, 1, 'searched once');
   assert.deepEqual(await collect(list(files), exec, DIR, live.ids, NOW), { trashed: 1, restored: 0, removed: 0 });
   assert.ok(files.files.has(`${DIR}/blobs/${named}.txt`), 'what only the transcripts behind the link name went to the trash');
   assert.ok(!files.files.has(`${DIR}/blobs/${unnamed}.txt`));
@@ -920,4 +920,35 @@ test('a kept part whose entry does not read, its text the one stored, is read as
   const stopped = await namedThroughParts(files, [DIR], new Set([part]));
   assert.ok('stop' in stopped);
   assert.deepEqual(stopped.unread, [{ id: part, why: 'text-changed' }]);
+});
+
+test('a search that does not come back in its time is not run again with the other grep: the collection stops after one (#118)', async () => {
+  const files = new MemoryFiles();
+  await files.write(`${ROOT}/-proj/s.jsonl`, `"${'a'.repeat(64)}"`);
+  await writeSentinel(files, DIR);
+  const { exec: plain } = commands(files);
+  const started: string[][] = [];
+  // The small search a grep is chosen by comes back; the search of a project does not, as one out of its time.
+  const outOfTime: Exec = async (argv, timeoutMs) => {
+    started.push([...argv]);
+    if (argv.includes('-rahoE')) throw new Error('still running after 300000 ms');
+    return plain(argv, timeoutMs);
+  };
+  const live = await liveIds(files, list(files), outOfTime, existsIn(files), [ROOT], SENTINEL);
+  assert.ok('stop' in live && live.kind === 'unread' && /did not run to the end/.test(live.stop), JSON.stringify(live));
+  assert.equal(started.filter((argv) => argv.includes('-rahoE')).length, 1, 'searched exactly once');
+
+  // Where /usr/bin/grep cannot start, /bin/grep is chosen, and reads the project.
+  const binOnly: Exec = async (argv, timeoutMs) => {
+    if (argv[0] === '/usr/bin/grep') throw new Error('cannot start /usr/bin/grep');
+    return plain(argv, timeoutMs);
+  };
+  const read = await liveIds(files, list(files), binOnly, existsIn(files), [ROOT], SENTINEL);
+  assert.ok(!('stop' in read) && read.grep === '/bin/grep' && read.ids.has('a'.repeat(64)), JSON.stringify(read));
+
+  // Where no grep starts, the line says what the host said; and the grep is chosen only where there is something to
+  // search, so places all gone stop it as they did, for what they are.
+  const { exec: none } = commands(files, { refuse: ['grep'] });
+  assert.match(JSON.stringify(await liveIds(files, list(files), none, existsIn(files), [ROOT], SENTINEL)), /no grep could be run \(\/usr\/bin\/grep: cannot start .*; \/bin\/grep: cannot start/);
+  assert.equal((await liveIds(files, list(files), none, existsIn(files), ['/gone/projects'], SENTINEL) as { kind?: string }).kind, 'place');
 });
