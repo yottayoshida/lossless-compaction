@@ -501,12 +501,12 @@ How the questions went, all runs together:
 
 ### The questions `find` is for, asked of an agent
 
-| Trace | Model | Run | Tools | Compaction | Right | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
+| Trace | Model | Run | Key | Compaction | Right | `find` calls | `recall` calls | Files read again | Seconds | Input tokens | Cost, USD |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| results | claude-haiku-4-5-20251001 | 1 | `recall` only | moved | 5/8 | 0 | 3 | 1 | 59.3 | 568683 | 0.5876 |
-| results | claude-haiku-4-5-20251001 | 1 | `recall` and `find` | moved | 6/8 | 0 | 11 | 0 | 169.2 | 1051285 | 0.7488 |
-| short | claude-haiku-4-5-20251001 | 1 | `recall` only | nothing | 3/5 | 0 | 3 | 0 | 38.4 | 161473 | 0.1370 |
-| short | claude-haiku-4-5-20251001 | 1 | `recall` and `find` | nothing | 4/5 | 0 | 4 | 0 | 41.4 | 188390 | 0.1480 |
+| results | claude-haiku-4-5-20251001 | 1 | no key | moved | 5/8 | 0 | 3 | 1 | 59.3 | 568683 | 0.5876 |
+| results | claude-haiku-4-5-20251001 | 1 | with a key | moved | 6/8 | 0 | 11 | 0 | 169.2 | 1051285 | 0.7488 |
+| short | claude-haiku-4-5-20251001 | 1 | no key | nothing | 3/5 | 0 | 3 | 0 | 38.4 | 161473 | 0.1370 |
+| short | claude-haiku-4-5-20251001 | 1 | with a key | nothing | 4/5 | 0 | 4 | 0 | 41.4 | 188390 | 0.1480 |
 
 ### What `find` picks, against a word match
 

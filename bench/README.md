@@ -261,7 +261,11 @@ the conversation, or that nothing moved out holds, is counted apart. `results/20
 key: four conversations as they were compacted by default then
 (`targetPercent` 40), two of them cut as
 well (`--max-after 10`), and `opaque` with `recall` alone
-(`find --variants default`, which needs no key).
+(`find --variants default`, which needs no key; with no key there was no
+`find` then). Since #110 the plugin has `find` with no key as well, which
+looks on the machine and sends nothing: a checkout of before is measured
+beside it with `--plugin-dirs name=path --without-find`, which `find` takes
+too, as `run` and `chain` do, each run of one checkout at a time.
 
 What comes back into the context over many turns is measured by `chain`:
 the same questions asked one after another, each going on from the one
@@ -294,9 +298,11 @@ and a document.
 ## `find`
 
 `find` is the plugin's other way to bring a result back: asked in words, it
-has Jev choose among the results moved out. It needs a key, sends Jev the
-call that made each result and a few hundred characters of its text, and is
-compared apart from everything above, which uses `recall` alone.
+has Jev choose among the results moved out. With a key it sends Jev the
+call that made each result and a few hundred characters of its text; with
+none, since #110, it looks on the machine and lists the results for the
+agent to choose from. It is compared apart from everything above, which was
+measured with `recall` alone.
 
 The questions (`finds` in `questions.json`) come in two kinds. By a value:
 the question names a number or a checksum the result holds. By meaning: it

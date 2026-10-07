@@ -18,16 +18,19 @@ import type { Message } from './types.ts';
 /** The plugin's version, as `.claude-plugin/plugin.json` gives it; a test holds the two together. */
 export const VERSION = '0.7.1';
 
-/** What became of `find` at the start of a session: registered, asking which provider, or not, and why. */
-export type Find = { registered: true; kind: Provider['kind'] } | { registered: false; why: string };
+/**
+ * What became of `find` at the start of a session: registered, asking which provider; registered with no key, looking
+ * on this machine alone, and why there is none (#110); or not, and why.
+ */
+export type Find = { registered: true; kind: Provider['kind'] } | { registered: true; local: true; why: string } | { registered: false; why: string };
 
 /** Why `find` is not there when the settings gave a key and Claude Code did not take the tool: what it said was said at the start. */
 export const NOT_TAKEN = 'Claude Code did not take it, as a line at the start of the session said';
 
 /** What the lookup for `find`'s key came to, as `find` would be registered from it. Undefined: the lookup failed. */
 export function findFrom(provider: Provider | null | { error: string } | undefined): Find {
-  if (provider === undefined) return { registered: false, why: 'looking for its key failed' };
-  if (provider === null) return { registered: false, why: 'no key' };
+  if (provider === undefined) return { registered: true, local: true, why: 'looking for its key failed' };
+  if (provider === null) return { registered: true, local: true, why: 'no key' };
   if ('error' in provider) return { registered: false, why: provider.error };
   return { registered: true, kind: provider.kind };
 }
@@ -99,8 +102,9 @@ function unusedKey(input: StatusInput): string {
 }
 
 function findText(find: Find, input: StatusInput): string {
+  if (find.registered && 'local' in find) return `looks on this machine and sends nothing (${find.why}${find.why === 'no key' ? unusedKey(input) : ''})`;
   if (find.registered) return `asks ${NAMED[find.kind]}, ${keyFrom(find.kind, input.options)}`;
-  return `${find.why}${find.why === 'no key' ? unusedKey(input) : ''}`;
+  return find.why;
 }
 
 const wouldBe = (now: Find) => `with the settings now it would ${now.registered ? 'be registered' : 'not be'}`;

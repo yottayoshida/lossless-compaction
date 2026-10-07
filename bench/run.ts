@@ -356,7 +356,11 @@ export const QUOTE = { value: 'Quote that line in full.', meaning: 'Quote its fi
 /** A question that needs nothing of the conversation: what it was sent is the size of what the compaction left. */
 export const PROBE = [{ id: 'probe', kind: 'continuity' as Kind, ask: 'Reply with the single word: ok' }];
 
-export type Plan = { traces: string[]; models: string[]; runs: number; buildModel: string; mode: Mode; variants?: Variant[]; arms?: Arm[] };
+/**
+ * `withoutFind`: the checkouts measured register `find` only with a key, as before #110, and none is given one: their
+ * sessions have `recall` alone.
+ */
+export type Plan = { traces: string[]; models: string[]; runs: number; buildModel: string; mode: Mode; variants?: Variant[]; arms?: Arm[]; withoutFind?: boolean };
 
 /**
  * The variants of the plugin a command line names: checkouts by name
@@ -398,8 +402,10 @@ export async function runAll(plan: Plan, places: Places, log: (text: string) => 
           for (const variant of arm === 'plugin' ? (plan.variants ?? [standard]) : [standard]) {
             const questions =
               plan.mode === 'probe' ? PROBE : plan.mode === 'find' ? trace.finds.map((find) => ({ id: find.id, kind: 'exact-gone' as Kind, ask: `${find.ask} ${QUOTE[find.by]}`, needles: [find.target] })) : trace.questions;
-            // `find` is registered only when the plugin has a key; the tool is named only in the variant that is handed one.
-            const tools = plan.mode === 'find' && variant.env !== undefined ? [...QUESTION_TOOLS, FIND_TOOL] : QUESTION_TOOLS;
+            // `find` is registered with a key or without one (#110): the plugin's sessions have it, but where the checkouts
+            // measured are of before, and no key is given them. A session with another set of tools than named is refused.
+            const withFind = arm === 'plugin' && (variant.env !== undefined || plan.withoutFind !== true);
+            const tools = withFind ? [...QUESTION_TOOLS, FIND_TOOL] : QUESTION_TOOLS;
             units.push(await unit(trace, base, model, run, arm, places, { ...variant, tools }, plan.mode, questions, arms[0] === arm, log));
           }
         }

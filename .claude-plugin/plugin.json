@@ -11,7 +11,7 @@
     "provider": {
       "type": "string",
       "title": "Jev provider",
-      "description": "Where Jev is asked when the find tool is called: auto, typesafe or cloudflare. auto asks Cloudflare when an account id is entered here and TypeSafe when none is. A key in the environment is used only once this is set to typesafe or cloudflare, or an account id is entered: on auto with none, only the key set here is. Leave the key unset to have no find tool and send nothing; recall works without one.",
+      "description": "Where Jev is asked when the find tool is called: auto, typesafe or cloudflare. auto asks Cloudflare when an account id is entered here and TypeSafe when none is. A key in the environment is used only once this is set to typesafe or cloudflare, or an account id is entered: on auto with none, only the key set here is. Leave the key unset to send nothing: find then looks through what was moved out on this machine, and recall works as with a key.",
       "default": "auto"
     },
     "apiKey": {

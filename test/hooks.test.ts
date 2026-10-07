@@ -502,7 +502,7 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   assert.ok(!hooks.includes('cutToPercent') && !hooks.includes("options['cutTo"), 'nothing of it is read from the options');
   assert.ok(hooks.includes('keepTokens: config.keepTokens,'));
   // What `find` says of itself speaks of parts kept either way, and its sentences stand apart as they did.
-  assert.ok(hooks.includes("moved out of this conversation and the parts of it that were ` +\n          'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about;"));
+  assert.ok(hooks.includes("moved out of this conversation and the parts of it that were ` +\n            'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about;"));
   // The line names the messages kept by their place in the conversation: from behind what stays in front, up to the cut.
   assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));'));
 });
@@ -551,6 +551,12 @@ test('recall names find in its description when find is registered, and only the
   // moved to another module, neither recall nor find was there (measured on 2.1.288).
   assert.equal(hooks.split('await $.tool.register({').length - 1, 2);
   assert.ok(hooks.includes('name: FIND,') && hooks.includes('name: RECALL,') && hooks.includes('description: recallDescription(withFind),'));
+  // Registered at the start with no key, find sends nothing, as its description says, though a key turns up later in the
+  // environment (a key set in the plugin's settings loads the hook again, and is used); and where looking for the key fails
+  // when it is called, it looks here with none (#110).
+  const calling = hooks.slice(hooks.indexOf("on('tool.call', { tool: 'mcp__lossless-compaction__find' }"), hooks.indexOf('const result = await find({'));
+  assert.ok(calling.includes("if (findAtStart?.registered === true && 'local' in findAtStart) provider = null;"), calling);
+  assert.ok(calling.includes('} catch {\n        provider = null;\n      }'), calling);
   // Loaded by its URL, so that the type check of the tests does not take in the host's types the hook is written against.
   const { registerTools } = (await import(new URL('../hooks/move-out.ts', import.meta.url).href)) as {
     registerTools: (
@@ -581,11 +587,17 @@ test('recall names find in its description when find is registered, and only the
   assert.deepEqual(keyed.names, ['find', 'recall']);
   assert.ok(keyed.recall.endsWith(` ${FIND_IN_RECALL}`));
   assert.ok(FIND_IN_RECALL.includes(FIND_TOOL));
-  // No key, a key that may not be used, a lookup that failed, find refused: recall says nothing of find.
+  // No key, or a lookup that failed: find is there all the same, looking on this machine (#110), and recall names it.
   for (const [what, outcome] of [
     ['no key', await run(null)],
-    ['a key that may not be used', await run({ error: 'set the key in your user settings' })],
     ['looking for the key failed', await run(undefined)],
+  ] as const) {
+    assert.deepEqual(outcome.names, ['find', 'recall'], what);
+    assert.ok(outcome.recall.endsWith(` ${FIND_IN_RECALL}`), what);
+  }
+  // A key that may not be used, find refused: recall says nothing of find.
+  for (const [what, outcome] of [
+    ['a key that may not be used', await run({ error: 'set the key in your user settings' })],
     ['find could not be registered', await run(provider, true)],
   ] as const) {
     assert.deepEqual(outcome.names, ['recall'], what);
@@ -654,9 +666,11 @@ test('/lossless-status is a command, registered at the start, that opens no plac
       provider: Provider | null | { error: string } | undefined,
     ) => Promise<unknown>;
   };
+  const registered: { name: string; description?: string }[] = [];
   const host = (refuseFind: boolean) => ({
     tool: {
-      register: async (tool: { name: string }) => {
+      register: async (tool: { name: string; description?: string }) => {
+        registered.push(tool);
         if (refuseFind && tool.name === 'find') throw new Error('refused by the host');
       },
     },
@@ -665,7 +679,23 @@ test('/lossless-status is a command, registered at the start, that opens no plac
   const provider = { kind: 'typesafe', key: 'test-key-for-typesafe', model: 'jev-latest' } as unknown as Provider;
   assert.deepEqual(await registerTools(host(false), provider), { registered: true, kind: 'typesafe' });
   assert.deepEqual(await registerTools(host(true), provider), { registered: false, why: 'Claude Code did not take it, as a line at the start of the session said' });
-  assert.deepEqual(await registerTools(host(false), null), { registered: false, why: 'no key' });
+  // With no key, or where looking for one failed, find is registered all the same, to look on this machine (#110).
+  const finds = (since: number) => registered.slice(since).filter((tool) => tool.name === 'find');
+  let since = registered.length;
+  assert.deepEqual(await registerTools(host(false), null), { registered: true, local: true, why: 'no key' });
+  assert.equal(finds(since).length, 1, 'registered once');
+  assert.match(finds(since)[0]?.description ?? '', /^Looks, on this machine, .* and sends nothing\./);
+  since = registered.length;
+  assert.deepEqual(await registerTools(host(false), undefined), { registered: true, local: true, why: 'looking for its key failed' });
+  assert.equal(finds(since).length, 1);
+  // Settings that name a key that cannot be used: nothing is registered, and that is said.
+  since = registered.length;
+  assert.deepEqual(await registerTools(host(false), { error: 'cloudflare needs an account id' }), { registered: false, why: 'cloudflare needs an account id' });
+  assert.equal(finds(since).length, 0);
+  // With a key the description is Jev's.
+  since = registered.length;
+  await registerTools(host(false), provider);
+  assert.match(finds(since)[0]?.description ?? '', /^Finds, among the tool results/);
 });
 
 test('a clean-up that stops records the kind, never its words: from where it stopped, or as unexpected; one that ends clears it', () => {

@@ -1218,8 +1218,8 @@ test('the questions find is for, asked of an agent, are tabled per unit: with re
   const text = finds([found, asked('default', false, ['ToolSearch', 'mcp__lossless-compaction__recall']), unitOf('plugin', 1, [])]);
   const rows = text.split('\n').slice(2);
   assert.equal(rows.length, 2, 'the units that asked the trace\'s own questions are not in it');
-  assert.match(rows[0] ?? '', /\| results \| haiku \| 1 \| `recall` only \| — \| 0\/2 \| 0 \| 2 \| 0 \|/);
-  assert.match(rows[1] ?? '', /\| results \| haiku \| 1 \| `recall` and `find` \| — \| 1\/2 \| 2 \| 0 \| 0 \|/);
+  assert.match(rows[0] ?? '', /\| results \| haiku \| 1 \| no key \| — \| 0\/2 \| 0 \| 2 \| 0 \|/);
+  assert.match(rows[1] ?? '', /\| results \| haiku \| 1 \| with a key \| — \| 1\/2 \| 2 \| 0 \| 0 \|/);
 });
 
 // --- what was published ---
@@ -3128,4 +3128,51 @@ test('what the eight working sessions replayed in a window of 1,000,000 come to,
   assert.ok(flat.includes(`The target at 1 is ${(window / 100).toLocaleString('en-US')} tokens and at 20 ${((window * 20) / 100).toLocaleString('en-US')}`));
   const differs = rowsOf.find((row) => row.atForty !== row.atOne) as (typeof rowsOf)[number];
   assert.ok(flat.includes(`left ${differs.atForty.toLocaleString('en-US')} tokens where they left ${differs.atOne.toLocaleString('en-US')}, ${Math.round(((differs.atForty - differs.atOne) / differs.atOne) * 100)} % more`));
+});
+
+test("find with no key (#110): docs/measurements.md gives every figure of the units published, against the commit before it, and the line set before the run as met in opaque and missed in results", () => {
+  const dir = fileURLToPath(new URL('../bench/results/2026-10-06-no-key-find', import.meta.url));
+  const measurements = readFileSync(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)), 'utf8');
+  const section = measurements.slice(measurements.indexOf('## `find` with no key'));
+  const grades = JSON.parse(readFileSync(`${dir}/grades.json`, 'utf8')) as Grades;
+  const units = unitsUnder(dir);
+  assert.equal(units.length, 12);
+  // Two checkouts, Sonnet 5.5, the plugin's arm alone, no key: the variant names the checkout.
+  const code = { before: '52719c0d11cc', branch: '31d52395bdac' } as const;
+  assert.ok(units.every((unit) => unit.model === 'claude-sonnet-5-5' && unit.arm === 'plugin' && unit.plugin === code[unit.variant.startsWith('before') ? 'before' : 'branch']));
+  const right = (unit: Unit) =>
+    unit.questions.filter((question) => (question.verdict ?? grades.verdicts[Object.keys(grades.verdicts).find((key) => key.startsWith(`${[unit.trace, unit.model, unit.run, unit.arm, unit.variant, question.id].join('|')}|`)) ?? '']?.[0]) === 'correct').length;
+  const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
+  const of = (trace: string, variant: string, run: number) => units.find((unit) => unit.trace === trace && unit.variant === variant && unit.run === run) as Unit;
+  const rows = [
+    ['`opaque`', 'opaque', '', [1, 2, 3]],
+    ['`results`', 'results', '', [1, 2]],
+    ['`results`, `maxAfterPercent` 10', 'results', '-max-after-10', [1]],
+  ] as const;
+  for (const [label, trace, setting, runs] of rows) {
+    for (const run of runs) {
+      const [before, branch] = [of(trace, `before${setting}`, run), of(trace, `branch${setting}`, run)];
+      const cells = [
+        label,
+        String(run),
+        `${right(before)}/${before.questions.length}`,
+        String(sum(before.questions.map((q) => q.retrieval.recalls))),
+        sum(before.questions.map((q) => q.own.costUSD)).toFixed(2),
+        `${right(branch)}/${branch.questions.length}`,
+        String(sum(branch.questions.map((q) => q.retrieval.finds))),
+        String(sum(branch.questions.map((q) => q.retrieval.recalls))),
+        sum(branch.questions.map((q) => q.own.costUSD)).toFixed(2),
+      ];
+      assert.ok(section.includes(`| ${cells.join(' | ')} |`), cells.join(' | '));
+      assert.equal(sum(before.questions.map((q) => q.retrieval.finds)), 0, 'the commit before has no find with no key');
+    }
+  }
+  // The line: opaque's calls together at half or fewer, as many right; results one right fewer.
+  const calls = (variant: string) => [1, 2, 3].map((run) => sum(of('opaque', variant, run).questions.map((q) => q.retrieval.recalls + q.retrieval.finds))).sort((a, b) => a - b)[1] as number;
+  assert.deepEqual([calls('before'), calls('branch')], [100, 16]);
+  assert.ok(section.includes('The median run made\n  100 calls to `recall` before and 16'));
+  const results = (variant: string) => sum(['', '-max-after-10'].flatMap((setting) => units.filter((unit) => unit.trace === 'results' && unit.variant === `${variant}${setting}`).map(right)));
+  assert.deepEqual([results('before'), results('branch')], [27, 26]);
+  // Nothing was cut at maxAfterPercent 10: every compaction moved out and handed back.
+  assert.ok(units.every((unit) => unit.compaction.line?.outcome === 'moved'));
 });

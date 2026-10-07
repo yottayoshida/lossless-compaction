@@ -331,7 +331,7 @@ counting was replaced:
 
 ### `find`
 
-`find` needs a key and was compared apart, with Haiku 4.5 and Jev on
+`find` needed a key then (before #110) and was compared apart, with Haiku 4.5 and Jev on
 Cloudflare Workers AI. Its questions ask which earlier result something was
 in, in two ways: by a value the result holds (a number, a checksum), or by
 what the result was, in other words than the call that made it or its text.
@@ -831,7 +831,7 @@ holding every value, and on those three questions `find` said none.
 
 **With an agent in between** (Haiku 4.5 with a key, three runs,
 `bench/results/2026-10-03-values/`). The arm with no key was not run again:
-it has no `find`, and nothing it meets changed. A unit names the code it was
+it had no `find` then, and nothing it meets changed. A unit names the code it was
 measured with by `plugin`, the hash of the tree of that code; its
 `pluginCommit` is a commit made to measure, which was not pushed.
 
@@ -927,7 +927,7 @@ right, and is what was built. A line fell one short of it on both, 6 and 6.
 - With the tools listed the agent searched for no tool: none of the 138
   questions had a call to Claude Code's tool search, where 85 of the
   baseline's 138 had one.
-- With no key there is no `find`, and listing `recall` did not make the
+- With no key there was no `find` then, and listing `recall` did not make the
   agent fetch more: by meaning it called for 4 questions where the baseline
   called for 8, and was right on 3 where the baseline was on 4, which is no
   further apart than one set of three runs lies from the next. Its answers
@@ -2633,3 +2633,54 @@ come to, and wrote the rest anew: in four of the five at 40 with a request
 after, the other reading 241,552, and in seven of the nine at 1, the other
 two reading nothing, their cache gone. That is what the
 session above measured in a window of 200,000.
+
+## `find` with no key
+
+Before #110 a session with no key for Jev had `recall` alone, and in `opaque`,
+where nothing in a call says what it returned, the agent opened tickets one
+by one. Since then `find` is there with no key: it looks on the machine and
+sends nothing, and a question in words is answered with every result by its
+call and first line, for the agent to choose from (ADR 0037). Measured on
+2026-10-06 with Sonnet 5.5 and no key, on the plugin at `d66d602` (code
+`31d52395bdac`) beside the commit before it, `e94fbeb` (code `52719c0d11cc`),
+which has `recall` alone; Claude Code 2.1.289, each question of a fresh copy,
+graded by Sonnet 5.5 (`bench/results/2026-10-06-no-key-find/`). The
+conversations are those of `bench/results/2026-10-05-fetched/`. Both commits
+are from before #113 to #116 were merged into this change; those add places
+read after the store that is set, change the clean-up, and cut a
+conversation of 1,536 entries or more, where these have 44 and 57 messages.
+
+Before it was run, the line was set: in `opaque`, over three runs, the calls
+to `recall` and `find` together at half those to `recall` before, or fewer,
+with no fewer right answers of those Sonnet 5.5 gave itself; in `results`,
+twice and once cut (`maxAfterPercent` 10), no fewer right answers.
+
+| Conversation | Run | Before: right | Before: `recall` | Before: cost, USD | With `find`: right | `find` | `recall` | Cost, USD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `opaque` | 1 | 9/10 | 129 | 2.30 | 9/10 | 9 | 8 | 0.53 |
+| `opaque` | 2 | 9/10 | 96 | 1.37 | 9/10 | 9 | 7 | 0.28 |
+| `opaque` | 3 | 9/10 | 100 | 1.20 | 9/10 | 9 | 7 | 0.26 |
+| `results` | 1 | 9/9 | 4 | 0.22 | 9/9 | 0 | 4 | 0.22 |
+| `results` | 2 | 9/9 | 4 | 0.05 | 9/9 | 1 | 3 | 0.06 |
+| `results`, `maxAfterPercent` 10 | 1 | 9/9 | 4 | 0.05 | 8/9 | 0 | 4 | 0.04 |
+
+- **`opaque`: 100 calls became 16, for the same answers.** The median run made
+  100 calls to `recall` before and 16 to `find` and `recall` together with
+  it, and each run answered 9 of 10 right both ways; the tenth was a
+  question Sonnet 5.5's safeguards stopped in every run, which another model
+  answered. A run cost 0.26 to 0.53 USD against 1.20 to 2.30. In 6 of the 27
+  answers the agent did not recall the result at all and answered from what
+  `find` listed: 5 times from the line it listed with a value, once from a
+  result's first line.
+- **`results`: one answer fewer, which `find` had no part in.** The answer
+  missed was to what a file now says, which the agent read again with
+  `Read`: it wrote the line out with the prefix `ST-` that a rule of the
+  conversation puts on station ids, and the line asked for was not in the
+  answer. It called neither `find` nor `recall` for it. So the line set for
+  `results` was not met, by that answer.
+- **Nothing was cut.** At `targetPercent` 1, the default, moving out brought
+  `results` under 10 % of the window, and the plugin handed it back rebuilt
+  with no cut: a list of `find` holding kept parts was not measured.
+- `opaque`'s results open with their titles, which is the case a list by
+  first lines suits best. Where the first line of a result says nothing, the
+  list is no better than `recall` one by one; that was not measured.

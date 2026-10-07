@@ -143,7 +143,8 @@ by the plugin.
 
 ## What it sends, and to whom
 
-- **With no key: nothing.** The plugin makes no network request.
+- **With no key: nothing.** The plugin makes no network request: `find`
+  looks through what was moved out on this machine (#110).
 - **With a key, at each call to `find`**: to the provider your settings name,
   TypeSafe AI (`https://api.typesafe.ai`) or Cloudflare Workers AI
   (`https://api.cloudflare.com`, with your account id), the key and what

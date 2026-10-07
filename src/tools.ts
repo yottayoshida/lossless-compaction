@@ -10,7 +10,7 @@ import { FIND_TOOL, PLUGIN } from './store.ts';
  * tickets name: there, this is where it learns that a result can be asked for
  * by what it was about.
  */
-export const FIND_IN_RECALL = `When no id at hand is known to be the result that is wanted, ${FIND_TOOL} finds it from what it was about, asked in words.`;
+export const FIND_IN_RECALL = `When no id at hand is known to be the result that is wanted, ${FIND_TOOL} looks for it from what it was about, asked in words.`;
 
 /**
  * How a kept part is read, said once where every part is fetched (#104): its fixed lines tell who said what, and a

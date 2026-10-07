@@ -116,7 +116,16 @@ async function main(): Promise<void> {
     const variants = variantsOf(flag(args, 'plugin-dirs'), flag(args, 'max-after'), pluginDir, flag(args, 'target'));
     const arms = flag(args, 'arms');
     const units = await runAll(
-      { traces, models, runs, buildModel, mode: command === 'probe' ? 'probe' : command === 'chain' ? 'chain' : 'ask', ...(variants ? { variants } : {}), ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}) },
+      {
+        traces,
+        models,
+        runs,
+        buildModel,
+        mode: command === 'probe' ? 'probe' : command === 'chain' ? 'chain' : 'ask',
+        ...(variants ? { variants } : {}),
+        ...(arms ? { arms: arms.split(',') as ('plugin' | 'builtin')[] } : {}),
+        withoutFind: args.includes('--without-find'),
+      },
       places,
       log,
     );
@@ -176,8 +185,11 @@ async function main(): Promise<void> {
   }
   if (command === 'find') {
     const only = flag(args, 'variants')?.split(',');
-    // The key is read only where the arm with `find` is measured: `--variants default` measures `recall` alone, with no key.
-    const { keys, provider } = only === undefined || only.includes('find') ? jevKeys() : { keys: {}, provider: 'typesafe' as const };
+    // Checkouts named with --plugin-dirs (and --max-after, --target) are measured with no key, side by side: one of
+    // before #110, with `recall` alone, is named with --without-find.
+    const named = variantsOf(flag(args, 'plugin-dirs'), flag(args, 'max-after'), pluginDir, flag(args, 'target'));
+    // The key is read only where the arm with it is measured: `--variants default` measures the plugin with no key.
+    const { keys, provider } = named === undefined && (only === undefined || only.includes('find')) ? jevKeys() : { keys: {}, provider: 'typesafe' as const };
     const units = await runAll(
       {
         traces: list(flag(args, 'traces'), ['results', 'short']),
@@ -187,10 +199,13 @@ async function main(): Promise<void> {
         mode: 'find',
         arms: ['plugin'],
         // With --variants, only those named: `find` alone, where the arm without a key is already measured on the same code path.
-        variants: [
-          { name: 'default', pluginDir },
-          { name: 'find', pluginDir, options: { provider }, env: keys },
-        ].filter((variant) => only === undefined || only.includes(variant.name)),
+        variants:
+          named ??
+          [
+            { name: 'default', pluginDir },
+            { name: 'find', pluginDir, options: { provider }, env: keys },
+          ].filter((variant) => only === undefined || only.includes(variant.name)),
+        withoutFind: args.includes('--without-find'),
       },
       places,
       log,

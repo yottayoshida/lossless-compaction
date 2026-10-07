@@ -94,3 +94,6 @@ Why the plugin is built the way it is, one record a decision.
   `/compact` given instructions, by hand or by a plugin, hands what is left
   to Claude Code's summary whatever room moving out made, and an automatic
   compaction does not.
+- [0037](0037-find-without-a-key.md): why `find` is registered with no key,
+  looks on the machine and sends nothing, and lists every result for the
+  agent to choose from where Jev would have chosen.

@@ -293,7 +293,8 @@ where they stood:
 - No summary is written, by Claude Code or by the plugin. What the agent
   has of the messages that were cut is the list: parts by their numbers,
   with no word of what each held. With a key, `find` reads them; without
-  one, `recall` takes an id from the list. A rule or a decision stated later
+  one it lists them, each part by the messages it holds, and `recall`
+  takes an id from the list. A rule or a decision stated later
   than the first message is in a part, and an agent that does not fetch it
   does not have it. Asked for what was cut, Sonnet 5.5 called `recall` and
   gave it each time; Haiku 4.5 mostly said that it did not have it.
@@ -885,12 +886,13 @@ and none chooses TypeSafe. When the account id is not 32 hexadecimal
 characters, or `provider` is `typesafe` while an account id is entered,
 nothing is sent: with a key for the provider chosen, `find` is not
 registered and a line at the start of the session says why; with none,
-nothing is said, as for any setup without a key. A key in the environment
+`find` is there with no key, as for any setup without one, looking on this
+machine and sending nothing (#110). A key in the environment
 (`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only where the
 plugin's own settings choose the provider: `provider` set to `typesafe` or
 `cloudflare`, or a Cloudflare account id entered. Left on `auto` with no
 account id, nothing is sent without a key in the plugin's settings: a key
-exported for another tool does not start `find`, and nothing is said of it
+exported for another tool does not make `find` send anything, and nothing is said of it
 at the start of a session; `/lossless-status` says it is there and what
 would use it.
 Where the settings choose the provider and hold no key, the key of the
@@ -1281,7 +1283,7 @@ value it would use that one of them holds stops it:
   `cloudflareAccountId` or `model` under its `pluginConfigs`; or a proxy or
   certificate variable (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` in either
   case, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`,
-  `SSL_CERT_FILE`, `SSL_CERT_DIR`): there is no `find`.
+  `SSL_CERT_FILE`, `SSL_CERT_DIR`): there is no `find` that asks Jev.
 
 Each time, the line the plugin prints names the value and the file. Set the
 key and `storeDir` in your user settings (`/plugin configure` without
@@ -1376,7 +1378,8 @@ kept part of the conversation. Nor is a result that holds an image looked
 through. A run with one digit ("the 2 logs", `log7.txt`) is no value, a
 number written with commas between its digits ("9,821.50") gives none, and a
 question whose values all have fewer than three digits ("step 17") has none
-looked for. Without a key there is no `find`, and so none of this.
+looked for. With no key the same is looked for, and the results with such
+a line are listed with it, Jev being told nothing (#110).
 
 ## What an agent does not fetch
 
@@ -1386,9 +1389,11 @@ they were about, and fetched the reading of a changed file. Haiku 4.5 asks
 less often, in made-up conversations asked right after the compaction
 ([the figures](measurements.md#the-tools-in-front-of-the-agent)):
 
-- **With no key, a result asked for by what it was about.** There is no
-  `find`, and nothing in the conversation says which ticket is the one
-  asked about. Of thirteen results whose calls say nothing of what is in
+- **With no key, a result asked for by what it was about.** Since #110
+  `find` lists every result by its call and first line for the agent to
+  choose from, ranked by nothing: where the first line says nothing, that is
+  no help. Before it there was no `find`, and nothing in the conversation
+  said which ticket was the one asked about, as below. Of thirteen results whose calls say nothing of what is in
   them, all moved out, Haiku was right on 3 questions of 21 and called
   `recall` for 4. With a key it was right on 19 of 21. Asked with no key
   for a code further down one of them, it was right on 3 of 9 in one set of

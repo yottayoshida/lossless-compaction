@@ -1,7 +1,7 @@
 // Finding, among the results moved out of a conversation, the one a question
 // is about: what the `find` tool answers with.
 
-import { choose, digest, head, inputLine, stateFor, type Provider } from './ask.ts';
+import { choose, digest, head, inputLine, redact, stateFor, type Provider } from './ask.ts';
 import { unnumbered } from './changed.ts';
 import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
@@ -205,7 +205,7 @@ function ticketsInPart(text: string, seen: Set<string>): Stored[] {
  * the lines in place of the middles of long messages, in the conversation and in the parts read: a message that went
  * into a part kept its line there (ADR 0024).
  */
-async function everyTicket(files: Files, dirs: readonly string[], messages: readonly Message[]): Promise<{ tickets: Stored[]; middles: Stored[] }> {
+async function everyTicket(files: Files, dirs: readonly string[], messages: readonly Message[]): Promise<{ tickets: Stored[]; middles: Stored[]; own: number }> {
   const seenMiddles = new Set<string>();
   const middles = middlesOf(messages.flatMap((message) => message.text.split('\n').map((line) => ({ line, role: message.role }))), seenMiddles);
   // What Claude Code attached is looked through as a middle is, wherever its ticket stands, and not followed (#105): it
@@ -214,6 +214,8 @@ async function everyTicket(files: Files, dirs: readonly string[], messages: read
   const all = ticketsIn(messages);
   const seen = new Set(all.map((ticket) => ticket.id));
   const tickets = aside(all);
+  // The tickets written in the conversation come first, oldest first; those read out of parts follow.
+  const own = tickets.length;
   let read = 0;
   for (let index = 0; index < tickets.length && read < MAX_PARTS; index += 1) {
     const ticket = tickets[index] as Stored;
@@ -229,7 +231,7 @@ async function everyTicket(files: Files, dirs: readonly string[], messages: read
     tickets.push(...aside(inside.filter((t) => t.tool === PART)));
     tickets.push(...inside.filter((t) => t.tool !== PART).slice(0, Math.max(0, MAX_OFFERED - tickets.length)));
   }
-  return { tickets, middles };
+  return { tickets, middles, own };
 }
 
 /** The lines in place of the middles of long messages, a person's or Claude's (ADR 0024), each with its message's role. */
@@ -261,10 +263,97 @@ function middlesLine(middles: readonly Entry[], values: readonly string[]): stri
   return [`[${PLUGIN}] Holding what was asked, looked through here and not sent to Jev:`, ...lines].join('\n');
 }
 
-/** `valued`: one of its lines holds every value the question names. */
-type Entry = { ticket: Stored; option: string; holds: boolean; valued: boolean };
+/**
+ * `valued`: one of its lines holds every value the question names. Kept for an answer given with no key: `first`, the
+ * first line of what it holds; `line`, the line holding the values; `own`, whether its ticket is written in the
+ * conversation rather than in a part, and where (`at`).
+ */
+type Entry = { ticket: Stored; option: string; holds: boolean; valued: boolean; first?: string; line?: string; own?: boolean; at?: number };
 
 const describe = (ticket: Stored) => `${ticket.about}; ${ticket.bytes} bytes`;
+
+/** Said after every answer `find` gives with no key: what it did, and that nothing was sent. */
+export const NO_KEY = `[${PLUGIN}] no key: looked through on this machine; Jev was not asked.`;
+/** The most an answer given with no key lists, in characters. */
+export const LISTED_CHARS = 8000;
+/** The most of a result's first line, or of the line holding the values, that such an answer shows. */
+const FIRST_CHARS = 120;
+const LINE_CHARS = 200;
+
+/** At most `n` characters, never halving one. */
+const upTo = (text: string, n: number) => (text.length <= n ? text : `${head(text, n)}…`);
+
+/** The first line of a result that says anything, the numbers `Read` puts in front of lines left out. */
+function firstLineOf(ticket: Stored, text: string): string {
+  if (ticket.tool === PART) return '';
+  const lines = (ticket.tool === 'Read' ? (unnumbered(text) ?? text) : text).split('\n');
+  // Shapes of secrets blanked, as in what is digested for Jev: the list goes into the conversation, many lines at once.
+  return upTo(redact(lines.find((line) => line.trim() !== '')?.trim() ?? ''), FIRST_CHARS);
+}
+
+/** The first line holding every value, its shapes of secrets blanked, cut to LINE_CHARS around where the first value stands in it. */
+function valueLineOf(text: string, values: readonly string[]): string | undefined {
+  const words = values.map(wordOf);
+  const found = text.split('\n').find((one) => words.every((word) => word.test(one)));
+  if (found === undefined) return undefined;
+  const line = redact(found);
+  const at = Math.max(0, (words[0]?.exec(line)?.index ?? 0) - LINE_CHARS / 2);
+  return `${at > 0 ? '…' : ''}${upTo(line.slice(at).trim(), LINE_CHARS)}`;
+}
+
+/** Kept free under LISTED_CHARS for the line that says how many more there are. */
+const MORE_CHARS = 80;
+
+/**
+ * The results as an answer given with no key lists them, for the agent to choose from: nothing is ranked. Those whose
+ * tickets the conversation holds first, newest first, then those read out of parts, as they were read; at most `most`
+ * of them, and within LISTED_CHARS, `head` included. The rest are counted.
+ */
+function catalogue(head: string, entries: readonly Entry[], lineOf: (entry: Entry) => string, most = Infinity): string {
+  const ordered = [...entries.filter((entry) => entry.own === true).sort((a, b) => (b.at ?? 0) - (a.at ?? 0)), ...entries.filter((entry) => entry.own !== true)];
+  const lines = [head];
+  let size = head.length;
+  let shown = 0;
+  for (const entry of ordered) {
+    const line = lineOf(entry);
+    if (shown >= most || size + line.length + 1 > LISTED_CHARS - MORE_CHARS) break;
+    lines.push(line);
+    size += line.length + 1;
+    shown += 1;
+  }
+  if (shown < ordered.length) lines.push(`- and ${ordered.length - shown} more: quote a phrase or name a value to narrow`);
+  return lines.join('\n');
+}
+
+const listedLine = (entry: Entry) => `- ${describe(entry.ticket)}${entry.first ? `: ${entry.first}` : ''}; recall with ${RECALL_TOOL} id ${entry.ticket.id}`;
+const valuedLine = (entry: Entry) => `- ${describe(entry.ticket)}; the line: ${entry.line ?? ''}; recall with ${RECALL_TOOL} id ${entry.ticket.id}`;
+const ALL_HEAD =
+  '[not sure] The moved-out results, by their call and first line, those written in the conversation newest first, then those in kept parts: one of them may be what was asked, or none is. Recall one by its id to read it.';
+
+/**
+ * What `find` answers with no key, where no quoted phrase settled it: nothing is sent, and no result is chosen. Several
+ * results holding the quoted phrase are listed; so are those with a line holding the values, with that line; and, where
+ * neither is asked or none holds what was asked, every result by its first line.
+ */
+function noKeyAnswer(entries: readonly Entry[], quoting: readonly Entry[], phrases: readonly string[], values: readonly string[]): string {
+  const everything = (before?: string) => catalogue(before === undefined ? ALL_HEAD : `${before}\n${ALL_HEAD}`, entries, listedLine);
+  if (quoting.length > 1) return catalogue(`[not sure] ${quoting.length} moved-out results hold the quoted phrase as written:`, quoting, listedLine);
+  const missed =
+    phrases.length > 0 ? '[not found] No moved-out result read here holds the quoted phrase as written. It may still be in the conversation, or in a result that holds an image.' : undefined;
+  const valued = entries.filter((entry) => entry.valued);
+  if (values.length > 0 && valued.length > 0) {
+    const count = valued.length === 1 ? 'One moved-out result has' : `${valued.length} moved-out results have`;
+    const head = `[not sure] ${count} a line holding ${quoted(values)}, which does not make it what was asked:`;
+    return catalogue(missed === undefined ? head : `${missed}\n${head}`, valued, valuedLine, VALUED_LISTED);
+  }
+  if (missed !== undefined) return everything(missed);
+  if (values.length > 0) {
+    return everything(
+      `[not found] No moved-out result read here has a line holding ${quoted(values)} as a word of its own. Not looked for this way: values on different lines, in another letter case, or that are only part of a longer word or number there; the number of a line; and what a kept part of the conversation says.`,
+    );
+  }
+  return everything();
+}
 
 /** At most this many tickets are named when `recall` refuses an id that may have been copied wrong. */
 export const NAMED_ON_REFUSAL = 5;
@@ -325,18 +414,15 @@ export async function find(input: FindInput): Promise<string> {
   if (input.agentId !== undefined) {
     return `[${PLUGIN}] Nothing to find: find does not look in a subagent's conversation. What a summary replaced there is kept in parts named after the summary; recall reads one by its id.`;
   }
-  if (input.provider === null) {
-    return (
-      `[${PLUGIN}] find needs a Jev key: set apiKey in the plugin's settings, and cloudflareAccountId as well for ` +
-      'Cloudflare. TYPESAFE_API_KEY in the environment is used once provider is set to typesafe there, and ' +
-      'CLOUDFLARE_API_TOKEN once Cloudflare is chosen. recall reads a result by its id without one.'
-    );
-  }
-  const provider = input.provider;
   const question = typeof input.question === 'string' ? input.question.trim() : '';
   if (question === '') return `[${PLUGIN}] Ask in words what the result is about.`;
+  // With no key nothing is sent: what is looked for here is, and the agent is given the rest to choose from (#110).
+  const answer = await looked(input, question);
+  return input.provider === null ? `${answer}\n${NO_KEY}` : answer;
+}
 
-  const { files, dirs } = input;
+async function looked(input: FindInput, question: string): Promise<string> {
+  const { files, dirs, provider } = input;
   const phrases = phrasesOf(question);
   // The values are those of the question as it is sent — shapes of secrets blanked, cut where it is cut — so that what Jev
   // is told of a result's line is in the question it is asked, and a secret the question names is told of no result.
@@ -344,17 +430,27 @@ export async function find(input: FindInput): Promise<string> {
   const entries: Entry[] = [];
   // One stored text at a time: what is kept of each is a few hundred characters.
   const every = await everyTicket(files, dirs, input.messages);
-  for (const ticket of every.tickets) {
+  for (const [at, ticket] of every.tickets.entries()) {
     if (!(await isStored(files, dirs, ticket.line))) continue;
     const got = await recall(files, dirs, ticket.id);
     if ('error' in got) continue;
-    // A result that holds an image is not offered: nothing of it is sent to Jev, its text included.
-    if (got.parts !== undefined) continue;
-    const holds = phrases.length > 0 && phrases.every((phrase) => got.text.includes(phrase));
+    // A result that holds an image is not offered to Jev: nothing of it is sent, its text included. With no key nothing
+    // is sent, and it is listed by its call.
+    if (got.parts !== undefined && provider !== null) continue;
+    const text = got.parts === undefined ? got.text : '';
+    const holds = phrases.length > 0 && phrases.every((phrase) => text.includes(phrase));
     // A part of a kept conversation holds what was asked as well as what came back, and is not looked through for
     // the values; the numbers `Read` puts in front of lines are no part of what the file said.
-    const valued = values.length > 0 && ticket.tool !== PART && lineHolds(ticket.tool === 'Read' ? (unnumbered(got.text) ?? got.text) : got.text, values);
-    entries.push({ ticket, option: `${describe(ticket)}. It reads: ${digest(shown(got.text), DIGEST_CHARS)}`, holds, valued });
+    const read = ticket.tool === 'Read' ? (unnumbered(text) ?? text) : text;
+    const valued = values.length > 0 && ticket.tool !== PART && lineHolds(read, values);
+    const entry: Entry = { ticket, option: `${describe(ticket)}. It reads: ${digest(shown(text), DIGEST_CHARS)}`, holds, valued };
+    if (provider === null) {
+      entry.first = firstLineOf(ticket, text);
+      entry.own = at < every.own;
+      entry.at = at;
+      if (valued) entry.line = valueLineOf(read, values);
+    }
+    entries.push(entry);
   }
   // The middles of long messages, and what Claude Code attached (#105), are looked through here and never sent to Jev
   // (ADR 0024): one that holds the
@@ -413,6 +509,7 @@ export async function find(input: FindInput): Promise<string> {
     );
   }
   const also = besides();
+  if (provider === null) return noKeyAnswer(entries, quoting, phrases, values) + also;
   const answer = async (): Promise<string> => {
     const pool = quoting.length > 1 ? quoting : entries;
     // Where one result alone has a line holding the values, Jev is told so beside its first lines: the values are in the
