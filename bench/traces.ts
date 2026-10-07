@@ -46,8 +46,10 @@ export type FindQuestion = {
    * `value`: the question names something the result holds, a number or a
    * checksum, and matching words can find it. `meaning`: it says what the result
    * was, in other words than the call that made it or the text it holds.
+   * `subject`: it names the result as `meaning` does, and asks for a line in the
+   * middle of it, which only reading the result gives (#149).
    */
-  by: 'value' | 'meaning';
+  by: 'value' | 'meaning' | 'subject';
   ask: string;
   /** A line only the result asked for holds: the line the question is about, or for `meaning` the result's first line. */
   target: string;
@@ -623,6 +625,15 @@ const OPAQUE_MEANING: [doc: number, ask: string][] = [
   [12, 'Which earlier result was about keeping the credentials that secure web traffic from lapsing?'],
 ];
 const OPAQUE_VALUE = [3, 6, 11];
+/**
+ * Asked for a line in the middle of a document named by what it was about (#149): its first line tells which result it
+ * is, and the line is far below it. In the words of the questions above; document 1 is left out, its question having
+ * been stopped by Sonnet 5.5's safeguards in each run of 2026-10-06, and document 5 is named instead.
+ */
+const OPAQUE_SUBJECT: [doc: number, about: string][] = [
+  ...OPAQUE_MEANING.filter(([doc]) => doc !== 1).map(([doc, ask]): [number, string] => [doc, ask.replace(/^Which earlier result /, '').replace(/\?$/, '')]),
+  [5, 'explained why what is paid to keep files in the cloud went up twofold'] as [number, string],
+].sort(([a], [b]) => a - b);
 const opaque: Trace = {
   name: 'opaque',
   version: 1,
@@ -645,6 +656,7 @@ const opaque: Trace = {
   finds: [
     ...OPAQUE_MEANING.map(([doc, ask]) => ({ id: `find-doc-${doc}`, by: 'meaning' as const, ask, target: OPAQUE_SUBJECTS[doc - 1]?.[0] ?? '' })),
     ...OPAQUE_VALUE.map((doc) => ({ id: `find-code-${doc}`, by: 'value' as const, ask: `Which earlier result gave the reference code ${opaqueCode(doc)}?`, target: opaqueCodeLine(doc) })),
+    ...OPAQUE_SUBJECT.map(([doc, about]) => ({ id: `find-subject-${doc}`, by: 'subject' as const, ask: `The earlier result that ${about} was given a reference code when it was filed. Which code was it?`, target: opaqueCodeLine(doc) })),
   ],
   marks: [],
 };

@@ -256,7 +256,7 @@ async function withTickets(files: Files, dir: string, message: Message, tools: R
       toolResults.push(result);
       continue;
     }
-    const moved = await moveOut(files, dir, tools.get(result.tool_use_id) ?? 'tool', result.text);
+    const moved = await moveOut(files, dir, tools.get(result.tool_use_id) ?? 'tool', result.text, true);
     toolResults.push('reason' in moved ? result : { ...result, text: moved.text });
   }
   const toolUses: ToolUse[] = [];

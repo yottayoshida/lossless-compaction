@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { build, recordPath, workDir, type Base, type Places } from './build.ts';
 import { claude } from './cc.ts';
-import { conversationAfter, fetchedOf, gapsOf, holdsAll, lookedOutside, ownUsage, readLine, retrievalOf, summarizedBy, tellsIn, type Arm, type Fetched, type Line, type Retrieval, type Usage } from './lib.ts';
+import { conversationAfter, fetchedOf, gapsOf, handedOf, holdsAll, lookedOutside, ownUsage, readLine, retrievalOf, summarizedBy, tellsIn, type Arm, type Fetched, type Handed, type Line, type Retrieval, type Usage } from './lib.ts';
 import { BUILT, FIND_TOOL, QUESTION_TOOLS, type Kind, type Trace } from './traces.ts';
 
 export type Asked = {
@@ -36,6 +36,8 @@ export type Asked = {
    * and how far the agent got in fetching it. Absent in a unit measured before it was recorded.
    */
   fetched?: Fetched;
+  /** What `recall` and `find` handed back to the question, in bytes: in the plugin's arm, where `fetched` is recorded. Absent in a unit measured before it was recorded. */
+  handed?: Handed;
   outside: boolean;
   /** Calls the session made that were refused: something it tried that a question does not allow. */
   refused: number;
@@ -290,6 +292,7 @@ export async function unit(
         own: ownUsage(session, parent),
       };
       if (question.needles !== undefined && left !== null && FETCHED.includes(question.kind)) one.fetched = fetchedOf(question.needles, left, stored, session.toolCalls);
+      if (fetching) one.handed = handedOf(session.toolCalls, stored);
       if (question.needles !== undefined && holdsAll(session.answer, question.needles)) one.verdict = 'correct';
       // A question calls the model: one that cost nothing is one whose usage was not taken from its parent's as meant.
       if (!(one.own.costUSD > 0)) throw new Error(`${records}, ${question.id}: the question's own cost came out as ${one.own.costUSD}`);
@@ -351,7 +354,7 @@ export async function unit(
 }
 
 /** Said after a question `find` is for, when an agent is asked it: which result it was is shown by a line of it, which a program can check. */
-export const QUOTE = { value: 'Quote that line in full.', meaning: 'Quote its first line in full.' } as const;
+export const QUOTE = { value: 'Quote that line in full.', meaning: 'Quote its first line in full.', subject: 'Quote that line in full.' } as const;
 
 /** A question that needs nothing of the conversation: what it was sent is the size of what the compaction left. */
 export const PROBE = [{ id: 'probe', kind: 'continuity' as Kind, ask: 'Reply with the single word: ok' }];

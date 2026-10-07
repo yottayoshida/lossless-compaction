@@ -103,3 +103,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0039](0039-a-place-that-is-a-link-is-read-where-it-leads.md): why a
   place transcripts are kept in that is a link is read where it leads, not
   taken for one that cannot be read.
+- [0040](0040-a-ticket-counts-a-results-lines-and-quotes-nothing.md): why a
+  result's ticket says how many lines it held and quotes nothing of it: a
+  quote of its first line was measured, and answers were lost to it.

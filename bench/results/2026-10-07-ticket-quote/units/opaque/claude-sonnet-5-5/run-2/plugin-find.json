@@ -1,0 +1,925 @@
+{
+ "trace": "opaque",
+ "version": 1,
+ "base": "3a324b45-0976-4b93-b6c0-39af3e04062c",
+ "plugin": "a14aaad597f3",
+ "pluginCommit": "73095971395d",
+ "model": "claude-sonnet-5-5",
+ "run": 2,
+ "arm": "plugin",
+ "first": true,
+ "variant": "default",
+ "mode": "find",
+ "at": "2026-10-07T06:52:49.075Z",
+ "claudeCode": "2.1.289",
+ "compaction": {
+  "sessionId": "6203c5e7-013a-4ab2-9111-854d851b5ce6",
+  "durationMs": 211,
+  "wallMs": 1679,
+  "preTokens": 97202,
+  "postTokens": 1494,
+  "thinkingBefore": 293,
+  "line": {
+   "outcome": "moved",
+   "moved": 20,
+   "results": 20,
+   "images": 0,
+   "charsBefore": 251357,
+   "charsAfter": 5552,
+   "ms": 96,
+   "estimate": 8466,
+   "window": 167000
+  },
+  "summarized": false,
+  "own": {
+   "inputTokens": 0,
+   "outputTokens": 0,
+   "cacheReadInputTokens": 0,
+   "cacheCreationInputTokens": 0,
+   "costUSD": 0,
+   "thinkingTokens": 0
+  }
+ },
+ "questions": [
+  {
+   "id": "find-doc-1",
+   "kind": "exact-gone",
+   "answer": "It was the result of `sh show.sh 01`. Its first line in full is:\n\n> Runbook: rotating the signing key used for release builds",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "how to replace the key that software is signed with before it ships"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9364,
+    12228,
+    14732
+   ],
+   "durationMs": 5912,
+   "wallMs": 7102,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 336,
+    "cacheReadInputTokens": 26129,
+    "cacheCreationInputTokens": 10189,
+    "costUSD": 0.0493538,
+    "thinkingTokens": 115
+   },
+   "fetched": {
+    "holders": [
+     "6a9576ece0a5e93e9afc3bef8dd7c0704f47d7b9bd05796a5e33af689c076e92"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7084,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-2",
+   "kind": "exact-gone",
+   "answer": "It was the output of `sh show.sh 02`. Its first line in full is:\n\n> Incident report: the payment webhook that stopped answering",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "outage where buyers could not finish paying because a callback went silent"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9368,
+    12199,
+    14693
+   ],
+   "durationMs": 6761,
+   "wallMs": 8098,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 294,
+    "cacheReadInputTokens": 30929,
+    "cacheCreationInputTokens": 5325,
+    "costUSD": 0.03043780000000007,
+    "thinkingTokens": 76
+   },
+   "fetched": {
+    "holders": [
+     "c021b51f43b37b98fd81bd89d849110f93f30f9874c4b8c675463b8642c40c07"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7084,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-4",
+   "kind": "exact-gone",
+   "answer": "It was the output of `sh show.sh 04`. Its first line is:\n\n\"Onboarding a contractor onto the company VPN\"",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "letting an outside worker reach the internal network from home (remote access VPN)"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9363,
+    12198,
+    14717
+   ],
+   "durationMs": 7499,
+   "wallMs": 8838,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 321,
+    "cacheReadInputTokens": 30918,
+    "cacheCreationInputTokens": 5354,
+    "costUSD": 0.030821599999999894,
+    "thinkingTokens": 101
+   },
+   "fetched": {
+    "holders": [
+     "f316b2e90d320b7642de6e2ca1c3319f00f4208d374c3f73547824e116a062d7"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7074,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-7",
+   "kind": "exact-gone",
+   "answer": "The best match is the result of `sh show.sh 07`. Its first line is:\n\n\"What to do during a fire drill\"\n\nThe second line says it covers \"Where to gather, who sweeps each floor, and what happens to visitors and deliveries meanwhile.\" The body doesn't give a specific assembly spot, though. It's all generic filler text. So this is the only result about the drill's gathering point, but it doesn't name one.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "assembly point where staff gather when the fire alarm drill is practised"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9364,
+    12252,
+    14708
+   ],
+   "durationMs": 8891,
+   "wallMs": 10129,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 468,
+    "cacheReadInputTokens": 30974,
+    "cacheCreationInputTokens": 5344,
+    "costUSD": 0.032262800000000036,
+    "thinkingTokens": 153
+   },
+   "fetched": {
+    "holders": [
+     "15cc6c1f067fb2439b36b3bfc2a4ecf284ca537f9c01cf604a59f43479e4fca2"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7061,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-9",
+   "kind": "exact-gone",
+   "answer": "It's the output of `sh show.sh 09`. Its first line in full is:\n\n\"The holiday rota for the support desk\"\n\nThe line under it reads: \"Who covers which days over the winter break, how swaps are agreed, and the escalation chain.\"\n\nThe body of the document is generic guidance and doesn't name anyone who covers the desk.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "who answers customers while most people are away in December"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9360,
+    12248,
+    14701
+   ],
+   "durationMs": 6324,
+   "wallMs": 7701,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 374,
+    "cacheReadInputTokens": 30962,
+    "cacheCreationInputTokens": 5341,
+    "costUSD": 0.031308400000000014,
+    "thinkingTokens": 63
+   },
+   "fetched": {
+    "holders": [
+     "22e0b17b9e9a204bf457e5b36eb1529e7b77376e4a29c538070e9f21a3292671"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7066,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-10",
+   "kind": "exact-gone",
+   "answer": "The result is the output of `sh show.sh 10`. It's a post-mortem about a cleanup script that removed the wrong database table, and its stated scope is \"how it was brought back.\" Its first line in full is:\n\n**Post-mortem: a database table deleted by mistake**\n\nThe body of that output is mostly filler. I didn't find the actual restoration steps in it.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "stored data wiped out by a cleanup job and how it was restored"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9364,
+    12249,
+    14744
+   ],
+   "durationMs": 6526,
+   "wallMs": 7889,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 417,
+    "cacheReadInputTokens": 30971,
+    "cacheCreationInputTokens": 5380,
+    "costUSD": 0.03189620000000004,
+    "thinkingTokens": 134
+   },
+   "fetched": {
+    "holders": [
+     "677297148c4d56ff580374348130245d786127219507f417ad25734d8197bdb3"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7130,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-doc-12",
+   "kind": "exact-gone",
+   "answer": "That was the result of `sh show.sh 12`. Its first line is:\n\n\"Renewing the TLS certificates before they expire\"",
+   "calls": [
+    "mcp__lossless-compaction__find"
+   ],
+   "findQuestions": [
+    "TLS certificate renewal expiry"
+   ],
+   "retrieval": {
+    "recalls": 0,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9367,
+    12236
+   ],
+   "durationMs": 5468,
+   "wallMs": 6744,
+   "own": {
+    "inputTokens": 4,
+    "outputTokens": 258,
+    "cacheReadInputTokens": 18730,
+    "cacheCreationInputTokens": 2869,
+    "costUSD": 0.017809999999999993,
+    "thinkingTokens": 147
+   },
+   "fetched": {
+    "holders": [
+     "8e8cc222ee94d7d7fb29ee0e303110e0a9faf1006155a6a2afa0043f4604b0f7"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": false,
+    "restored": false,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 0,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-code-3",
+   "kind": "exact-gone",
+   "answer": "The code came from the output of `sh show.sh 03`, the third result. It's the unnumbered line between entries 3.024 and 3.025:\n\n> Reference code RX-5323-T was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "RX-5323-T"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9358,
+    9707,
+    12179
+   ],
+   "durationMs": 9024,
+   "wallMs": 10418,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 345,
+    "cacheReadInputTokens": 28417,
+    "cacheCreationInputTokens": 2821,
+    "costUSD": 0.020429400000000042,
+    "thinkingTokens": 111
+   },
+   "fetched": {
+    "holders": [
+     "c995f0024bc8f1d69916b7b66bf3aec0fedf065b929b6afb78958447ea97c201"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7074,
+    "find": 483
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-code-6",
+   "kind": "exact-gone",
+   "answer": "The reference code RX-9646-M came from the output of `sh show.sh 06`. The line reads:\n\n> Reference code RX-9646-M was given to this document when it was filed.\n\nI got this line from a search of the moved-out results, not by recalling the full output. It was the only result that contained the code.",
+   "calls": [
+    "mcp__lossless-compaction__find"
+   ],
+   "findQuestions": [
+    "RX-9646-M"
+   ],
+   "retrieval": {
+    "recalls": 0,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 1,
+   "requests": [
+    9358,
+    9685
+   ],
+   "durationMs": 4637,
+   "wallMs": 6227,
+   "own": {
+    "inputTokens": 4,
+    "outputTokens": 280,
+    "cacheReadInputTokens": 18712,
+    "cacheCreationInputTokens": 327,
+    "costUSD": 0.007858399999999932,
+    "thinkingTokens": 122
+   },
+   "fetched": {
+    "holders": [
+     "c203e34bf92329b8fb7fbdff47156602b7da87971663105b58caebadb5f6e2db"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": false,
+    "restored": false,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 0,
+    "find": 483
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-code-11",
+   "kind": "exact-gone",
+   "answer": "It came from the output of `sh show.sh 11`, the document titled \"How the mobile app delivers push notifications\". The line reads:\n\n> Reference code RX-4851-M was given to this document when it was filed.\n\nIt sits between lines 11.024 and 11.025.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "RX-4851-M"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9358,
+    9643,
+    12152
+   ],
+   "durationMs": 7073,
+   "wallMs": 8359,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 341,
+    "cacheReadInputTokens": 28638,
+    "cacheCreationInputTokens": 2509,
+    "costUSD": 0.019185600000000025,
+    "thinkingTokens": 97
+   },
+   "fetched": {
+    "holders": [
+     "6392aa4bd916bff038c33bff329373629acd1839c37a9985c4e693976ab1fb87"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7123,
+    "find": 483
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-2",
+   "kind": "exact-gone",
+   "answer": "The code is RX-9882-P. This is the line, quoted in full from the \"Incident report: the payment webhook that stopped answering\" output (`sh show.sh 02`):\n\n> Reference code RX-9882-P was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "outage where buyers could not finish paying because a callback went silent"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9384,
+    12261,
+    14700
+   ],
+   "durationMs": 6777,
+   "wallMs": 8133,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 321,
+    "cacheReadInputTokens": 31023,
+    "cacheCreationInputTokens": 5316,
+    "costUSD": 0.030690600000000012,
+    "thinkingTokens": 45
+   },
+   "fetched": {
+    "holders": [
+     "c021b51f43b37b98fd81bd89d849110f93f30f9874c4b8c675463b8642c40c07"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7084,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-4",
+   "kind": "exact-gone",
+   "answer": "The code is RX-9764-W. It's in the result of `sh show.sh 04`, \"Onboarding a contractor onto the company VPN\". That's the one document about giving an outside worker network access.\n\nThe line in full:\n\n> Reference code RX-9764-W was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "outside worker reach the internal network from home, reference code"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9379,
+    12285,
+    14746
+   ],
+   "durationMs": 7936,
+   "wallMs": 9331,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 385,
+    "cacheReadInputTokens": 31037,
+    "cacheCreationInputTokens": 5367,
+    "costUSD": 0.03153740000000005,
+    "thinkingTokens": 77
+   },
+   "fetched": {
+    "holders": [
+     "f316b2e90d320b7642de6e2ca1c3319f00f4208d374c3f73547824e116a062d7"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7074,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-5",
+   "kind": "exact-gone",
+   "answer": "The code is **RX-5205-K**. It's in the output of `sh show.sh 05`, titled \"Why the object storage bill doubled\". The line in full:\n\n> Reference code RX-5205-K was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "why the price paid for cloud file storage doubled"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9383,
+    12277,
+    14853
+   ],
+   "durationMs": 7637,
+   "wallMs": 9227,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 471,
+    "cacheReadInputTokens": 31037,
+    "cacheCreationInputTokens": 5470,
+    "costUSD": 0.03280939999999999,
+    "thinkingTokens": 226
+   },
+   "fetched": {
+    "holders": [
+     "9ceafb25b70337d78e3a591bad5df5aac908349708d5388498b36abc9bf29a22"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7070,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-7",
+   "kind": "exact-gone",
+   "answer": "The code is **RX-5087-P**. It comes from the \"What to do during a fire drill\" result, which is the output of `sh show.sh 07`. The line in full:\n\n> Reference code RX-5087-P was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "assembly point where staff gather during alarm drill, with reference code"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9380,
+    12268,
+    14706
+   ],
+   "durationMs": 7329,
+   "wallMs": 8744,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 328,
+    "cacheReadInputTokens": 31022,
+    "cacheCreationInputTokens": 5326,
+    "costUSD": 0.03080039999999995,
+    "thinkingTokens": 55
+   },
+   "fetched": {
+    "holders": [
+     "15cc6c1f067fb2439b36b3bfc2a4ecf284ca537f9c01cf604a59f43479e4fca2"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7061,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-9",
+   "kind": "exact-gone",
+   "answer": "The code is **RX-4969-W**. It's in the output of `sh show.sh 09`, \"The holiday rota for the support desk\". The line in full:\n\n> Reference code RX-4969-W was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "who answers customers while most people are away in December, reference code"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9376,
+    12262,
+    14704
+   ],
+   "durationMs": 6254,
+   "wallMs": 7643,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 329,
+    "cacheReadInputTokens": 31008,
+    "cacheCreationInputTokens": 5328,
+    "costUSD": 0.030815600000000054,
+    "thinkingTokens": 57
+   },
+   "fetched": {
+    "holders": [
+     "22e0b17b9e9a204bf457e5b36eb1529e7b77376e4a29c538070e9f21a3292671"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7066,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-10",
+   "kind": "exact-gone",
+   "answer": "The code is RX-9410-K. It comes from the output of `sh show.sh 10`, the post-mortem on the database table deleted by mistake. The full line reads:\n\n> Reference code RX-9410-K was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "how stored data wiped out by a tidying job was restored, reference code"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9380,
+    12286,
+    14728
+   ],
+   "durationMs": 7854,
+   "wallMs": 9201,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 348,
+    "cacheReadInputTokens": 31040,
+    "cacheCreationInputTokens": 5348,
+    "costUSD": 0.03109200000000001,
+    "thinkingTokens": 72
+   },
+   "fetched": {
+    "holders": [
+     "677297148c4d56ff580374348130245d786127219507f417ad25734d8197bdb3"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7130,
+    "find": 6162
+   },
+   "verdict": "correct"
+  },
+  {
+   "id": "find-subject-12",
+   "kind": "exact-gone",
+   "answer": "The code is RX-9292-P. It's in the result of `sh show.sh 12`, \"Renewing the TLS certificates before they expire\". The full line is:\n\n> Reference code RX-9292-P was given to this document when it was filed.",
+   "calls": [
+    "mcp__lossless-compaction__find",
+    "mcp__lossless-compaction__recall"
+   ],
+   "findQuestions": [
+    "keeping TLS certificates from expiring, certificate renewal"
+   ],
+   "retrieval": {
+    "recalls": 1,
+    "finds": 1,
+    "searches": 0,
+    "reads": 0
+   },
+   "outside": false,
+   "refused": 0,
+   "tells": 0,
+   "requests": [
+    9383,
+    12302,
+    14785
+   ],
+   "durationMs": 7055,
+   "wallMs": 8559,
+   "own": {
+    "inputTokens": 6,
+    "outputTokens": 405,
+    "cacheReadInputTokens": 31062,
+    "cacheCreationInputTokens": 5402,
+    "costUSD": 0.03188239999999998,
+    "thinkingTokens": 148
+   },
+   "fetched": {
+    "holders": [
+     "8e8cc222ee94d7d7fb29ee0e303110e0a9faf1006155a6a2afa0043f4604b0f7"
+    ],
+    "inContext": false,
+    "tried": true,
+    "chose": true,
+    "restored": true,
+    "opened": 0,
+    "wasted": 0
+   },
+   "handed": {
+    "recall": 7116,
+    "find": 6162
+   },
+   "verdict": "correct"
+  }
+ ]
+}

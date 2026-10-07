@@ -69,11 +69,20 @@ time, by why:
 | where the store has a link in its place, where the store has something other than a file in its place, read back unlike what was written | Something else wrote where results are kept | `/lossless-store` says where that is; `/lossless-store check` names what is not whole |
 | from a tool whose name cannot go on a ticket, whose text is not the same in its call and its result | The result cannot stand behind a ticket | Nothing: it stays as it was |
 
-Each result that left has a ticket in its place, from the same check:
+Each result that left has a ticket in its place. Of a page of these docs
+read with `Read`:
 
 ```text
-[moved out] Read result, 45130 bytes; recall with mcp__lossless-compaction__recall id 9f4115d935e68429ec7e4e3409c400c15ba50e8d5f355797caf064c961eecf61
+[moved out] Read result, 1600 lines, 106768 bytes; recall with mcp__lossless-compaction__recall id 98578c7e6eadae56d5548c36a17db0c38ac2b0b15e94ecec42367af63a4ec810
 ```
+
+A ticket says how many lines of text the result held (a result that is an
+image alone has no count), and nothing of what it said: a quote of each
+result's first line was measured, and the agent took a ticket's id for what
+a question asked and answered without reading the result
+([ADR 0040](adr/0040-a-ticket-counts-a-results-lines-and-quotes-nothing.md)).
+A ticket written by 0.4.0 or later keeps its wording; one of an earlier
+version is written in the current one, with no count.
 
 Where moving results out is not enough, or there is nothing to move out and
 the conversation is too full to go on with, the oldest messages are kept

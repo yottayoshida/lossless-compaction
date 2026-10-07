@@ -434,6 +434,21 @@ test('with no key, find looks on this machine and sends nothing: a quoted phrase
   assert.ok(none.includes(`id ${oldestId}`) && none.includes(`id ${notesId}`), none);
 });
 
+test("with no key, a result's first line is chosen as a ticket's quote is: a line that says nothing is passed over, one holding an id is not shown, and Read's number comes off (#149)", async () => {
+  const files = new MemoryFiles();
+  const said: Call = { tool: 'Bash', input: { command: 'show deploy' }, text: `[\n---\nDeploy 77 rolled back\n${'a line of the log\n'.repeat(40)}` };
+  const hashed: Call = { tool: 'Bash', input: { command: 'show artifact' }, text: `artifact ${'e'.repeat(64)}\n${'a line of the listing\n'.repeat(40)}` };
+  // Claude Code adds a line after a reading: not every line is numbered then.
+  const read: Call = { tool: 'Read', input: { file_path: 'notes.md' }, text: ['1\tRelease notes', ...Array.from({ length: 40 }, (_, i) => `${i + 2}\tsomething else`), '', 'A note added after the reading.'].join('\n') };
+  const messages = await compacted(files, [said, hashed, read]);
+  const { http, sent } = recordingHttp(() => ok({}));
+  const words = await find(input(files, messages, 'Which result was about the release?', http, { provider: null }));
+  assert.equal(sent.length, 0);
+  assert.ok(words.includes(': Deploy 77 rolled back;') && words.includes(': Release notes;'), words);
+  assert.ok(!words.includes('artifact ') && !words.includes('e'.repeat(64)), words);
+  assert.ok(!words.includes(': [') && !words.includes(': ---'), words);
+});
+
 test('with no key, the results with a line holding the values are all counted, the newest listed first up to the bound, and the rest said; a quoted phrase that misses leaves them listed (#110)', async () => {
   const files = new MemoryFiles();
   const many: Call[] = Array.from({ length: 12 }, (_, at) => ({ tool: 'Bash', input: { command: `show r${at}` }, text: `run r${at}\nbuild 4821 step ${at}\n` }));

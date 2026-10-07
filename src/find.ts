@@ -5,7 +5,23 @@ import { choose, digest, head, inputLine, redact, stateFor, type Failed, type Pr
 import { unnumbered } from './changed.ts';
 import { isFoldedList } from './fold.ts';
 import { callsOfLines } from './keep.ts';
-import { PART, PLUGIN, RECALL_TOOL, headOf, idsWritten, inputTicketsOf, isOwnTool, isStored, readBodyTicket, readInputTicket, readPartTicket, readTicket, recall, sharedHead, type Ticket } from './store.ts';
+import {
+  PART,
+  PLUGIN,
+  RECALL_TOOL,
+  headOf,
+  idsWritten,
+  inputTicketsOf,
+  isOwnTool,
+  isStored,
+  readBodyTicket,
+  readInputTicket,
+  readPartTicket,
+  readTicket,
+  recall,
+  sharedHead,
+  type Ticket,
+} from './store.ts';
 import type { Files, Http, Message } from './types.ts';
 
 /** The text of a result is returned when the likeliest option has at least this probability ... */
@@ -283,12 +299,41 @@ const LINE_CHARS = 200;
 /** At most `n` characters, never halving one. */
 const upTo = (text: string, n: number) => (text.length <= n ? text : `${head(text, n)}…`);
 
-/** The first line of a result that says anything, the numbers `Read` puts in front of lines left out. */
+// What a result's first line may not hold to be shown in `find`'s list with no key: an id, a ticket's opening, anything
+// that names this plugin (its tools, its lines, its compaction's line, under either name), or the opening of an answer
+// of `find`.
+const OWN_SHAPES = new RegExp(`[0-9a-fA-F]{64}|\\[moved out\\]|${PLUGIN}|\\[(?:found|not sure|not found)\\]`);
+
+/** Whether a line holds an id or a line of this plugin's own: it is then never shown as a result's first line. */
+const ownShaped = (line: string): boolean => OWN_SHAPES.test(line);
+
+/**
+ * The first line of a result that says anything: the first with a letter or a digit, without the number `Read` puts in
+ * front of a line. A `{` or a rule of dashes says nothing of what a result is.
+ */
+function firstLineIn(tool: string, text: string): string {
+  for (let at = 0; at < text.length; ) {
+    const end = text.indexOf('\n', at);
+    const raw = text.slice(at, end === -1 ? text.length : end);
+    const line = tool === 'Read' ? raw.replace(/^\d+\t/, '') : raw;
+    if (/[\p{L}\p{N}]/u.test(line)) return line;
+    if (end === -1) break;
+    at = end + 1;
+  }
+  return '';
+}
+
+/**
+ * What the list with no key shows of a result: its first line that says anything (`firstLineIn`, #149). One that holds
+ * an id or a line of this plugin's own is not shown.
+ */
 function firstLineOf(ticket: Stored, text: string): string {
   if (ticket.tool === PART) return '';
-  const lines = (ticket.tool === 'Read' ? (unnumbered(text) ?? text) : text).split('\n');
+  // No more than could be shown is looked at: `redact` takes time that grows faster than a line.
+  const line = head(firstLineIn(ticket.tool, text).trim(), FIRST_CHARS * 4);
+  if (ownShaped(line)) return '';
   // Shapes of secrets blanked, as in what is digested for Jev: the list goes into the conversation, many lines at once.
-  return upTo(redact(lines.find((line) => line.trim() !== '')?.trim() ?? ''), FIRST_CHARS);
+  return upTo(redact(line), FIRST_CHARS);
 }
 
 /** The first line holding every value, its shapes of secrets blanked, cut to LINE_CHARS around where the first value stands in it. */

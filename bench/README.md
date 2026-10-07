@@ -333,7 +333,17 @@ leaves it out unless it is named.
   plugin's arm after a compaction, once with `recall` alone and once with
   `find` as well, each ending "Quote that line in full" (or "its first
   line"), which a program checks. What the agent asked `find` is kept in the
-  unit (`findQuestions`), so that a test can put it to `find` again. The plugin is told which provider to ask
+  unit (`findQuestions`), so that a test can put it to `find` again.
+  `opaque` asks three kinds: by what a document was about, its first line
+  the answer; by a code in the middle of one; and, since #149, by what it
+  was about for the code in its middle (`subject`), where knowing which
+  result it is does not answer and only reading it does. Each unit records,
+  per question, the bytes `recall` and `find` handed back (`handed`: a whole
+  text counted by what is stored under its id, since Claude Code puts one
+  over about 50 KB in a file) and, of the ids handed to `recall`, those that
+  named no piece holding the answer and brought none back (`fetched.opened`,
+  `fetched.wasted`); `report` tables them by how each question was asked.
+  The plugin is told which provider to ask
   in its settings and finds the key in the session's environment; no other
   session has it there, whatever the environment of whoever runs this.
 

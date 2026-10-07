@@ -9,7 +9,10 @@ import {
   conversationAfter,
   fetchedOf,
   gapsOf,
+  handedBy,
+  handedOf,
   holdsAll,
+  idsOf,
   keysIn,
   lexicalPick,
   lookedOutside,
@@ -33,7 +36,7 @@ import { saidBy, saidIn, type Conversation } from '../bench/build.ts';
 import { FUNCTION_HOOKS, argsOf, envOf, toolsOf } from '../bench/cc.ts';
 import { MISSED, VERSIONS, batchName, currentOf, itemsOf, keyOf, promptOf, published, scrubbed, summed, unitsUnder, verdictsIn, versionsIn, type Grades } from '../bench/grade.ts';
 import { MIN_CHARS, pick, pickTable, readAnswer, resultsOf, staged, wentOf, type Pick } from '../bench/pick.ts';
-import { chains, estimates, fetches, finds, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
+import { chains, estimates, fetches, finds, findsByKind, graderOf, outcomesOf, overruled, report, verdictOf, whole } from '../bench/report.ts';
 import { FETCHED, QUOTE, armsOf, leaf, staleness, variantsOf, type Unit } from '../bench/run.ts';
 import { replay, triggerAt, windowOf } from '../bench/replay.ts';
 import { BUILT, FOUND, LARGE, PROBED, TRACES, described, unnamed, type Question } from '../bench/traces.ts';
@@ -679,23 +682,25 @@ test('where the answer went and how far the agent got: each step is counted from
   ]);
   const needles = ['8 warnings', '5384f20e'];
   const recall = (id: string, result?: string): ToolCall => ({ name: RECALL, input: { id }, id: `t-${id.slice(0, 4)}`, ...(result !== undefined ? { result } : {}) });
+  // A piece opened that does not hold the answer is counted by what is stored under it (#149).
+  const OTHER_BYTES = Buffer.byteLength('another log\n');
   // Fetched as meant: every step.
-  assert.deepEqual(fetchedOf(needles, '[moved out] Bash result ...', stored, [recall(holder, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true });
+  assert.deepEqual(fetchedOf(needles, '[moved out] Bash result ...', stored, [recall(holder, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true, opened: 0, wasted: 0 });
   // The wrong piece: tried, chose none that holds it, nothing came back that holds it.
-  assert.deepEqual(fetchedOf(needles, '', stored, [recall(other, 'another log')]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(other, 'another log')]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false, opened: 1, wasted: OTHER_BYTES });
   // An id copied wrong that recall took for the one meant: what came back holds it, though the id given was not the holder's.
-  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 16)}${'0'.repeat(48)}`, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: false, restored: true });
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 16)}${'0'.repeat(48)}`, stored.get(holder))]), { holders: [holder], inContext: false, tried: true, chose: false, restored: true, opened: 0, wasted: 0 });
   // Refused, the answer naming tickets with what they stand for, here one whose call holds what was asked: nothing came back (#107).
   const refusedNaming = `[lossless-compaction] Nothing is stored under that id on this machine.\nThe tickets of this conversation it may stand for:\n- Bash called with {"command":"grep \x278 warnings\x27 log | grep 5384f20e"}; 40 bytes; recall with x id ${holder}`;
-  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 63)}0`, refusedNaming)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  assert.deepEqual(fetchedOf(needles, '', stored, [recall(`${holder.slice(0, 63)}0`, refusedNaming)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false, opened: 1, wasted: Buffer.byteLength(refusedNaming) });
   // `find` gave the holder as its answer, with its text under the line it opens with: chosen, and it came back, with no `recall`.
   const finding = (result: string): ToolCall => ({ name: FIND, input: { question: 'which batch warned?' }, result });
-  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 40 bytes; id ${holder}; probability 0.9\n\n${stored.get(holder)}`)]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true });
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 40 bytes; id ${holder}; probability 0.9\n\n${stored.get(holder)}`)]), { holders: [holder], inContext: false, tried: true, chose: true, restored: true, opened: 0, wasted: 0 });
   // It gave another: neither. And an id it only lists when it is not sure, or that stands in the text it gave, is no choice.
-  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 12 bytes; id ${other}; probability 0.9\n\nanother log, which names ${holder}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
-  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[not sure] the likeliest:\n- Bash result; id ${holder}\n- Bash result; id ${other}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false });
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[found] Bash result, 12 bytes; id ${other}; probability 0.9\n\nanother log, which names ${holder}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false, opened: 0, wasted: 0 });
+  assert.deepEqual(fetchedOf(needles, '', stored, [finding(`[not sure] the likeliest:\n- Bash result; id ${holder}\n- Bash result; id ${other}`)]), { holders: [holder], inContext: false, tried: true, chose: false, restored: false, opened: 0, wasted: 0 });
   // Nothing called.
-  assert.deepEqual(fetchedOf(needles, '', stored, [{ name: 'Read', input: {} }]), { holders: [holder], inContext: false, tried: false, chose: false, restored: false });
+  assert.deepEqual(fetchedOf(needles, '', stored, [{ name: 'Read', input: {} }]), { holders: [holder], inContext: false, tried: false, chose: false, restored: false, opened: 0, wasted: 0 });
   // Left in the conversation: nothing had to be fetched, whatever was moved out holds it too.
   const left = fetchedOf(needles, 'the agent said: batch 07: 8 warnings, checksum 5384f20e', stored, []);
   assert.equal(left.inContext, true);
@@ -706,6 +711,70 @@ test('where the answer went and how far the agent got: each step is counted from
   assert.equal(needed(fetchedOf(needles, '', stored, [])), true);
   // The kinds it is recorded for: an answer no file holds any more.
   assert.deepEqual(FETCHED, ['exact-gone', 'exact-then']);
+});
+
+test('what recall and find handed back is counted in bytes: a whole text by what is stored under its id, a refusal and some of its lines as they came back (#148 #149)', () => {
+  const RECALL = 'mcp__plugin_lossless-compaction_lossless-compaction__recall';
+  const FIND = 'mcp__plugin_lossless-compaction_lossless-compaction__find';
+  const [holder, other] = ['1'.repeat(64), '2'.repeat(64)];
+  const big = `${'a line of a long result\n'.repeat(3000)}batch 07: 8 warnings, checksum 5384f20e\n`;
+  const stored = new Map([
+    [holder, big],
+    [other, 'another log\n'],
+  ]);
+  const recall = (input: Record<string, unknown>, result: string): ToolCall => ({ name: RECALL, input, result });
+  // A whole text Claude Code put in a file, showing its path: what recall handed over is the text stored under the id.
+  assert.equal(handedBy(recall({ id: holder }, 'Output too large: saved to /tmp/x.txt'), stored), Buffer.byteLength(big));
+  // A refusal, and some lines of a text that the plugin opens with its own line, count as they came back; so does an id not stored here.
+  const refusal = '[lossless-compaction] Nothing is stored under that id on this machine.';
+  assert.equal(handedBy(recall({ id: other }, refusal), stored), Buffer.byteLength(refusal));
+  const some = '[lossless-compaction] lines 2-3 of 3001\n     2\ta line\n     3\ta line';
+  assert.equal(handedBy(recall({ id: holder, lines: '2-3' }, some), stored), Buffer.byteLength(some));
+  assert.equal(handedBy(recall({ id: '3'.repeat(64) }, 'what came back'), stored), Buffer.byteLength('what came back'));
+  // Every id a call named, the one and the many; nothing else is an id.
+  assert.deepEqual(idsOf(recall({ id: holder, ids: [other, 7, holder] }, '')), [holder, other, holder]);
+  assert.deepEqual(idsOf({ name: RECALL, input: { ids: 'not a list' } }), []);
+  // `recall` and `find` apart, and nothing of the other tools.
+  const found = '[found] Bash result, 12 bytes; id x\n\nanother log';
+  assert.deepEqual(handedOf([recall({ id: other }, 'another log\n'), { name: FIND, input: {}, result: found }, { name: 'Read', input: {}, result: 'zzz' }], stored), {
+    recall: Buffer.byteLength('another log\n'),
+    find: Buffer.byteLength(found),
+  });
+  // A call naming several ids, a holder among them, chose it; one that named none and brought nothing back is counted as opened.
+  const needles = ['8 warnings', '5384f20e'];
+  const both = fetchedOf(needles, '', stored, [recall({ ids: [other, holder], grep: 'warnings' }, '[lossless-compaction] 1 of 3001 lines hold "warnings"\n  3001\tbatch 07: 8 warnings, checksum 5384f20e')]);
+  assert.deepEqual([both.chose, both.restored, both.opened, both.wasted], [true, true, 0, 0]);
+  const astray = fetchedOf(needles, '', stored, [recall({ ids: [other, '3'.repeat(64)], grep: 'warnings' }, '[lossless-compaction] 0 lines hold "warnings"')]);
+  assert.deepEqual([astray.chose, astray.restored, astray.opened, astray.wasted], [false, false, 2, Buffer.byteLength('[lossless-compaction] 0 lines hold "warnings"')]);
+});
+
+test('the bytes handed back, and the questions find is for by how they were asked, are tabled only where they were recorded (#149)', () => {
+  const asked = (id: string, by: { recalls: number; finds: number }, right: boolean, extra: Partial<Unit['questions'][number]> = {}): Unit['questions'][number] => ({
+    ...answered(id, 'exact-gone', 'x', [], right ? 'correct' : undefined),
+    retrieval: { recalls: by.recalls, finds: by.finds, searches: 0, reads: 0 },
+    ...extra,
+  });
+  const fetched = (opened: number, wasted: number) => ({ holders: ['h'], inContext: false, tried: true, chose: true, restored: true, opened, wasted });
+  const recorded: Unit = {
+    ...unitOf('plugin', 1, [
+      asked('find-doc-2', { recalls: 1, finds: 1 }, true, { handed: { recall: 7000, find: 900 }, fetched: fetched(0, 0) }),
+      asked('find-subject-2', { recalls: 2, finds: 1 }, true, { handed: { recall: 14000, find: 900 }, fetched: fetched(1, 7000) }),
+      asked('find-subject-4', { recalls: 1, finds: 0 }, false, { handed: { recall: 7000, find: 0 }, fetched: fetched(0, 0) }),
+    ]),
+    trace: 'opaque',
+    mode: 'find',
+  };
+  const before: Unit = { ...unitOf('plugin', 1, [asked('find-doc-2', { recalls: 1, finds: 1 }, true)]), trace: 'opaque', mode: 'find' };
+  // A table of units measured before it was recorded reads as it did.
+  assert.ok(!finds([before]).includes('Bytes'));
+  assert.ok(finds([recorded]).includes('| Bytes `recall` handed back | Bytes `find` handed back |'));
+  assert.ok(finds([recorded]).split('\n').some((row) => row.includes('| 28000 | 1800 |')));
+  assert.deepEqual(findsByKind([recorded]).split('\n').slice(2), [
+    '| opaque | haiku | no key | 1 | meaning | 1/1 | 0 | 1 | 1 | 0 | 7000 |',
+    '| opaque | haiku | no key | 1 | subject | 1/2 | 0 | 1 | 3 | 1 | 21000 |',
+  ]);
+  assert.ok(!whole([before], null).includes('by how they were asked'));
+  assert.ok(whole([recorded], null).includes('### The questions `find` is for, by how they were asked'));
 });
 
 test('the conversation a compaction left is read from the record after its last boundary, every message but a subagent\'s', () => {
@@ -1000,7 +1069,7 @@ test('the questions find is for: by a value or by what the result was, each abou
   assert.equal(resultsOf(builtConversation('short'), 0).length, 38);
   assert.equal(resultsOf(builtConversation('short')).length, 3);
   // An agent asked the same question is told how to show which result it means, so that a program can check it.
-  assert.deepEqual(QUOTE, { value: 'Quote that line in full.', meaning: 'Quote its first line in full.' });
+  assert.deepEqual(QUOTE, { value: 'Quote that line in full.', meaning: 'Quote its first line in full.', subject: 'Quote that line in full.' });
 });
 
 test('the conversation asked only what find is for: no call says what came back, and what came back is in the results alone', () => {
@@ -1022,20 +1091,24 @@ test('the conversation asked only what find is for: no call says what came back,
   const said = opaque.steps.map((step) => ('say' in step ? step.say : '')).join('\n');
   assert.equal(opaque.finds.filter((find) => find.by === 'meaning').length, 7);
   assert.equal(opaque.finds.filter((find) => find.by === 'value').length, 3);
+  assert.equal(opaque.finds.filter((find) => find.by === 'subject').length, 7);
   for (const find of opaque.finds) {
     // One output holds what the question is about, and nothing that is said does.
     assert.equal(outputs.filter((text) => text.includes(find.target)).length, 1, find.id);
     assert.ok(outputs.slice(0, 13).some((text) => text.includes(find.target)), find.id);
     assert.ok(!said.includes(find.target), find.id);
     assert.ok(!/recall|find tool|Read tool|cannot|do not read|don't read/i.test(find.ask), find.id);
-    if (find.by === 'meaning') assert.ok(!/[0-9"]/.test(find.ask), `${find.id}: ${find.ask}`);
+    if (find.by !== 'value') assert.ok(!/[0-9"]/.test(find.ask), `${find.id}: ${find.ask}`);
   }
-  // A question by what a result was shares no word of five letters or more with that result's first two lines.
+  // A question by what a result was shares no word of five letters or more with that result's first two lines; one by
+  // its subject asks for a line in the middle of it, so that its first line tells which result and does not answer (#149).
   const words = (text: string) => new Set(text.toLowerCase().match(/[a-z]{5,}/g) ?? []);
-  for (const find of opaque.finds.filter((one) => one.by === 'meaning')) {
-    const head = outputs.find((text) => text.startsWith(find.target))?.split('\n').slice(0, 2).join(' ') ?? '';
+  for (const find of opaque.finds.filter((one) => one.by !== 'value')) {
+    const output = outputs.find((text) => text.includes(find.target)) ?? '';
+    const head = output.split('\n').slice(0, 2).join(' ');
     const shared = [...words(find.ask)].filter((word) => words(head).has(word) && !['which', 'earlier', 'result'].includes(word));
     assert.deepEqual(shared, [], find.id);
+    if (find.by === 'subject') assert.ok(output.split('\n').indexOf(find.target) > 20, find.id);
   }
   // Results leave sharing the least with the last three things said first (ruleOrder): every document shares fewer of their words than any station log, so the documents leave before the logs do.
   const goal = termsOf(opaque.steps.flatMap((step) => ('say' in step ? [step.say] : [])).slice(-3).join('\n\n'));
@@ -3328,4 +3401,50 @@ test("find with no key (#110): docs/measurements.md gives every figure of the un
   assert.deepEqual([results('before'), results('branch')], [27, 26]);
   // Nothing was cut at maxAfterPercent 10: every compaction moved out and handed back.
   assert.ok(units.every((unit) => unit.compaction.line?.outcome === 'moved'));
+});
+
+test("a ticket's quote of a result's first line (#149): docs/measurements.md gives every figure of the units published, the line set before the run missed both times, and full at maxAfterPercent 10 left uncut (#148)", () => {
+  const dir = fileURLToPath(new URL('../bench/results/2026-10-07-ticket-quote', import.meta.url));
+  const measurements = readFileSync(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)), 'utf8');
+  const section = measurements.slice(measurements.indexOf("## A ticket's quote of a result's first line"));
+  const units = unitsUnder(dir);
+  assert.equal(units.length, 10);
+  // Three checkouts named by their code, Sonnet 5.5, the plugin's arm alone, no key, on one building of opaque.
+  const code: Record<string, string> = { default: 'a14aaad597f3', branch: 'c4765c8457f8', branch2: 'b5c0edb7e898', 'max-after-10': 'a14aaad597f3' };
+  assert.ok(units.every((unit) => unit.model === 'claude-sonnet-5-5' && unit.arm === 'plugin' && unit.claudeCode === '2.1.289' && unit.plugin === code[unit.variant]));
+  const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
+  const middle = (values: readonly number[]) => [...values].sort((a, b) => a - b)[1] as number;
+  const of = (variant: string, run: number) => units.find((unit) => unit.trace === 'opaque' && unit.variant === variant && unit.run === run) as Unit;
+  const bySubject = (unit: Unit) => unit.questions.filter((question) => question.id.startsWith('find-subject-'));
+  const right = (unit: Unit) => bySubject(unit).filter((question) => question.verdict === 'correct').length;
+  const calls = (unit: Unit) => sum(bySubject(unit).map((question) => question.retrieval.finds + question.retrieval.recalls));
+  const labels = { default: 'Before', branch: '`begins:`', branch2: '`first line, recall for the rest:`' } as const;
+  for (const [variant, label] of Object.entries(labels)) {
+    for (const run of [1, 2, 3]) {
+      const asked = bySubject(of(variant, run));
+      assert.equal(asked.length, 7);
+      const cells = [
+        label,
+        String(run),
+        `${right(of(variant, run))}/7`,
+        String(sum(asked.map((question) => question.retrieval.finds))),
+        String(sum(asked.map((question) => question.retrieval.recalls))),
+        String(sum(asked.map((question) => question.fetched?.opened ?? 0))),
+        sum(asked.map((question) => question.own.costUSD)).toFixed(2),
+      ];
+      assert.ok(section.includes(`| ${cells.join(' | ')} |`), cells.join(' | '));
+    }
+  }
+  // The line: the calls at 75 % or fewer, met; no fewer right, missed under both openings.
+  const runs = (variant: string) => [1, 2, 3].map((run) => of(variant, run));
+  assert.deepEqual(['default', 'branch', 'branch2'].map((variant) => middle(runs(variant).map(calls))), [14, 5, 5]);
+  assert.deepEqual(['default', 'branch', 'branch2'].map((variant) => middle(runs(variant).map(right))), [7, 4, 5]);
+  assert.ok(section.includes('13 to 15 calls a run of\n  seven') && section.includes('4 to 7 calls, and answered 4 or 5 of 7 right against 6\n  or 7'));
+  // full, cut no more: moved out, and what recall handed back went to the results that hold the answers alone.
+  const full = units.find((unit) => unit.trace === 'full') as Unit;
+  assert.equal(full.compaction.line?.outcome, 'moved');
+  const fetched = full.questions.filter((question) => question.fetched !== undefined && needed(question.fetched));
+  assert.equal(fetched.length, 3);
+  assert.deepEqual(fetched.map((question) => [question.fetched?.wasted, question.fetched?.opened]), [[0, 0], [0, 0], [0, 0]]);
+  assert.ok(section.includes(`${Math.min(...fetched.map((question) => question.handed?.recall ?? 0)).toLocaleString('en-US')}\nto ${Math.max(...fetched.map((question) => question.handed?.recall ?? 0)).toLocaleString('en-US')} bytes`));
 });

@@ -10,7 +10,7 @@ import { fitForALine, foldedReadLine, foldedWriteLine, unnumbered } from './chan
 import { ticketIdsInText } from './guard.ts';
 import { PART_BYTES, messageText, wholeCharacters } from './keep.ts';
 import { HOST_TEXT, fileOf } from './select.ts';
-import { PART, PLUGIN, bytesOf, moveOut, partTicketText, type NotMoved } from './store.ts';
+import { PART, PLUGIN, bytesOf, linesOf, moveOut, partTicketText, type NotMoved } from './store.ts';
 import type { Files, Message, ToolUse } from './types.ts';
 
 /**
@@ -120,8 +120,6 @@ function targetOf(use: ToolUse): string {
   if (ticketIdsInText(text).size > 0) return '';
   return text.length > TARGET_CHARS ? `${head(text, TARGET_CHARS - 1)}…` : text;
 }
-
-const linesOf = (text: string): number => (text === '' ? 0 : text.split('\n').length);
 
 /** What a folded run left in the conversation, and the part that holds it. */
 export type Folded = { list: Message; part: { id: string; bytes: number }; calls: number };

@@ -69,6 +69,8 @@ test('a kept conversation holds every text, input value and result as it was, th
   assert.equal(ticket.tool, 'Bash');
   const back = await recall(files, [DIR], ticket.id);
   assert.deepEqual(back, { text: output('build', 60) });
+  // A result's ticket in a part, as in the conversation, says how many lines it held (#149).
+  assert.equal(ticket.lines, 60);
   assert.ok(joined.includes('[result toolu_r error]'), 'a failed result says so');
 });
 

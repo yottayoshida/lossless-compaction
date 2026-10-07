@@ -5,6 +5,7 @@
 // changes nothing that an earlier compaction left in the conversation.
 
 import { dirsOf, idOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
+import { decodeMedia, textOf } from './encoded.ts';
 import { blobPath, entryPath } from './layout.ts';
 import type { Files, Message } from './types.ts';
 
@@ -71,7 +72,11 @@ export function namedInText(text: string): string[] {
 
 const movedOut = (recallTool: string) =>
   new RegExp(`^\\[moved out\\] ([A-Za-z0-9_.-]{1,128}) result, (\\d{1,9}) bytes; recall with ${recallTool} id ([0-9a-f]{64})$`);
-const TICKET = movedOut(RECALL_TOOL);
+// The wording written now: the result's lines, where they were counted (#149). Without them it is the wording of 0.4.0
+// to 0.7.1, which is read the same.
+const TICKET = new RegExp(
+  `^\\[moved out\\] ([A-Za-z0-9_.-]{1,128}) result, (?:(\\d{1,9}) lines?, )?(\\d{1,9}) bytes; recall with ${RECALL_TOOL} id ([0-9a-f]{64})$`,
+);
 // The wordings of earlier versions. Conversations compacted then still carry them, so they are read, never written:
 // 0.2.0 and 0.3.0 wrote the line above under the old name, 0.1.0 a longer one.
 const TICKET_OLD_NAME = movedOut(OLD_RECALL_TOOL);
@@ -99,7 +104,8 @@ const PART_TICKET = new RegExp(
   `^\\[moved out\\] (?:conversation(?: before the summary)?, part (\\d{1,6}) of (\\d{1,6}), messages (\\d{1,6})-(\\d{1,6})|${ATTACHED_WORDS}, part (\\d{1,6}) of (\\d{1,6})), (\\d{1,9}) bytes; recall with ${RECALL_TOOL} id ([0-9a-f]{64})$`,
 );
 
-export type Ticket = { tool: string; bytes: number; id: string };
+/** What a ticket says of what it stands for. `lines` is said of a result moved out since #149, and of no other. */
+export type Ticket = { tool: string; bytes: number; id: string; lines?: number };
 
 /**
  * Which part of a kept conversation a line stands for, and which of its messages the part holds; or, `attached`,
@@ -131,25 +137,36 @@ export function readPartTicket(text: string): PartTicket | null {
 export type Moved = Ticket & { text: string };
 
 /**
- * The line left in the conversation. Fixed wording, the tool's name, a size
- * and an id: nothing from the result itself, which is text from outside. The
- * tool's exact name is what the model loads the tool by, so it is spelled out;
- * this plugin's own tools, whose results leave too, are named `recall` and
- * `find`.
+ * The line left in the conversation. Fixed wording, the tool's name, how many
+ * lines the result held where that was counted, a size and an id. The tool's
+ * exact name is what the model loads the tool by, so it is spelled out; this
+ * plugin's own tools, whose results leave too, are named `recall` and `find`.
+ * Nothing from the result itself, which is text from outside: a quote of its
+ * first line was measured, and answers were lost to it (ADR 0040).
  */
-export function ticketText({ tool, bytes, id }: Ticket): string {
+export function ticketText({ tool, bytes, id, lines }: Ticket): string {
   const name = OWN.get(tool) ?? tool;
-  return `[moved out] ${name} result, ${bytes} bytes; recall with ${RECALL_TOOL} id ${id}`;
+  const counted = lines === undefined ? '' : `${lines} ${lines === 1 ? 'line' : 'lines'}, `;
+  return `[moved out] ${name} result, ${counted}${bytes} bytes; recall with ${RECALL_TOOL} id ${id}`;
 }
 
 /** Reads a line that has the shape of a ticket, in any wording written so far. The shape alone proves nothing: see `isStored`. */
 export function readTicket(text: string): Ticket | null {
-  const match = TICKET.exec(text) ?? TICKET_OLD_NAME.exec(text) ?? TICKET_2026_09.exec(text);
+  const now = TICKET.exec(text);
+  if (now) {
+    const [, tool, lines, bytes, id] = now;
+    if (tool === undefined || bytes === undefined || id === undefined) return null;
+    return { tool, bytes: Number(bytes), id, ...(lines !== undefined ? { lines: Number(lines) } : {}) };
+  }
+  const match = TICKET_OLD_NAME.exec(text) ?? TICKET_2026_09.exec(text);
   if (!match) return null;
   const [, tool, bytes, id] = match;
   if (tool === undefined || bytes === undefined || id === undefined) return null;
   return { tool, bytes: Number(bytes), id };
 }
+
+/** How many lines a text holds, as a folded call's line counts them: none in an empty text. */
+export const linesOf = (text: string): number => (text === '' ? 0 : text.split('\n').length);
 
 // The name of an input's field as a ticket spells it. A tool of anyone's names its fields as it likes; a name of
 // any other shape is written `value`, so that nothing of another's wording stands in the line.
@@ -291,12 +308,19 @@ export async function placesOf(files: Files, setting: unknown, env: Places): Pro
 /**
  * Stores one tool result and returns the ticket that replaces it, or why the
  * result has to stay where it is. The result is replaced only after the stored
- * text has been read back and found equal (src/blobs.ts).
+ * text has been read back and found equal (src/blobs.ts). `described`: the text
+ * is a tool's result, whose ticket says how many lines it held;
+ * a value of an input, a part or a reading kept apart is named by size alone.
  */
-export async function moveOut(files: Files, dir: string, tool: string, text: string): Promise<Moved | NotMoved> {
+export async function moveOut(files: Files, dir: string, tool: string, text: string, described = false): Promise<Moved | NotMoved> {
   const stored = await store(files, dir, tool, text);
   if ('reason' in stored) return stored;
-  return { tool, ...stored, text: ticketText({ tool, ...stored }) };
+  if (!described) return { tool, ...stored, text: ticketText({ tool, ...stored }) };
+  // A result's ticket says how many lines it held (#149): of a result that held images, the lines of its text.
+  const media = decodeMedia(text);
+  const plain = media === null ? text : textOf(media);
+  const ticket: Ticket = { tool, ...stored, ...(plain === '' ? {} : { lines: linesOf(plain) }) };
+  return { ...ticket, text: ticketText(ticket) };
 }
 
 /** A value of a tool call's input, stored: what its ticket says, and the line that replaces it. */
