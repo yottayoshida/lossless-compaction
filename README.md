@@ -49,30 +49,30 @@ asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#f
 ## Against the built-in compaction
 
 The benchmark's six kinds of made-up conversation, measured
-twice with Sonnet 5.5 at `targetPercent` 40, the default then: a `/compact` by
-hand, then nine questions one after another:
+twice with Sonnet 5.5 at `targetPercent` 1, the default, beside the built-in
+compaction's run on the same conversations: a `/compact` by hand, then nine
+questions one after another:
 
 |                                  |        Plugin |      Built-in |
 | -------------------------------- | ------------: | ------------: |
 | A summary was written            |       0 of 12 |      12 of 12 |
-| `/compact` took                  |   0.07–0.35 s |       15–27 s |
-| The next request carried, tokens | 12,283–83,475 |  9,044–30,735 |
-| After the nine questions, tokens | 21,647–84,889 | 12,010–40,921 |
-| Right answers, of 108            |           106 |            96 |
-| The first run cost               |      2.82 USD |      2.17 USD |
+| `/compact` took                  |   0.11–0.48 s |       15–27 s |
+| The next request carried, tokens |  7,970–18,243 |  9,044–30,735 |
+| After the nine questions, tokens | 12,576–25,298 | 12,010–40,921 |
+| Right answers, of 108            |           102 |            96 |
+| The first run cost               |      0.65 USD |      2.17 USD |
 
-- **`/compact` without instructions is instant and calls no model.** At 40 the next request was
-  larger in five kinds of six; at 1, the default, smaller in four
-  ([both](docs/measurements.md#the-six-kinds-of-conversation-at-40-and-at-1)).
-- **What left comes back by its id.** With the plugin the agent called
-  `recall`; after a summary it read files again and Claude Code's record of
-  the session. Either way it re-entered context.
-- **The cost moves.** No summary to pay for, and at 40 larger requests after it:
-  the plugin cost less in five kinds, and more in the one that fills the
-  window, where Claude Code wrote it to the cache again at four questions
-  ([every table](docs/measurements.md#every-kind-of-conversation-with-sonnet-55)).
-- **In a window of 1,000,000**, at 40 and 576,000 tokens: `/compact` 0.26–0.27 s
-  against 40–52 s; eleven questions in a row, 11 right against 6, 2.05 USD against 1.58.
+- **`/compact` without instructions is instant and calls no model.** The next
+  request was smaller in five kinds of six, and larger in the one of thinking,
+  in both runs.
+- **What left comes back.** With the plugin the agent called
+  `recall` and `find`; after a summary it read files again and Claude Code's
+  record of the session. Either way it re-entered context.
+- **It cost less.** No summary to pay for: in the first run the plugin cost
+  less in each of the six kinds, its questions alone more in four of them
+  ([every table](docs/measurements.md#every-kind-of-conversation-at-the-default)).
+- **In a window of 1,000,000**, at 579,000 tokens: `/compact` 0.29 s against
+  52 s; eleven questions in a row, 11 right against 6, 0.14 USD against 1.58.
 
 ## Before you install
 
