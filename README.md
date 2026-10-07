@@ -22,7 +22,7 @@ The 61 ms is the plugin's own count for one recorded compaction
 
 ## Quick start
 
-In Claude Code 2.1.287 or later, type this at the prompt:
+In Claude Code 2.1.287 or later (checked on macOS; [other systems](docs/limits.md#systems)), type this at the prompt:
 
 ```text
 /plugin install lossless-compaction --marketplace yottayoshida/lossless-compaction

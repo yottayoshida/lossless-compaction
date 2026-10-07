@@ -834,6 +834,24 @@ soon as the input box showed, and right after `--resume`), and after
 `/reload-plugins` loaded the module into a session that had started without
 it; a `/compact` there was not held.
 
+## Systems
+
+The plugin is checked in Claude Code on macOS only: `npm run check:host`
+and every figure in [the measurements](measurements.md). What it needs of a
+system is [the commands it runs](../PRIVACY.md#commands-it-runs), which it
+starts by an absolute path, from `/bin` or `/usr/bin` (`grep` from
+`/usr/bin` first) and never through `PATH`, and an `sh` found in `PATH` for
+its notices (`hooks/hooks.json`).
+
+| System | How it was checked | What does not work |
+| --- | --- | --- |
+| macOS | In Claude Code | Nothing known, but for an access control list, which `chmod` leaves in place ([how long results are kept](#how-long-results-are-kept)) |
+| Linux with GNU tools: Debian 13, Ubuntu 24.04 | Not run in Claude Code. CI on Ubuntu installs Claude Code, checks the hook file and its types, runs the notices with `/bin/sh` and `/bin/dash`, and runs the tests, whose files and other commands are mostly stand-ins. On 2026-10-07 each command line the plugin starts, with its arguments, was run in Docker's `debian:stable-slim` (13.7) and `ubuntu:24.04` (24.04.5) and did what the plugin expects. Other distributions and versions were not checked | Nothing known |
+| Alpine, or another system whose `grep` is BusyBox's | Not run in Claude Code. The same command lines in Docker's `alpine:3` (3.24, BusyBox 1.37.0) on 2026-10-07: the clean-up's `grep` refused `--include` and exited 2; the others did what the plugin expects | The clean-up stops each time before anything moves, so nothing kept is removed. A GNU `grep` at `/usr/bin/grep` or `/bin/grep` would be used instead; not checked |
+| WSL | Not checked | From the code, as Linux. A store on a Windows drive (`/mnt/c`) may not hold the mode it is given |
+| Windows | Not checked | From the code: where `mv` cannot be started, results are written in place, with no move. A store whose place starts with a drive letter is given no mode; one that starts with `/` cannot be made private, as on NixOS. With no `grep` to start, the clean-up stops each time, so nothing kept is removed. `/lossless-export` and `/lossless-import` do not run. Whether a hook there finds an `sh` for the notices was not checked |
+| NixOS | Not checked | From what NixOS ships, `sh` in `/bin` and `env` in `/usr/bin` alone: no `mkdir` or `chmod` can be started, so the store cannot be made private, nothing is moved out or kept, and each compaction is Claude Code's summary; its line says why |
+
 ## Setting it up
 
 The README's quick start installs from a Claude Code session, where
@@ -1254,12 +1272,12 @@ to readable by its owner alone: it runs `mkdir -m 700` when the directory is
 not there and `chmod 700` on it either way (from `/bin`, else `/usr/bin`,
 never through `PATH`). A link or a file in its place, a directory `chmod`
 fails on (someone else's), or a host where neither command can be run —
-NixOS without `/bin` and `/usr/bin`, a surface of Claude Code that runs no
-commands — means nothing is moved out, and the line the compaction prints
-says why. Each other directory it reads from that is there as a directory is
-closed the same way; when that fails, the compaction says so and goes on. A
-`storeDir` you point at an existing directory is made mode 700 too: point it
-at a directory of its own.
+NixOS, whose `/bin` and `/usr/bin` hold no `mkdir` or `chmod`, a surface of
+Claude Code that runs no commands — means nothing is moved out, and the line
+the compaction prints says why. Each other directory it reads from that is
+there as a directory is closed the same way; when that fails, the compaction
+says so and goes on. A `storeDir` you point at an existing directory is made
+mode 700 too: point it at a directory of its own.
 
 What that covers and what it does not:
 
