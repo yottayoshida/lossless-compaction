@@ -1488,7 +1488,8 @@ What is sent for it is one sentence: that a line of that result holds the
 values, which the question already holds. No line of the result is sent. The
 values are taken from the question as it is sent, with shapes of secrets
 blanked and cut at 2,000 characters: a value blanked or cut off there is not
-looked for. Where several results have such a line, and where a line holds
+looked for (PRIVACY.md lists the shapes; a telephone number written with `+`,
+its country code and groups is one). Where several results have such a line, and where a line holds
 only some of the values, Jev is told nothing: told of each of four results a
 line of which held one of the two values asked for, it gave the first of
 them as the answer (`docs/measurements.md`).
@@ -1505,7 +1506,10 @@ through. A run with one digit ("the 2 logs", `log7.txt`) is no value, a
 number written with commas between its digits ("9,821.50") gives none, and a
 question whose values all have fewer than three digits ("step 17") has none
 looked for. With no key the same is looked for, and the results with such
-a line are listed with it, Jev being told nothing (#110).
+a line are listed with it, Jev being told nothing (#110): there the values
+are taken from the question as it is asked, cut at 2,000 characters, and a
+shape blanked in what would be sent is looked for all the same (#131). The
+call and the line shown with each are blanked.
 
 ## What an agent does not fetch
 

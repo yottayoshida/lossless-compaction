@@ -25,34 +25,91 @@ const SPLITS = 3;
 
 const BLANK = '[redacted]';
 
-// Shapes of secrets. This is a courtesy, not a boundary: a password with no
-// telling name or prefix passes through it.
-const SHAPES: readonly (readonly [RegExp, string])[] = [
+/** A number written with `+` and a country code is taken for a telephone number when it has as many digits as one can (E.164). */
+const PHONE_DIGITS = { least: 8, most: 15 } as const;
+
+/**
+ * What is blanked of a number written with `+` and groups: the longest run of its first groups that has as many digits
+ * as a telephone number can, the rest kept (`+44 20 7946 0958 2026-10-07` blanks the number and keeps the date). Too few
+ * digits even in all of it, and nothing is.
+ */
+function phone(found: string): string {
+  let digits = 0;
+  let upTo = 0;
+  for (const group of found.matchAll(/\d+/g)) {
+    digits += group[0].length;
+    if (digits > PHONE_DIGITS.most) break;
+    if (digits >= PHONE_DIGITS.least) upTo = (group.index ?? 0) + group[0].length;
+  }
+  return upTo === 0 ? found : `${BLANK}${found.slice(upTo)}`;
+}
+
+/**
+ * A value given to a name, blanked: a quoted one to its closing quote (the quote kept, escaped or not), any other to a
+ * space, a comma or a semicolon.
+ */
+const value = (_found: string, name: string, given: string) => `${name}${/^\\?["']/.exec(given)?.[0] ?? ''}${BLANK}`;
+
+// Shapes of secrets, and of what tells who a person is. This is a courtesy, not a boundary: a password with no
+// telling name or prefix passes through it. PRIVACY.md lists them; the order matters where one shape holds
+// another (a webhook's path holds an `@`, an address with a password holds one without). Those marked
+// "gitleaks:" are adapted from the rules of that name in gitleaks's default configuration (MIT,
+// github.com/gitleaks/gitleaks). No address here is one the plugin sends to (test/privacy.test.ts).
+const SHAPES: readonly (readonly [RegExp, string | ((found: string, ...groups: string[]) => string)])[] = [
   [/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?(?:-----END [A-Z0-9 ]+-----|$)/g, BLANK],
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, `$1${BLANK}@`],
-  [/\b((?:proxy-)?authorization["']?\s*[:=]\s*["']?)[^\r\n"']+/gi, `$1${BLANK}`],
+  // The path of an incoming webhook is its secret; a `/` may be written `\/` in JSON. gitleaks: slack-webhook-url,
+  // microsoft-teams-webhook; Discord's is not among them: its form is Discord's own documentation of webhooks.
+  [/\b(hooks\.slack\.com\\?\/(?:services|workflows|triggers)\\?\/)[^\s"'<>]+/gi, `$1${BLANK}`],
+  [/\b([a-z0-9-]{1,63}\.webhook\.office\.com\\?\/webhookb2\\?\/)[^\s"'<>]+/gi, `$1${BLANK}`],
+  [/\b(discord(?:app)?\.com\\?\/api\\?\/(?:v\d{1,3}\\?\/)?webhooks\\?\/\d{1,30}\\?\/)[^\s"'<>/?\\]+/gi, `$1${BLANK}`],
+  // A password with a user or none (`redis://:password@host`).
+  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@:]{0,256}:[^\s/@]{1,256}@/gi, `$1${BLANK}@`],
+  // A user alone stands for a key where a service takes one there (a DSN): blanked whatever it is.
+  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@:]{1,256}@/gi, `$1${BLANK}@`],
+  // A quote before a value may be escaped, as JSON writes one inside a string (a kept part's call line).
+  [/\b((?:proxy-)?authorization\\?["']?\s*[:=]\s*\\?["']?)[^\r\n"']+/gi, `$1${BLANK}`],
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g, `$1 ${BLANK}`],
   [
-    /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passwd|password|pwd|credential|private[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*["']?)[^\s"',;]+/gi,
-    `$1${BLANK}`,
+    /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passwd|password|pwd|credential|private[_-]?key)[A-Za-z0-9_.-]*\\?["']?\s*[:=]\s*)(\\?"[^"\r\n]*|\\?'[^'\r\n]*|[^\s"',;]+)/gi,
+    value,
   ],
+  // An assignment as an environment file or a shell writes one, to a name in capitals ending as keys, passwords,
+  // DSNs and webhooks are named, or that is one of those words (`DSN=`).
+  [/(?<![A-Za-z0-9_$])([A-Z0-9_]*(?:_KEY|_PASS|_PW|DSN|_WEBHOOK|_WEBHOOK_URL)\s*=\s*)(\\?"[^"\r\n]*|\\?'[^'\r\n]*|[^\s"',;]+)/g, value],
   [/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, BLANK],
+  // gitleaks: stripe-access-token.
+  [/\b(?:sk|rk)_(?:live|test|prod)_[A-Za-z0-9]{10,}/g, BLANK],
   [/\bgh[pousr]_[A-Za-z0-9]{20,}/g, BLANK],
   [/\bgithub_pat_[A-Za-z0-9_]{20,}/g, BLANK],
   [/\bglpat-[A-Za-z0-9_-]{16,}/g, BLANK],
   [/\bxox[abeoprs]-[A-Za-z0-9-]{10,}/g, BLANK],
   [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, BLANK],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, BLANK],
+  // gitleaks: npm-access-token, pypi-upload-token, rubygems-api-token.
+  [/\bnpm_[A-Za-z0-9]{36}\b/g, BLANK],
+  [/\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}/g, BLANK],
+  [/\brubygems_[a-f0-9]{48}\b/g, BLANK],
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, BLANK],
   [
     /([?&](?:X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token|sig|signature|token|access_token|key)=)[^&\s"']+/gi,
     `$1${BLANK}`,
   ],
+  // An email address, not `user@host:path` (where git and scp are told which account to use), nor a domain going
+  // on past where it is cut (`a@host.example` of `a@host.example.com:path`). Each part is bounded, as an address's
+  // are: a long run of letters is not read again from each place it could begin.
+  [/\b[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}\b(?!:\S|[.-][A-Za-z0-9])/g, BLANK],
+  // A telephone number with `+` and its country code, `(+81)` too, then groups apart by a space, a `-` or a `.`;
+  // after a part in brackets (`(0)20`, `(415)555`) a group may follow with none. Not one written at home
+  // (`090-1234-5678` is shaped as a date is, `07-10-2026`), nor `+12345678` or `+0900` with no groups; `phone`
+  // keeps one of too few or too many digits (`+10 20 30`). And a `tel:` link, whatever it holds.
+  [/(?<![\w+])(?:\(\+\d{1,3}\)|\+\d{1,3})(?:[ .-]?\(\d{1,4}\)[ .-]?\d{1,8}|[ .-]\d{1,8})(?:[ .-]\(?\d{1,8}\)?)+(?![\w-])/g, phone],
+  [/\btel:[^\s"'<>]{6,}/gi, BLANK],
 ];
 
 export function redact(text: string): string {
   let out = text;
-  for (const [shape, replacement] of SHAPES) out = out.replace(shape, replacement);
+  // Two calls for replace's two signatures, a text and a function: TypeScript takes neither for the union.
+  for (const [shape, replacement] of SHAPES) out = typeof replacement === 'string' ? out.replace(shape, replacement) : out.replace(shape, replacement);
   return out;
 }
 
@@ -107,9 +164,12 @@ export type Question = { type: 'choice'; instructions: string; criteria: Record<
 
 export type State = { task: string; judging: string };
 
+/** The most of a question Jev is told, in UTF-16 units. */
+export const QUESTION_CHARS = 2000;
+
 /** What Jev is told: the question, blanked, and what the options are. Nothing of the conversation. */
 export function stateFor(question: string): State {
-  return { task: head(redact(question), 2000), judging: JUDGING };
+  return { task: head(redact(question), QUESTION_CHARS), judging: JUDGING };
 }
 
 /** One option of a choice: a key Jev answers by, and the text it is shown. */

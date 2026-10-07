@@ -494,3 +494,92 @@ test('a call input, a digest and a question are never cut inside a character, no
     assert.ok(!halfAlone.test(task) && task.length <= 2000, `stateFor at ${n}`);
   }
 });
+
+// Every shape PRIVACY.md lists, one made-up value each, put together here so that no line of this file has the shape of
+// a real credential. Each: the line it stands in, and the part of it that must not be left.
+const j = (...pieces: string[]) => pieces.join('');
+const LISTED: readonly (readonly [string, string, string])[] = [
+  ['a private key block', j('-----BEGIN', ' PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END', ' PRIVATE KEY-----'), 'MIIEvQIBADANBg'],
+  ['a URL with a user and a password', j('postgres://admin:', 'hunter2-swordfish', '@db.internal/app'), 'hunter2-swordfish'],
+  ['a URL with a user alone (a DSN)', j('https://', 'a1b2c3d4e5f6a7b8', '@o1.ingest.sentry.io/42'), 'a1b2c3d4e5f6a7b8'],
+  ['an Authorization header', j('Authorization: ', 'Token qwertyuiop12345'), 'qwertyuiop12345'],
+  ['a Bearer token', j('curl -H "x: Bearer ', 'zxcvbnm1234567890', '"'), 'zxcvbnm1234567890'],
+  ['a value named as a secret', j('db_password: ', 'correct-horse-battery'), 'correct-horse-battery'],
+  ['an environment assignment ending in _KEY', j('STRIPE', '_KEY=', 'plainvalue123456'), 'plainvalue123456'],
+  ['an environment assignment ending in _PASS', j('export SMTP', '_PASS="', 'mailpass99887766', '"'), 'mailpass99887766'],
+  ['an environment assignment ending in _PW', j('DB', '_PW=', 'dbpw55667788aa'), 'dbpw55667788aa'],
+  ['an environment assignment ending in DSN', j('SENTRY', '_DSN=', 'notaurl-but-a-dsn-value'), 'notaurl-but-a-dsn-value'],
+  ['an environment assignment ending in _WEBHOOK_URL', j('ALERTS', '_WEBHOOK_URL=', 'hookvalue-1234567'), 'hookvalue-1234567'],
+  ['a key with sk- before it', j('s', 'k-', 'x9Y8z7W6'.repeat(4)), 'x9Y8z7W6x9Y8z7W6'],
+  ['a payment key, sk_live_', j('s', 'k_live_', 'a1B2c3D4e5F6g7H8i9J0'), 'a1B2c3D4e5F6g7H8i9J0'],
+  ['a payment key, rk_test_', j('r', 'k_test_', 'Z9y8X7w6V5u4T3s2R1q0'), 'Z9y8X7w6V5u4T3s2R1q0'],
+  ['a GitHub token', j('gh', 'p_', 'a1B2c3D4'.repeat(5)), 'a1B2c3D4a1B2c3D4'],
+  ['a GitHub fine-grained token', j('github', '_pat_', 'A1b2C3d4E5f6G7h8I9j0K1'), 'A1b2C3d4E5f6G7h8I9j0K1'],
+  ['a GitLab token', j('gl', 'pat-', 'Aa1Bb2Cc3Dd4Ee5Ff6'), 'Aa1Bb2Cc3Dd4Ee5Ff6'],
+  ['a Slack token', j('xo', 'xb-', '1234567890-abcdefghij'), '1234567890-abcdefghij'],
+  ['an AWS access key id', j('AK', 'IA', 'ABCDEFGHIJKLMNOP'), 'ABCDEFGHIJKLMNOP'],
+  ['a Google API key', j('AI', 'za', 'Sy0123456789abcdefghijklmnopqrstu'), 'Sy0123456789abcdefghijklmnopqrstu'],
+  ['an npm token', j('np', 'm_', 'a1b2c3d4e5'.repeat(3), 'f6g7h8'), 'a1b2c3d4e5a1b2c3d4e5'],
+  ['a PyPI token', j('py', 'pi-AgEIcHlwaS5vcmc', 'Q'.repeat(60)), 'QQQQQQQQQQQQ'],
+  ['a RubyGems token', j('ruby', 'gems_', 'ab12'.repeat(12)), 'ab12ab12ab12ab12'],
+  ['a JSON web token', j('ey', 'JhbGciOiJIUzI1NiJ9', '.', 'eyJ', 'zdWIiOiIxMjM0NTY3ODkwIn0', '.', 'c2lnbmF0dXJlLWhlcmU'), 'zdWIiOiIxMjM0NTY3ODkwIn0'],
+  ['a signature in a URL', j('https://bucket.example/f?X-Amz-Signature=', 'f'.repeat(64), '&other=1'), 'f'.repeat(64)],
+  ['a Slack webhook', j('https://hooks.slack.com/services/', 'T0001/B0002/', 'q9W8e7R6t5Y4u3I2o1P0a9S8'), 'q9W8e7R6t5Y4u3I2o1P0a9S8'],
+  ['a Microsoft Teams webhook', j('https://contoso.webhook.office.com/webhookb2/', 'abc@def/IncomingWebhook/', '0123456789abcdef'), '0123456789abcdef'],
+  ['a Discord webhook', j('https://discord.com/api/webhooks/', '123456789012/', 'Ab-Cd_Ef'.repeat(5)), 'Ab-Cd_EfAb-Cd_Ef'],
+  ['an email address', j('written by ', 'jane.doe', '@', 'example.com', '.'), 'jane.doe'],
+  ['a telephone number with + and groups', j('call ', '+44 20', ' 7946 0958', ' today'), '7946 0958'],
+  ['a telephone number in parentheses', j('call ', '+1 (415)', ' 555-0100'), '555-0100'],
+  ['a tel: link', j('<a href="', 'tel:', '+81-3-1234-5678', '">'), '1234-5678'],
+  ['a tel: link written for a URL', j('href="', 'tel:', '+44%2020%207946%200958', '"'), '7946%200958'],
+  ['a telephone number with a group of six', j('mobile ', '+44 7911', ' 123456'), '123456'],
+  ['a telephone number with a group of eight', j('office ', '+49 30', ' 12345678'), '12345678'],
+  ['a telephone number with (0)', j('tel ', '+44 (0)20', ' 7946 0958'), '7946 0958'],
+  ['a telephone number with (0) and no space after it', j('tel ', '+81 (0)3', '-1234-5678'), '1234-5678'],
+  ['a telephone number with dots', j('call ', '+1.415', '.555.0100'), '555.0100'],
+  ['a telephone number with brackets and no space after them', j('call ', '+1 (415)', '555-0100'), '555-0100'],
+  ['a telephone number with its country code in brackets', j('call ', '(+81)', ' 90-1234-5678'), '1234-5678'],
+  ['a URL with a password and no user', j('redis://:', 's3cretPassw0rd', '@cache:6379'), 's3cretPassw0rd'],
+  ['a quoted value escaped in JSON', j('{"command":"export SMTP', '_PASS=\\"', 'mailpass99887766', '\\""}'), 'mailpass99887766'],
+  ['a quoted secret escaped in JSON', j('{"command":"db_password=\\"', 'correct-horse-battery', '\\""}'), 'correct-horse-battery'],
+  ['an environment assignment named DSN', j('DSN', '=', 'just-the-dsn-value'), 'just-the-dsn-value'],
+  ['an email address before a colon and a space', j('sent to ', 'jane.doe', '@', 'example.com', ': ok'), 'jane.doe'],
+  ['a Discord webhook with the version in its path', j('https://discord.com/api/v10/webhooks/', '123456789012/', 'Ab-Cd_Ef'.repeat(5)), 'Ab-Cd_EfAb-Cd_Ef'],
+  ['a telephone number with a date after it', j('call ', '+44 20', ' 7946 0958', ' 2026-10-07'), '7946 0958'],
+  ['a telephone number with another after it', j('call ', '+81 3', ' 1234 5678', ' 03 1234 5678'), '+81 3 1234'],
+  ['a quoted secret with spaces in it', j('password: "', 'correct horse', ' battery', '"'), 'horse battery'],
+  ['a quoted environment value with spaces in it', j('SMTP', '_PASS="', 'mail pass', ' 9988', '"'), 'pass 9988'],
+  ['a Slack webhook written in JSON', j('{"url":"https:\\/\\/hooks.slack.com\\/services\\/', 'T0001\\/B0002\\/', 'q9W8e7R6t5Y4u3I2o1P0a9S8', '"}'), 'q9W8e7R6t5Y4u3I2o1P0a9S8'],
+];
+
+test('each shape PRIVACY.md lists is blanked, alone and in a digest (#131)', () => {
+  for (const [label, line, secret] of LISTED) {
+    assert.ok(!redact(line).includes(secret), `${label}: ${redact(line)}`);
+    assert.ok(!digest(`first line\n${line}\nlast line`).includes(secret), `${label}, in a digest`);
+  }
+});
+
+test('ordinary lines a coding session holds are left as they are (#131)', () => {
+  const kept = [
+    '2026-10-07 14:57:01',
+    'v1.2.3-beta+build.5',
+    '123e4567-e89b-12d3-a456-426614174000',
+    `[lossless-compaction] Bash result moved out, 1290 bytes; recall with mcp__lossless-compaction__recall id ${'a1'.repeat(32)}`,
+    'record 95-0001: station 418 reported 126 units at step 1',
+    'git clone git@github.com:owner/repo.git',
+    'scp notes.txt user@host.example.com:path/to',
+    'npm install pkg@1.2.3',
+    `docker pull node@sha256:${'c'.repeat(64)}`,
+    '+12345678',
+    '+10 20 30',
+    'Date: Tue, 07 Oct 2026 14:57:01 +0900',
+    'Hotel: two nights',
+    'call 090-1234-5678 for the desk',
+    'const MONKEY = banana',
+    'https://github.com/@scope/pkg',
+  ];
+  for (const line of kept) assert.equal(redact(line), line);
+  // What follows a telephone number, or a quoted secret, is kept: only the number and the secret go.
+  assert.equal(redact(j('call ', '+44 20 7946', ' 0958 2026-10-07')), 'call [redacted] 2026-10-07');
+  assert.equal(redact(j('password: "', 'a b', '", user: "me"')), 'password: "[redacted]", user: "me"');
+});
