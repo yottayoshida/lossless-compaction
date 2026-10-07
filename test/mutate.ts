@@ -42,8 +42,8 @@ export const MUTATIONS: readonly Mutation[] = [
     promise: 'I1',
     breaks: 'a result just written is not compared with what was written',
     file: 'src/blobs.ts',
-    find: "  if (back === text) return null;\n  if (found === 'missing' || !repair(back)) return { reason: 'differs' };",
-    replace: "  if (back === text || found === 'missing') return null;\n  if (!repair(back)) return { reason: 'differs' };",
+    find: "  if (found === 'missing' || !repair(back)) return { reason: 'differs' };",
+    replace: "  if (found === 'missing') return null;\n  if (!repair(back)) return { reason: 'differs' };",
     killedBy: 'a result that does not read back as it was written stays in the conversation',
   },
   {
@@ -109,6 +109,23 @@ export const MUTATIONS: readonly Mutation[] = [
     find: '    if (part === false) continue;',
     replace: '    continue;',
     killedBy: 'a collection keeps what a kept part names: its results, and the parts of an earlier summary and theirs',
+  },
+  {
+    promise: 'I4',
+    breaks: "a copy in the trash is removed from a day another clean-up may still be moving the one in place into",
+    file: 'src/lifetime.ts',
+    find: '    const doubled = plan.toRestore.filter((item) => item.day < settled).flatMap((item) => {',
+    replace: '    const doubled = plan.toRestore.flatMap((item) => {',
+    killedBy:
+      'clean-ups at once, one that names a result and others that do not, leave it to recall: a copy in the trash goes only from a day none still moves into (ADR 0038)',
+  },
+  {
+    promise: 'I4',
+    breaks: 'a text stored again keeps the time it was first stored at',
+    file: 'src/blobs.ts',
+    find: "    if (renew && found === 'file') await files.move?.renew?.(path).catch(() => undefined);",
+    replace: '    // not renewed',
+    killedBy: 'a text stored again has its time renewed, so a clean-up within a day of the new use does not move it; where no command starts it is not',
   },
   {
     promise: 'I5',

@@ -533,7 +533,11 @@ export async function collect(list: List, exec: Exec, dir: string, live: Readonl
     const back = await blobNames(list, dir);
     const entries = await entryNames(list, dir);
     // Each copy only once the one in place is there: an entry whose move failed stays in the trash, to be put back.
-    const doubled = plan.toRestore.flatMap((item) => {
+    // And only from a day no clean-up is still moving into (ADR 0038): another, that names it no more, may be moving
+    // the one in place into today's directory right now, and what it moves there is all that is left of it. A copy
+    // in a newer day stays until a later clean-up, or goes a week after it is named by none.
+    const settled = dayOf(now - DAY);
+    const doubled = plan.toRestore.filter((item) => item.day < settled).flatMap((item) => {
       const [blob, entry] = trashedAt(dir, item);
       return [...(back.has(blobName(item.id)) ? [blob] : []), ...(entries.has(entryName(item.id)) ? [entry] : [])];
     });

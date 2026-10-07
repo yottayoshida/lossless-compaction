@@ -1,8 +1,9 @@
 name: claude-code-latest
 
-# The check of ci.yml with the newest Claude Code, once a week and by hand: a
-# release that changes what it requires of the hook file shows here, red,
-# without failing pull requests. When it does, raise CLAUDE_CODE_VERSION in
+# The checks of ci.yml with the newest Claude Code, once a week and by hand: a
+# release that changes what it requires of the hook file, or gives a `$` that
+# the hook file's own shapes of it no longer accept, shows here, red, without
+# failing pull requests. When it does, raise CLAUDE_CODE_VERSION in
 # ci.yml. GitHub stops a schedule in a repository with no activity for 60 days.
 on:
   schedule:
@@ -23,6 +24,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          cache: npm
+      - run: npm ci
       # Into a directory of its own, not the project: npm may block an install script it was
       # not told to allow (npm 12 does), so Claude Code's own is run by name; running it twice is harmless.
       - name: Install Claude Code latest
@@ -34,3 +37,5 @@ jobs:
         run: |
           "$CLAUDE" --version
           sh test/validate.sh
+      - name: Type check of the hook file against the newest Claude Code's declarations
+        run: sh test/typecheck-hooks.sh

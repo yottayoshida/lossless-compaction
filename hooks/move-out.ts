@@ -525,7 +525,9 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     // One try, one stop: the first, should more than one place stop.
     let stopped: StopKind | null = null;
     for (const dir of dirs) {
-      const done = await collect(list, execOf($), dir, named, now);
+      // The time of the moves, not of the start: the day a clean-up moves into is the day it is in when it moves,
+      // which another clean-up takes its own day before (ADR 0038).
+      const done = await collect(list, execOf($), dir, named, Date.now());
       if ('stop' in done) {
         stopped ??= done.kind;
         say($, `moved-out results in ${dir} are kept, not cleaned up: ${done.stop}`);

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "typecheck:hooks": "tsc -p tsconfig.hooks.json",
+    "typecheck:hooks": "sh test/typecheck-hooks.sh",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:hooks": "claude plugin test hooks",
     "bench": "node bench/main.ts",

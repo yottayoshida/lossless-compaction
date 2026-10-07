@@ -445,8 +445,8 @@ test('a clean-up keeps what kept parts name: it collects against the ids followe
   assert.ok(back > 0 && back < collecting.indexOf('namedThroughParts('), 'put back first');
   assert.ok(collecting.slice(back, collecting.indexOf('namedThroughParts(')).includes("if ('stop' in inTrash) {"), 'and stopped where the trash cannot be read');
   assert.ok(collecting.includes("if ('stop' in named) {"), 'stops');
-  assert.ok(collecting.includes('collect(list, execOf($), dir, named, now)'), 'collected against them');
-  assert.ok(!collecting.includes('collect(list, execOf($), dir, live.ids, now)'), 'not against the transcripts alone');
+  assert.ok(collecting.includes('collect(list, execOf($), dir, named, Date.now())'), 'collected against them, at the time of the moves (ADR 0038)');
+  assert.ok(!collecting.includes('collect(list, execOf($), dir, live.ids,'), 'not against the transcripts alone');
 });
 
 test('stored results are written through mv where it starts, the reason a write failed is said, and a summary can be skipped', () => {

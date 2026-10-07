@@ -43,16 +43,22 @@ a link where a result would go is refused.
 - `a link to nothing is refused too`
 
 **I4. The clean-up removes nothing a conversation can still reach.** A result
-goes to the trash only when its file is over a day old and neither a recorded
-transcript nor a kept part names it, and is removed only after the trash has
-held it over a week, still named by none. What is named and in the trash goes
-back before the parts are read, so that a part there is read for what it
-names; where one cannot be put back, the clean-up stops (I5).
+goes to the trash only when its file is over a day old — storing the same
+text again renews its time — and neither a recorded transcript nor a kept
+part names it, and is removed only after the trash has held it over a week,
+still named by none. What is named and in the trash goes back before the
+parts are read, so that a part there is read for what it names; where one
+cannot be put back, the clean-up stops (I5). A copy the trash holds of what
+is in place is removed only from a day two or more days past, which no
+clean-up is still moving into: clean-ups that run at once remove nothing one
+of them names (ADR 0038).
 
 - `a result over a day old that no transcript names goes to the trash; a young one and a named one stay`
 - `the trash is aged by the day of its directory, not by the file: a move keeps a file old`
 - `a collection keeps what a kept part names: its results, and the parts of an earlier summary and theirs`
 - `a part named again while it is in the trash keeps what only it names: both go back before a collection counts what is named`
+- `clean-ups at once, one that names a result and others that do not, leave it to recall: a copy in the trash goes only from a day none still moves into (ADR 0038)`
+- `a text stored again has its time renewed, so a clean-up within a day of the new use does not move it; where no command starts it is not`
 
 **I5. A clean-up that cannot tell what is named moves nothing.** A search of
 the transcripts that ends with an error, is cut short, or does not print the
@@ -173,9 +179,16 @@ is cut for its length well before that, where a compaction comes in time
   machines that hold one id, copied with a home directory, mark the store as
   one, and are not told apart; nor is a machine one of whose latest sessions'
   transcripts was copied here, which is taken for this one (ADR 0032).
-- **A result written again within its first day of a new use.** The day is
-  counted from the file's time, which storing the same text again does not
-  change: such a result can go to the trash before a transcript names it, and
+- **A collection that takes more than a day.** A copy in the trash is
+  removed only from a day no clean-up is still moving into, counted from the
+  time a collection is handed, after its search. One that spends more than a
+  day from then to its last move — a machine asleep in the middle of it —
+  can meet another clean-up's removal (ADR 0038).
+- **A result written again whose time is not renewed.** Storing the same
+  text again renews its file's time with `touch`. Where no command can be
+  started (Windows), where `touch` fails, and for a clean-up that listed the
+  results before it ran, the day is counted from the time it was first
+  stored: such a result can go to the trash before a transcript names it, and
   comes back when it is asked for (I7).
 - **That putting back from the trash succeeds.** Where the move back fails,
   `recall` and `find` answer that nothing is stored under the id, and say so;

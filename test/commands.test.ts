@@ -63,3 +63,11 @@ test('mv is known to start once it has, never that it does not; a rename ends wi
   assert.deepEqual(other.started, [['/bin/mkdir', '-p', '--', '/s/tmp'], ['/bin/rm', '-f', '--', '/s/tmp/x.1.part']]);
   forgetMove();
 });
+
+test('a result stored again is renewed with touch, making no file and following no link, from /usr/bin where /bin has none (macOS)', async () => {
+  const macos = host(['/usr/bin']);
+  await moverOf(macos.start, async () => file).renew?.('/s/blobs/x.txt');
+  assert.deepEqual(macos.started, [['/usr/bin/touch', '-c', '-h', '--', '/s/blobs/x.txt']]);
+  // Where no touch starts at all, nothing is said and nothing throws.
+  await moverOf(host([]).start, async () => file).renew?.('/s/blobs/x.txt');
+});
