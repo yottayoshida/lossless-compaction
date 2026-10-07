@@ -562,13 +562,19 @@ test('the mark is taken off by the rule docs/limits.md gives, on any line: one b
   assert.ok(out.every((line, at) => (line === said[at] ? !readsFixed(line) : line === `\\${said[at]}` && readsFixed(line))));
 });
 
-test('keeping a conversation of 4096 messages and six million characters takes no more than its length makes it: at most six times what a quarter of it takes (#102)', async () => {
+test('keeping a conversation of 4096 messages and six million characters takes no more than its length makes it: under twenty-two times what an eighth of it takes (#102)', async () => {
   // What a handler of a failure has is a second (docs/limits.md); 4096 messages took 59 ms on the machine this was written
-  // on, and over a second on CI's. A bound in milliseconds holds on one machine only: what it can hold everywhere is
-  // that the time grows as the conversation does, four times as long for four times the messages, and not as its square.
+  // on, and 0.36 to 1.06 s on CI's runners. A bound in milliseconds holds on one machine only: what it can hold everywhere
+  // is that the time grows as the conversation does, eight times as long for eight times the messages, and not as its
+  // square, sixty-four times; twenty-two is as far from each by ratio. With a quarter (1024) instead, four against
+  // sixteen, CI's runners went over a bound of six by their own noise three times on 2026-10-07 (7.9, 6.5 and 6.1
+  // times, each green when run again), and in a box of four CPUs as busy as CI's the noise and a square came within a
+  // tenth of a bound of eight from either side. With an eighth, in that box, the time grew 10.8 times at most, and
+  // re-measuring every piece at each message, a square that costs, 43.9 to 60.7 times. A square too cheap to show over
+  // the rest at 4096 messages is not seen: it is no harm under a second.
   const of = (count: number) =>
     conversation(Array.from({ length: (count - 2) / 2 }, (_, at) => ({ tool: 'Bash', input: { command: `show ${at}` }, text: output(`r${at}`, 120) })));
-  const quarter = of(1024);
+  const eighth = of(512);
   const whole = of(4096);
   assert.equal(whole.length, 4096);
   const time = async (messages: readonly Message[]) => {
@@ -578,11 +584,17 @@ test('keeping a conversation of 4096 messages and six million characters takes n
     assert.ok('text' in kept);
     return ms;
   };
-  // Once to warm up, then the least of two of each, so that a pause of the machine's is not read as the code's.
-  await time(quarter);
-  const small = Math.min(await time(quarter), await time(quarter));
-  const large = Math.min(await time(whole), await time(whole));
-  assert.ok(large < small * 6, `${Math.round(large)} ms for 4096 messages, ${Math.round(small)} ms for 1024`);
+  // Each once to warm up, then the least of several, so that a pause of the machine's is not read as the code's: five of
+  // the eighth, which takes a few milliseconds, and three of the whole.
+  const least = async (messages: readonly Message[], times: number) => {
+    await time(messages);
+    let best = Infinity;
+    for (let run = 0; run < times; run += 1) best = Math.min(best, await time(messages));
+    return best;
+  };
+  const small = await least(eighth, 5);
+  const large = await least(whole, 3);
+  assert.ok(large < small * 22, `${Math.round(large)} ms for 4096 messages, ${Math.round(small)} ms for 512`);
 });
 
 test('a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed; an entry of another shape over a sound text is read (#114, ADR 0033)', async () => {
