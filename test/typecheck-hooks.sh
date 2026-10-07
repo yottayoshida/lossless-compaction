@@ -105,7 +105,8 @@ for patch in "$root"/test/fixtures/typecheck/*.patch; do
   elif grep -q "^hooks/move-out\.ts([0-9,]*): error TS2345: Argument of type 'EngineInterface' is not assignable" "$scratch/$name.log" &&
     ! grep -v '^hooks/move-out\.ts(' "$scratch/$name.log" | grep -q 'error TS'; then
     echo "== $name: failed, as it should"
-    grep -m 1 "error TS2345" "$scratch/$name.log" | cut -c1-200
+    # Indented: a line that begins as tsc's does is an error annotation to a CI that reads tsc's output, on a run that passed.
+    grep -m 1 "error TS2345" "$scratch/$name.log" | cut -c1-200 | sed 's/^/   /'
   else
     echo "== $name: the type check failed, but not where Claude Code's \$ is handed to the hook file's shapes" >&2
     cat "$scratch/$name.log" >&2
