@@ -11,7 +11,7 @@ import { providerFrom, type Provider } from '../src/ask.ts';
 import { CHARS_PER_TOKEN, charsOf, compact, countFrom, windowFrom, type Config, type Context, type Count, type Host, type Outcome } from '../src/compact.ts';
 import { shownAgainNote } from '../src/changed.ts';
 import { cutLine, keepOldest } from '../src/cut.ts';
-import { find, mayStandFor } from '../src/find.ts';
+import { findAnswer, mayStandFor } from '../src/find.ts';
 import { beforeTrying, configFrom, failedLine, nextStep, settingNotes, type Step } from '../src/flow.ts';
 import { PLACES, moverOf } from '../src/commands.ts';
 import { readBody, rewound } from '../src/body.ts';
@@ -316,6 +316,27 @@ let toldLate = false;
 
 /** What this process said of the number settings it does not use as they were set: each line once, a changed setting anew. */
 const toldSettings = new Set<string>();
+
+/** What this process told each session of why find cannot ask Jev: each line once a session, anew once the settings change (#143). */
+const toldUnasked = new Set<string>();
+
+/**
+ * Tells the person `line` once a session: a key refused stays refused at every call, and the line would pile up. Another
+ * line, requests limited after a key refused say, is told too. Where the session cannot be told apart, nothing is said,
+ * as a surface that cannot show a line changes nothing the plugin does.
+ */
+export async function tellOnce($: WithUi & { session: { id: () => Promise<string> } }, line: string): Promise<void> {
+  let id: string;
+  try {
+    id = await $.session.id();
+  } catch {
+    return;
+  }
+  const told = `${id}\n${line}`;
+  if (toldUnasked.has(told)) return;
+  toldUnasked.add(told);
+  say($, line);
+}
 
 /**
  * Records where this session's transcript is kept, so that a collection counts
@@ -889,6 +910,8 @@ export const register: Register = (on, options) => {
   // Run again when the settings change: what an earlier start registered is not known to hold for these settings until
   // a session.start registers anew, and till then /lossless-status says what they give now.
   findAtStart = undefined;
+  // A key set right, or set wrong again, is told of anew: the settings that loaded this are not those told of before.
+  toldUnasked.clear();
   on('session.start', async ($, e, next) => {
     await markRunning($);
     // A number setting not used as it was set is said once a process, and again once set otherwise: the session
@@ -1143,7 +1166,7 @@ export const register: Register = (on, options) => {
       const agentId = (e as { agentId?: string | undefined }).agentId;
       const messages = agentId === undefined ? ((await $.session.messages()) as readonly Message[]) : [];
       await restoreFor($, store, ticketIds(messages), partIds(messages));
-      const result = await find({
+      const answer = await findAnswer({
         files: filesOf($),
         dirs: store.read,
         messages,
@@ -1153,7 +1176,9 @@ export const register: Register = (on, options) => {
         question: (e as { question?: unknown }).question,
         agentId,
       });
-      return { result };
+      // A key refused is the person's to put right, and only the agent reads find's answer (#143).
+      if (answer.tell !== undefined) await tellOnce($, answer.tell);
+      return { result: answer.text };
     } catch (error) {
       // What the host threw names no key: keys are only ever read, not thrown.
       return { result: `[${PLUGIN}] find could not run: ${error instanceof Error ? error.message : String(error)}` };

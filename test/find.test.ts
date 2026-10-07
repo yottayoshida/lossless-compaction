@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { digest } from '../src/ask.ts';
-import { HEAD_CHARS, LISTED_CHARS, MIN_DIGITS, NAMED_ON_REFUSAL, NO_KEY, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, lineHolds, mayStandFor, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
+import { GETTING_A_KEY, HEAD_CHARS, LISTED_CHARS, MIN_DIGITS, NAMED_ON_REFUSAL, NO_KEY, VALUED_LISTED, VALUE_DIGITS, WHOLE_UP_TO, find, findAnswer, lineHolds, mayStandFor, phrasesOf, shown, ticketsIn, valuesOf, type FindInput } from '../src/find.ts';
 import { FIND_TOOL, RECALL_TOOL, moveInputOut, moveOut, partTicketText, ticketText } from '../src/store.ts';
 import type { Http, Message } from '../src/types.ts';
 import { MemoryFiles, TOLD, conversation, ok, output, questionsOf, recordingHttp, trusting, type Call, type Sent } from './helpers.ts';
@@ -291,22 +291,86 @@ test('with more results than one request takes, one that wins a later request is
   assert.ok(text.endsWith(output('step 90', 5)));
 });
 
-test('when Jev cannot be asked, the answer says so by status alone', async () => {
+test('when Jev cannot be asked, the answer says why by the status and what to do, and the person is told where it may be theirs to put right (#143)', async () => {
   const files = new MemoryFiles();
   const messages = await compacted(files, [call('a'), call('b')]);
-  const echo = `unauthorized: Bearer ${TYPESAFE.key}`;
-  const { http } = recordingHttp(() => ({ status: 401, ok: false, text: echo }));
+  const CLOUDFLARE = { kind: 'cloudflare', key: TYPESAFE.key, accountId: 'a'.repeat(32) } as const;
+  // Both providers answer in JSON (measured with a key they refused). What they answer is never repeated: an endpoint may
+  // echo the key it was sent.
+  const said = `{"error":"unauthorized: Bearer ${TYPESAFE.key}"}`;
+  const asked = async (status: number, provider: FindInput['provider'] = TYPESAFE, text = said) => {
+    const { http } = recordingHttp(() => ({ status, ok: false, text }));
+    return findAnswer(input(files, messages, 'Which?', http, { provider }));
+  };
+  const head = '[lossless-compaction] Jev could not be asked: ';
+  const back = ' recall still reads a result by its id.';
+  const configure = '/plugin configure lossless-compaction@lossless-compaction';
+  const where = `/lossless-status says where the key came from, and ${GETTING_A_KEY} how to get one`;
 
-  const text = await find(input(files, messages, 'Which?', http));
-
-  assert.equal(text, '[lossless-compaction] Jev could not be asked: HTTP 401.');
-  const thrown = await find(
+  const refused = await asked(401);
+  assert.deepEqual(refused, {
+    text: `${head}the provider refused the key (HTTP 401). Check the key with ${configure}; ${where}.${back}`,
+    tell: `Jev refused the find tool's key (HTTP 401): set it with ${configure}; until then find cannot ask Jev; ${where}`,
+  });
+  // Where the agent works, docs/usage.md is another repository's: the section is named by its address.
+  assert.ok(GETTING_A_KEY.startsWith('https://github.com/yottayoshida/lossless-compaction/') && GETTING_A_KEY.endsWith('/docs/usage.md#getting-a-key'));
+  // On Cloudflare the account id is as likely the wrong one; on TypeSafe there is none to name.
+  const onCloudflare = await asked(401, CLOUDFLARE);
+  assert.ok(onCloudflare.text.includes(`(HTTP 401). Check the key and the account id with ${configure};`), onCloudflare.text);
+  assert.ok(onCloudflare.tell?.startsWith("Jev refused the find tool's key or account id (HTTP 401): "), onCloudflare.tell ?? 'no line');
+  assert.ok(!refused.text.includes('account id') && !refused.tell?.includes('account id'));
+  // 403 is not put on the key alone: Cloudflare answers it for the key's access, the account's plan, terms not agreed to.
+  assert.deepEqual(await asked(403), {
+    text: `${head}the provider refused access (HTTP 403). The key, what it may reach or the account was refused: check the key with ${configure}, and the account with the provider; ${where}.${back}`,
+    tell: `Jev's provider refused access (HTTP 403), for the key, what it may reach or the account: check the key with ${configure}, and the account with the provider; until then find cannot ask Jev; ${where}`,
+  });
+  const deniedOnCloudflare = await asked(403, CLOUDFLARE);
+  assert.ok(deniedOnCloudflare.text.includes(`check the key and the account id with ${configure}, and the account`), deniedOnCloudflare.text);
+  assert.ok(deniedOnCloudflare.tell?.includes(`check the key and the account id with ${configure}, and the account`), deniedOnCloudflare.tell ?? 'no line');
+  // An answer not in JSON, a proxy's page say, is put on neither the key nor the provider, and the person is told nothing of it.
+  for (const status of [401, 402, 403, 429]) {
+    assert.deepEqual(await asked(status, TYPESAFE, '<html>Forbidden</html>'), {
+      text: `${head}HTTP ${status}, in an answer not in JSON, as the provider's are: something between this machine and the provider may have refused it.${back}`,
+    });
+  }
+  assert.deepEqual(await asked(402), {
+    text: `${head}the provider asks for payment (HTTP 402).${back}`,
+    tell: "Jev's provider asks for payment (HTTP 402): until the account is paid, find cannot ask Jev",
+  });
+  // Limited: on Cloudflare a day's free allocation used up answers so, which is the person's to know. Nothing asks the agent
+  // to call again.
+  assert.deepEqual(await asked(429), {
+    text: `${head}the provider is limiting requests (HTTP 429).${back}`,
+    tell: "Jev's provider is limiting requests (HTTP 429): find cannot ask Jev until it takes more, which may be the next day where a free allocation ran out",
+  });
+  assert.deepEqual(await asked(500), { text: `${head}the provider failed (HTTP 500).${back}` });
+  assert.deepEqual(await asked(404), { text: `${head}HTTP 404.${back}` });
+  const thrown = await findAnswer(
     input(files, messages, 'Which?', async () => {
       throw new Error(`down, key ${TYPESAFE.key}`);
     }),
   );
-  assert.ok(!thrown.includes(TYPESAFE.key));
-  assert.ok(thrown.includes('could not be reached'));
+  assert.deepEqual(thrown, { text: `${head}the endpoint could not be reached.${back}` });
+  for (const one of [refused, onCloudflare, thrown]) assert.ok(!JSON.stringify(one).includes(TYPESAFE.key));
+
+  // Asked in several requests at once, each refused: one answer, and one line for the person.
+  const manyFiles = new MemoryFiles();
+  const inMany = await compacted(manyFiles, Array.from({ length: 100 }, (_, i) => call(`step ${i + 1}`, 5)));
+  const { http, sent } = recordingHttp(() => ({ status: 401, ok: false, text: '{}' }));
+  assert.deepEqual(await findAnswer(input(manyFiles, inMany, 'Which?', http)), refused);
+  assert.ok(sent.length > 1, `${sent.length} requests`);
+  // A refusal is kept though a request in flight with it fails after it with no status: the status says why.
+  let calls = 0;
+  const thenDown: Http = async () => {
+    calls += 1;
+    if (calls === 1) return { status: 401, ok: false, text: '{}' };
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    throw new Error('down');
+  };
+  assert.deepEqual(await findAnswer(input(manyFiles, inMany, 'Which?', thenDown)), refused);
+  assert.ok(calls > 1, `${calls} requests`);
+  // find itself still answers with the text alone.
+  assert.equal(await find(input(files, messages, 'Which?', recordingHttp(() => ({ status: 401, ok: false, text: '{}' })).http)), refused.text);
 });
 
 test('nothing moved out, a subagent, no key, no question: each is answered without asking anything', async () => {
