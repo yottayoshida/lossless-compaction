@@ -14,7 +14,7 @@
 - **Rules decide what leaves. On this path no summary is written, and
   nothing is sent,** but where `/compact` is given instructions, which ask
   for Claude Code's summary of what is left
-  ([ADR 0031](adr/0031-a-compact-given-instructions-is-summarized.md)).
+  ([ADR 0036](adr/0036-a-compact-given-instructions-is-summarized.md)).
   Where moving results out makes room and no summary was asked for, a
   compaction takes the time of writing a few files. Results leave in this
   order until the conversation is estimated to be under the target size

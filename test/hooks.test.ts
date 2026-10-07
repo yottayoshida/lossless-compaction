@@ -193,7 +193,7 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recallHook.includes('const agentId = (e as { agentId?: string | undefined }).agentId;'), "recall, the subagent told by the event's own agentId");
   // What is put back takes along what the kept parts among it name, through earlier parts (#73).
   const restoreForAt = hooks.indexOf('async function restoreFor(');
-  assert.ok(hooks.slice(restoreForAt, hooks.indexOf('\n}\n', restoreForAt)).includes('restoreThroughParts(filesOf($), listOf($), execOf($), store.read, ids, parts)'), 'through the parts');
+  assert.ok(hooks.slice(restoreForAt, hooks.indexOf('\n}\n', restoreForAt)).includes('restoreThroughParts(filesOf($), listOf($), execOf($), ownedOf(store), ids, parts)'), 'through the parts, in the places of the settings in use: an earlier place is read alone (#116)');
   const putBack = recalled.indexOf('restoreFor($, store, new Set([id]))');
   assert.ok(recalledAt > 0 && putBack > 0 && putBack < recalled.lastIndexOf('recall(filesOf($), store.read, id)'), 'recall, put back first');
   const findHook = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
@@ -478,13 +478,15 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   assert.ok(
     handler.includes(
       'const step = nextStep({\n        trigger: e.trigger,\n        instructions: e.instructions,\n        outcome: tried.outcome,\n        inUse: tried.inUse,\n' +
-        '        given: tried.given,\n        maxAfterPercent: tried.maxAfterPercent,\n        count: tried.count,\n        keepTokens: tried.keepTokens,\n      });',
+        '        given: tried.given,\n        maxAfterPercent: tried.maxAfterPercent,\n        count: tried.count,\n        keepTokens: tried.keepTokens,\n        entries: tried.entries,\n      });',
     ),
   );
   // Handed back only where the step says so: as rebuilt, or cut. A part that could not be written goes on to the hand-over the step names.
   const carrying = hooks.slice(hooks.indexOf('async function carryOut('), hooks.indexOf('type WithTools'));
   assert.ok(carrying.includes("case 'back':\n      say($, step.line);\n      return { messages: outcome.messages };"), 'the rebuilt messages, no handle');
-  assert.ok(carrying.includes('const cut = await cutKeeping($, tried, step.after, step.at, step.over);'), 'cut where the step says');
+  assert.ok(carrying.includes('const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);'), 'cut where the step says, its length named where it was cut for it (ADR 0034)');
+  // What Claude Code handed over is counted before anything is rebuilt: the larger of the messages and the conversation as sent.
+  assert.ok(hooks.includes('entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),'), 'the entries, as Claude Code handed them over');
   assert.ok(carrying.includes('return cut ?? carryOut($, e, next, tried, step.otherwise);'), 'or, when nothing could be cut, what the step says instead');
   // What is cut is what the compaction rebuilt, never the messages the hook was handed, which carry Claude Code's handles.
   const keeping = hooks.slice(hooks.indexOf('async function cutKeeping('), hooks.indexOf('async function carryOut('));
@@ -502,7 +504,7 @@ test('a conversation too full, or with nothing to move out, is cut in place of a
   // What `find` says of itself speaks of parts kept either way, and its sentences stand apart as they did.
   assert.ok(hooks.includes("moved out of this conversation and the parts of it that were ` +\n            'kept, the one a question is about, and returns it unchanged. Ask in words what the result contains or is about;"));
   // The line names the messages kept by their place in the conversation: from behind what stays in front, up to the cut.
-  assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over }));'));
+  assert.ok(keeping.includes('say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));'));
 });
 
 test('a /compact left undone is decided in src/: by who asked, with what, what Claude Code says is in use, and what could have left (ADR 0015)', () => {
@@ -529,6 +531,9 @@ test('a /compact left undone is decided in src/: by who asked, with what, what C
   const kept = handler.indexOf("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);");
   const abortedAgain = handler.indexOf(abort, aborted + 1);
   assert.ok(kept > 0 && abortedAgain > kept && abortedAgain < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'and right after what was attached is kept');
+  // A `/compact` by hand that would have been left undone, cut for its length, is left undone where what was attached cannot be kept (ADR 0034).
+  const undone = handler.indexOf("if ('why' in ready && step.step === 'cut' && step.otherwise.step === 'skip') {\n        say($, `not cut for its length: ${ready.why}`);\n        result = { skip: step.otherwise.why };");
+  assert.ok(undone > abortedAgain && undone < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'before what was attached sends it to the summary');
   assert.equal(carrying.match(/return \{ skip: /g)?.length, 1);
 });
 
@@ -603,7 +608,7 @@ test('recall names find in its description when find is registered, and only the
   assert.match((await run(provider, true)).said.join('\n'), /: the find tool could not be registered: refused$/m);
 });
 
-test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result (ADR 0016)', () => {
+test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result (ADR 0016, #116)', () => {
   assert.ok(hooks.includes(`on('command.run', { command: '${STORE_COMMAND}' }`), 'the matcher is spelled as STORE_COMMAND');
   const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
   assert.ok(start.includes('await $.command.register({\n        name: STORE_COMMAND,'), 'registered at the start');
@@ -612,18 +617,25 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   assert.equal(hooks.split('$.tool.register(').length - 1, 2);
   const handler = hooks.slice(hooks.indexOf("on('command.run'"), hooks.indexOf(hookOn('tool.call', RECALL_TOOL)));
   assert.ok(handler.includes('const store = await storeOf($, options);'), 'the place as the repository cannot decide it');
-  assert.ok(handler.includes('for (const dir of store.read)'), 'every place read');
-  // A place is counted as the clean-up takes it: a plain directory, not a link.
-  assert.ok(handler.includes('const there = await plainDirsOf($, store);'), 'the places the clean-up reads');
-  assert.ok(handler.includes('for (const dir of store.read) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
+  // A place is counted as the clean-up takes it: a plain directory, not a link. Those of the settings in use first.
+  assert.ok(handler.includes('const owned = ownedOf(store);\n      const there = await plainDirsOf($, owned);'), 'the places the clean-up reads');
+  assert.ok(handler.includes('for (const dir of owned) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
+  // Then every other place read, the earlier ones, counted the same way and said as never cleaned up (#116).
+  assert.ok(handler.includes('const before = store.read.filter((dir) => !owned.includes(dir));'), 'every place read');
+  assert.ok(handler.includes('for (const dir of before) earlier.push(plain.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
-  assert.ok(collecting.includes('const dirs = await plainDirsOf($, store);'), 'the same places as the clean-up');
+  assert.ok(collecting.includes('const dirs = await plainDirsOf($, ownedOf(store));'), 'the same places as the clean-up, never an earlier one (#116)');
   const plain = hooks.slice(hooks.indexOf('async function plainDirsOf('), hooks.indexOf('async function collectOnce('));
   assert.ok(plain.includes("if (found && found.kind === 'dir' && found.isLink !== true) dirs.push(dir);"));
   // What an error says may name a path: it is not shown.
   assert.ok(!handler.includes('error.message'));
   assert.ok(handler.includes('const gc = await stateIn(files, list, there);'));
-  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set) };'));
+  // The machines it is used from, read from the same places, and this machine's id (ADR 0032).
+  assert.ok(handler.includes('const readable = marks === null ? null : await readableSessions(files, list, gc.roots, marks);'));
+  // It reads this machine's id and makes none.
+  assert.ok(handler.includes('const self = markName(await machineOf($, options, false), session);'));
+  assert.ok(handler.includes('const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };'));
+  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set, machines, earlier) };'));
   // What answers it reads nothing itself: no recall, no read of a file.
   assert.ok(!/recall\(|\$\.fs\.read\(|files\.read\(/.test(handler));
 });
@@ -690,7 +702,8 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes('const record = await noteTried(files, store.write, state, now);'));
   assert.ok(collecting.includes('await stoppedAs(files, store.write, record, live.kind);'));
-  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, named.kind);'));
+  // What stopped it, one stored thing each, is recorded with it (#114).
+  assert.ok(collecting.includes('await stoppedAs(files, store.write, record, named.kind, named.unread, named.more);'));
   assert.ok(collecting.includes('stopped ??= done.kind;'));
   assert.ok(collecting.includes('if (stopped === null) await noteRun(files, store.write, now);\n    else await stoppedAs(files, store.write, record, stopped);'));
   assert.ok(collecting.includes("if (tried !== null) await stoppedAs(filesOf($), tried.dir, tried.record, 'unexpected');"));
@@ -700,7 +713,24 @@ test('a clean-up that stops records the kind, never its words: from where it sto
   assert.ok(collecting.includes('await stoppedAs(files, store.write, record, unseen.kind);'));
   const witnessed = collecting.indexOf('const unseen = await checkWitnesses(');
   assert.ok(witnessed > collecting.indexOf('const live = await liveIds(') && witnessed < collecting.indexOf('const inTrash = await putBackNamed('), 'looked at after the search, before the trash');
-  assert.equal(collecting.split('stoppedAs(').length - 1, 7, 'six places it stops and the declaration');
+  // Another machine's mark stops it after the try is noted and before anything of this machine's transcripts is read (ADR 0032).
+  assert.ok(collecting.includes("await stoppedAs(files, store.write, record, 'shared');"));
+  const shared = collecting.indexOf('const shared = sharedWith(marks, self, session, readable);');
+  // The marks of other names whose transcripts are read here are taken off first, from the places the clean-up reads.
+  const taken = collecting.indexOf('await takeOffMarks(remove, dirs, readMarks(marks, self, session, readable).map((mark) => mark.name));');
+  assert.ok(taken > 0 && taken < shared, 'taken off before the marks left are looked at');
+  assert.ok(collecting.includes('const readable = marks === null ? null : await readableSessions(files, list, state.roots, marks);'), "this machine's transcripts are where the sessions of the marks are looked for");
+  assert.ok(shared > collecting.indexOf('const record = await noteTried(') && shared < collecting.indexOf('await writeSentinel('), 'after the try is noted, before the sentinel');
+  // Each session marks the store, whether it collects or not, once the store is private.
+  const marked = collecting.indexOf('if (unsafe === null) await noteMachineOf($, store, options);');
+  assert.ok(marked > 0 && marked < collecting.indexOf('if (whyNotNow(state, now) !== null) return;'), 'marked before the week is looked at');
+  // And at each compaction, of the main conversation and a subagent's, once its place is recorded.
+  const attempting = hooks.slice(hooks.indexOf('async function placeOf('), hooks.indexOf('async function placeOf(') + 2500);
+  assert.ok(attempting.includes('await noteRootOf($, place, options);\n  await noteMachineOf($, place, options);'), 'at a compaction');
+  assert.ok(hooks.includes('await noteRootOf($, store, options);\n      await noteMachineOf($, store, options);'), "at a subagent's compaction");
+  // A mark is named by the session where the machine has no id.
+  assert.ok(hooks.includes('const name = markName(await machineOf($, options), session);'));
+  assert.equal(collecting.split('stoppedAs(').length - 1, 8, 'seven places it stops and the declaration');
   assert.ok(!/noteStopped\([^)]*\.stop\b/.test(collecting));
 });
 
@@ -1015,7 +1045,7 @@ test('handed to the built-in summary as it was, the conversation is kept with th
   assert.ok((await partsNamed(files, conversationKept)).includes('PROBE-HOOK-WORD: walrus'));
 });
 
-test('a /compact given instructions hands what is left, once moved out, to the summary with them, though it fits; an automatic compaction handed the same instructions is handed back rebuilt (ADR 0031)', async () => {
+test('a /compact given instructions hands what is left, once moved out, to the summary with them, though it fits; an automatic compaction handed the same instructions is handed back rebuilt (ADR 0036)', async () => {
   forgetMove();
   // Every result may leave, and what is left fits: the step that gives no summary, but for the instructions.
   const hook = await compactionHook({ keepTokens: 0 });
@@ -1095,4 +1125,15 @@ test('where what Claude Code attached cannot be written, the conversation is not
   assert.match(answer.skip ?? '', /nothing could be kept \(could not write: ENOSPC\), so the summary did not run/);
   assert.equal(asked, 0);
   assert.ok(logged.includes(`${PLUGIN_NAME}: built-in compaction: what Claude Code attached to the messages could not be kept (could not write: ENOSPC)`), logged.join(' | '));
+});
+
+test("the places written to under these settings are noted in the plugin's own store and read after the current ones, with the defaults beside a storeDir of your own where the repository did not set what they are built from (#116)", () => {
+  const at = hooks.indexOf('async function storeOf(');
+  const storing = hooks.slice(at, hooks.indexOf('/** The provider', at));
+  // After the repository's settings were looked at: a place they decide is refused before anything is noted.
+  assert.ok(storing.indexOf('placeTaints(taints, options)') < storing.indexOf('earlierOf($, store.write)'));
+  assert.ok(storing.includes('const defaults = storeDirSet(options) && taints !== null && variableTaints(taints).length === 0 ? defaultPlacesOf(places) : [];'), 'the defaults only where HOME and the like are your own');
+  assert.ok(storing.includes('return withEarlier(store, [...(await earlierOf($, store.write)), ...defaults]);'));
+  const noting = hooks.slice(hooks.indexOf('function earlierOf('), hooks.indexOf('/** The provider', at));
+  assert.ok(noting.includes('() => $.store.get(PLACES_KEY),\n    (places) => $.store.set(PLACES_KEY, places),'), "in the plugin's own store, through notePlace (test/store.test.ts)");
 });

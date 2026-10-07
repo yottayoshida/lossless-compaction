@@ -37,6 +37,15 @@ messages, at 40 as well:
 lossless-compaction: no summary, messages 2-22 of 30 kept in 11 parts: moved 0 of 3 tool results out (609241 -> 224393 chars, about 75804 of 231000 tokens in use) in 237 ms
 ```
 
+A conversation that holds 1,536 of the 4096 entries Claude Code hands a
+plugin is cut down to 1,024 messages the same way, however much room is left
+([why](limits.md#when-the-conversation-is-too-long)). From a made-up
+session of 3,400 short messages, at a `/compact` by hand:
+
+```text
+lossless-compaction: no summary, messages 2-2378 of 3400 kept in 3 parts for its length, 3400 of the 4096 entries Claude Code hands a plugin: moved 0 of 0 tool results out (83181 -> 26742 chars) in 86 ms
+```
+
 The first message stays, and one message lists the parts where the others
 stood ([what stays, and how far a cut goes](limits.md#when-the-conversation-is-too-full)):
 
@@ -58,7 +67,7 @@ Edit: /work/notes.md -> written
 
 To have Claude Code's summary, give `/compact` instructions: what can leave
 is moved out, and what is left is summarized with them, the conversation
-kept first (ADR 0031). Any words will do, and they are what the summary is
+kept first (ADR 0036). Any words will do, and they are what the summary is
 told to keep or stress. A `/compact` typed without them asks for none.
 
 In a session where the plugin is enabled and is not running, a line says so
@@ -88,7 +97,7 @@ back:
 ```
 
 With no key, `find` looks through what was moved out on this machine and
-sends nothing (#110, ADR 0032). A phrase of twelve characters or more in
+sends nothing (#110, ADR 0037). A phrase of twelve characters or more in
 double quotes is looked for as written, and the one result that holds it
 comes back as it was; several are listed. A number, a checksum or a code the
 question names is looked for a line at a time, and the results with such a

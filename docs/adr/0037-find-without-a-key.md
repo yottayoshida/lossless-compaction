@@ -1,4 +1,4 @@
-# 0032. `find` without a key
+# 0037. `find` without a key
 
 - Status: Accepted
 - Date: 2026-10-06

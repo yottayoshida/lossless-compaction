@@ -298,7 +298,7 @@ export type Line = {
   /**
    * `moved`: the plugin compacted. `undone`: it left a `/compact` with nothing to move out
    * and room left as it was, and nothing was compacted. The others name why the built-in
-   * compaction ran: `asked`, a `/compact` given instructions, after moving out made room (ADR 0031).
+   * compaction ran: `asked`, a `/compact` given instructions, after moving out made room (ADR 0036).
    */
   outcome: 'moved' | 'too-much' | 'asked' | 'nothing' | 'other' | 'undone' | 'cut' | 'rebuilt';
   moved: number;

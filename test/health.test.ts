@@ -212,3 +212,53 @@ test('the oldest result is the oldest blob of every place, by its time; none, nu
   empty.dirs.add(`${DIR}/blobs`);
   assert.equal(await oldestResult(list(empty), [DIR, '/nowhere']), null);
 });
+
+test('a stop by what the clean-up follows is recorded with each id and why, read back as such, and /lossless-store says how to go on for each (#114)', async () => {
+  const files = new MemoryFiles();
+  await noteRoot(files, DIR, ROOT, NOW - 30 * DAY);
+  const record = await noteTried(files, DIR, await stateIn(files, list(files), [DIR]), NOW);
+  const unread = [
+    { id: hex('1'), why: 'text-missing' as const },
+    { id: hex('2'), why: 'text-changed' as const },
+    { id: hex('3'), why: 'text-unreadable' as const },
+    { id: hex('4'), why: 'in-trash' as const },
+  ];
+  await noteStopped(files, DIR, record, 'part', NOW, unread);
+  const gc = await stateIn(files, list(files), [DIR]);
+  assert.deepEqual(gc.stopped, { at: NOW, kind: 'part', unread });
+  const text = storeReport([await countStore(files, list(files), DIR, NOW)], gc, NOW, false);
+  assert.ok(text.includes(`    ${hex('1')}: its text, blobs/<id>.txt, is not there; where you removed it yourself, remove index/<id>.json too`));
+  assert.ok(text.includes(`    ${hex('2')}: its text, blobs/<id>.txt, is not what was stored`));
+  assert.ok(text.includes(`    ${hex('3')}: its text, blobs/<id>.txt, could not be read; make it readable to you, or move both its files out of the store, after which what only it named is no longer kept`));
+  assert.ok(!text.includes('more, named once'), 'none beyond the four');
+  assert.ok(text.includes(`    ${hex('4')}: it is named and in the trash, and could not be put back; move its files from trash/<day>/`));
+  // What the record holds is read as ids and causes of the list, at most twenty: nothing else it holds is kept.
+  const many = Array.from({ length: 25 }, (_, at) => ({ id: hex(at.toString(16).padStart(2, '0')), why: 'text-missing' as const }));
+  await files.write(`${DIR}/gc.json`, JSON.stringify({ ...record, stopped: { at: NOW, kind: 'part', unread: [{ id: PATH_MARK, why: 'entry' }, { id: hex('5'), why: MARK }, ...many] } }));
+  const read = (await stateIn(files, list(files), [DIR])).stopped;
+  assert.equal(read?.unread?.length, 20);
+  // Recorded past twenty, the rest are counted, and said.
+  const again = await noteTried(files, DIR, await stateIn(files, list(files), [DIR]), NOW + 1);
+  await noteStopped(files, DIR, again, 'part', NOW + 1, many);
+  const counted = await stateIn(files, list(files), [DIR]);
+  assert.deepEqual([counted.stopped?.unread?.length, counted.stopped?.more], [20, 5]);
+  assert.ok(storeReport([await countStore(files, list(files), DIR, NOW)], counted, NOW, false).includes('    and 5 more, named once these are gone past'));
+  assert.ok(!JSON.stringify(read).includes(PATH_MARK) && !JSON.stringify(read).includes(MARK));
+});
+
+test('the places results were kept in before are said after those of the settings in use, counted the same way, as read and never cleaned up (#116)', async () => {
+  const files = new Guarded();
+  files.dirs.add(DIR);
+  files.dirs.add('/data/earlier');
+  files.dirs.add('/data/earlier/blobs');
+  await put(files, `/data/earlier/blobs/${hex('a')}.txt`, 'x'.repeat(40), NOW - DAY);
+  const gc = await stateIn(files, list(files), [DIR]);
+  const counted = [await countStore(files, list(files), DIR, NOW)];
+  const earlier = [await countStore(files, list(files), '/data/earlier', NOW), { dir: '/media/gone', missing: true as const }];
+  const text = storeReport(counted, gc, NOW, true, null, earlier);
+  assert.match(text, /^Results are kept in one place, set by storeDir:/);
+  assert.match(text, /\n\nRead as well, never cleaned up: 2 places, written to before under your settings or the default ones beside storeDir \(docs\/limits\.md, "The files"\):\n\n\/data\/earlier\n  results: 1 \(40 B\); trash: empty\n\n\/media\/gone\n  not there, or not a plain directory\n\nclean-up:/);
+  // None before: as it was.
+  assert.equal(storeReport(counted, gc, NOW, true, null, []), storeReport(counted, gc, NOW, true));
+  assert.ok(!storeReport(counted, gc, NOW, true).includes('Read as well'));
+});

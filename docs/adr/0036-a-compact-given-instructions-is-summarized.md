@@ -1,4 +1,4 @@
-# 0031. A `/compact` given instructions is summarized
+# 0036. A `/compact` given instructions is summarized
 
 - Status: Accepted
 - Date: 2026-10-06

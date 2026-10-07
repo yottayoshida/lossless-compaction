@@ -14,9 +14,15 @@ import {
   isStored,
   moveInputOut,
   moveOut,
+  defaultPlacesOf,
   oldStoreDirFrom,
+  notePlace,
+  ownedOf,
   partTicketText,
+  placesAfter,
   placesOf,
+  withEarlier,
+  PLACES_KEPT,
   readInputTicket,
   readTicket,
   recall,
@@ -24,6 +30,7 @@ import {
   storeDirFrom,
   ticketText,
   type Moved,
+  type StoreDirs,
 } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles, output } from './helpers.ts';
@@ -585,4 +592,64 @@ test('the hook answers to the name the ticket tells the model to call', async ()
   const hook = await readFile(new URL('../hooks/move-out.ts', import.meta.url), 'utf8');
 
   assert.ok(hook.includes(`on('tool.call', { tool: '${RECALL_TOOL}' }`));
+});
+
+test('the places written to are kept newest first, each once, one not found staying, and read after those of the settings in use, which alone are owned (#116)', () => {
+  const A = '/data/a';
+  const B = '/data/b';
+  assert.deepEqual(placesAfter(undefined, A), [A]);
+  // What is not an absolute path is dropped; one used again goes first, and is there once.
+  assert.deepEqual(placesAfter([B, A, 'relative', 3, B], A), [A, B]);
+  assert.deepEqual(placesAfter([A], B), [B, A]);
+  // The oldest goes past PLACES_KEPT, and no other: a place not found is not looked for here.
+  const many = Array.from({ length: PLACES_KEPT + 3 }, (_, at) => `/data/${at}`);
+  assert.deepEqual(placesAfter(many, A), [A, ...many.slice(0, PLACES_KEPT - 1)]);
+
+  // Read after the places of the settings in use, which alone are cleaned up, made private and put back into.
+  const store = { write: A, read: [A] };
+  const both = withEarlier(store, [B, A, B]);
+  assert.deepEqual(both, { write: A, read: [A, B], owned: [A] });
+  assert.deepEqual(ownedOf(both), [A]);
+  // Nothing earlier: as before, all of it owned.
+  assert.equal(withEarlier(store, [A]), store);
+  assert.deepEqual(ownedOf(store), [A]);
+  // The defaults, under the current name and the old one.
+  assert.deepEqual(defaultPlacesOf({ HOME: '/home/u' }), ['/home/u/.claude/lossless-compaction', '/home/u/.claude/jev-lossless-compaction']);
+  assert.deepEqual(defaultPlacesOf({ HOME: '.' }), []);
+});
+
+test('once storeDir changes, a ticket written before comes back from the place it was written to, read as storeOf reads it (#116)', async () => {
+  const files = new MemoryFiles();
+  const A = '/data/a';
+  const B = '/data/b';
+  const moved = await moveOut(files, A, 'Read', 'what a file held, long enough to leave'.repeat(20));
+  assert.ok(!('reason' in moved));
+  // Written under A, which was noted; storeDir is now B.
+  const noted = placesAfter(placesAfter(undefined, A), B);
+  const store = withEarlier((await placesOf(files, B, { HOME: '/home/u' })) as StoreDirs, noted.slice(1));
+  assert.deepEqual(store, { write: B, read: [B, A], owned: [B] });
+  const found = await recall(files, store.read, moved.id);
+  assert.ok(!('error' in found), JSON.stringify(found));
+  assert.equal(found.text, 'what a file held, long enough to leave'.repeat(20));
+  // As before this, read from B alone, it is not found.
+  assert.ok('error' in (await recall(files, [B], moved.id)));
+});
+
+test('the list of places is written only where it changed, left as it is where it cannot be read, and used as read where it cannot be written (#116)', async () => {
+  const A = '/data/a';
+  const B = '/data/b';
+  const written: unknown[] = [];
+  const set = async (places: string[]) => void written.push(places);
+  // Used again: nothing written, the earlier ones returned.
+  assert.deepEqual(await notePlace(async () => [B, A], set, B), [A]);
+  assert.deepEqual(written, []);
+  // A new place: written first.
+  assert.deepEqual(await notePlace(async () => [A], set, B), [A]);
+  assert.deepEqual(written, [[B, A]]);
+  // The list cannot be read: nothing read, nothing written over it.
+  written.length = 0;
+  assert.deepEqual(await notePlace(async () => Promise.reject(new Error('unreadable')), set, B), []);
+  assert.deepEqual(written, []);
+  // It cannot be written: what was read is used all the same.
+  assert.deepEqual(await notePlace(async () => [A], async () => Promise.reject(new Error('full')), B), [A]);
 });

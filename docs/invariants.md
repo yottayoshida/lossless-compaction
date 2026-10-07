@@ -21,6 +21,7 @@ was.
 
 - `a result that does not read back as it was written stays in the conversation`
 - `a result that cannot be stored stays in the conversation and is counted`
+- `an entry that does not read back as it was written is not relied on, and the result stays where it is: no ticket for what recall cannot find (I1)`
 - `a value that cannot be stored stays in its call, as it was, and is counted`
 - `the second round of a /compact by hand tries no middle the first tried: one that could not be written is counted once`
 - `a run that cannot be stored stays where it stood, and is counted`
@@ -60,20 +61,32 @@ that is a link; every recorded place gone; a kept part that cannot be read;
 something named, by a transcript or by a part, that is in the trash and
 cannot be put back; a conversation the plugin compacted with tickets that is
 still there under its session id, whose own transcript does not hold the
-newest ticket noted for it (ADR 0027): each stops the clean-up before
-anything moves to the trash or is removed. A noted ticket whose conversation
-is no longer there lets go of it.
+newest ticket noted for it (ADR 0027); a store marked by a session of
+another machine whose transcript this one cannot read, or whose marks
+cannot be listed (ADR 0032): each stops the clean-up before anything moves
+to the trash or is removed. A noted ticket whose conversation is no longer
+there lets go of it. A stop by what it follows — a kept part, or something named
+in the trash — names every one it reaches in that try, with why, and
+`/lossless-store` says how the clean-up goes on for each (#114). An entry
+that does not read, over a text that is the one stored under its id, does
+not stop it: the text is read as a part's, which keeps more, never less
+(ADR 0033).
 
 - `the ids in transcripts are read per project; a place that is gone is dropped, one that cannot be read stops it all`
 - `a place that is there but cannot be looked at or listed stops it all: its conversations may still be resumed`
 - `a project directory that is a link stops it all: a search does not follow it`
 - `with every recorded place gone, nothing is collected: an empty set would name nothing in use`
 - `a collection stops when a kept part it is to follow cannot be read`
+- `a clean-up stopped by what it follows names each of them and why, in one try: a text not there, one changed; an entry of another shape over a sound text is read (#114, ADR 0033)`
+- `a kept part whose entry does not read, its text the one stored, is read as a part: what it names comes back from the trash and is counted as named (ADR 0033)`
+- `a stop by what the clean-up follows is recorded with each id and why, read back as such, and /lossless-store says how to go on for each (#114)`
 - `where what is named cannot be put back from the trash, the collection is stopped before it counts what is named`
 - `a clean-up stops where a conversation compacted with tickets is still there and the search does not find the ticket noted for it: renamed, compressed, spelled otherwise, or moved inside its directory (ADR 0027)`
 - `with a witness noted, a transcript renamed keeps every result; with the conversation gone, the clean-up goes on as before (ADR 0027)`
 - `a conversation written otherwise from its start, or from some point on, stops the clean-up too: its newest ticket is its witness, wherever it was written (ADR 0027)`
 - `the witness of a compaction is a ticket it put in, where it put any, before what stays behind a cut; at a start the one noted stays while the conversation shows it (ADR 0027)`
+- `a mark none of whose sessions has a transcript here keeps a clean-up from running; this session's, and a container's made again over the same transcripts, do not (ADR 0032)`
+- `a machine's id is made once and read after; two sessions making it together keep one, whichever linked first (ADR 0032)`
 
 **I6. What a cut takes out is kept first, and a summary does not run on a
 refused write.** The messages a cut takes out are kept in parts before they
@@ -99,7 +112,9 @@ it.
 **I8. A conversation holding what a rebuilt message cannot carry is not
 rebuilt.** Where a conversation holds a block of a kind the plugin does not
 know, an image or a document outside a tool result, or as many messages as
-Claude Code shows a plugin at most, the plugin moves nothing out of it.
+Claude Code shows a plugin at most, the plugin moves nothing out of it. One
+is cut for its length well before that, where a compaction comes in time
+([limits](limits.md#when-the-conversation-is-too-long), ADR 0034).
 
 - `a conversation is rebuilt only when every block in it is of a kind a rebuilt message carries`
 - `a conversation of as many messages as the host shows at most is not rebuilt: older ones may be missing`
@@ -145,6 +160,14 @@ Claude Code shows a plugin at most, the plugin moves nothing out of it.
   what only they name goes to the trash; from there it comes back within the
   week, and is gone after it
   ([how long results are kept](limits.md#how-long-results-are-kept)).
+- **A machine that has not marked the store.** A session marks a store at
+  its start and at each compaction, from this version on, by its machine's id
+  or, with none, by its own. A machine that runs an earlier version, or has
+  not started a session since, leaves no mark: until it does, a clean-up on
+  another machine moves what only its transcripts name, as before. Two
+  machines that hold one id, copied with a home directory, mark the store as
+  one, and are not told apart; nor is a machine one of whose latest sessions'
+  transcripts was copied here, which is taken for this one (ADR 0032).
 - **A result written again within its first day of a new use.** The day is
   counted from the file's time, which storing the same text again does not
   change: such a result can go to the trash before a transcript names it, and

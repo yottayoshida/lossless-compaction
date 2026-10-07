@@ -8,6 +8,8 @@
   kept and no summary runs. What 0007 decided for every other hand-over
   stands, and so does
   [0015](0015-a-compact-with-nothing-to-move-and-room-left-is-not-summarized.md).
+- Extended by [0034](0034-a-conversation-near-what-claude-code-hands-over-is-cut.md):
+  a conversation is cut for its length as well.
 
 ## Context
 
@@ -47,7 +49,7 @@ and too much is still in use, or nothing was moved out and 0015 does not
 leave the `/compact` undone:
 
 1. With instructions given to `/compact`, as before: kept, then summarized.
-   A summary that was asked for is given. (Amended by ADR 0031: also where
+   A summary that was asked for is given. (Amended by ADR 0036: also where
    moving out made room, on what is left.)
 2. Otherwise the oldest messages are kept in parts, as 0007 keeps a
    conversation, and one message that lists the parts stands where they

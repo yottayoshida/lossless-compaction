@@ -396,6 +396,12 @@ node bench/main.ts session-report --from bench/results/2026-10-05-session
 
 ## Running it
 
+The plugin runs from its directory, as `lossless-compaction@inline`, with
+Claude Code's own configuration. It notes the places it writes to in one
+list under `~/.claude/plugins/store/` (ADR 0035), so a run reads the stores
+of earlier runs, and your default places, as well as its own box. They are
+read only, by the ids the run's conversations hold.
+
 ```sh
 export BENCH_BOX=~/somewhere/outside/the/repository
 node bench/main.ts build                                   # every conversation but `large`, which is built by name
@@ -415,6 +421,7 @@ BENCH_JEV_ENV=~/somewhere/jev.env node bench/main.ts pick     # asks Jev: no ses
 BENCH_JEV_ENV=~/somewhere/jev.env node bench/main.ts pick --questions test/fixtures/values/held-out.json   # the questions of a file
 BENCH_JEV_ENV=~/somewhere/jev.env node bench/main.ts find     # results and short, with and without `find`
 BENCH_JEV_ENV=~/somewhere/jev.env node bench/main.ts find --traces opaque --variants find   # only the arm with `find`
+node bench/messages.ts ~/.claude/projects --since 2026-10-01   # how many entries your sessions held at each compaction: counts only, nothing is sent
 ```
 
 A run that is stopped goes on where it was: each unit is written once, when

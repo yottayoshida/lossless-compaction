@@ -198,7 +198,7 @@ test('the plugin\'s line is read in every form it has, and from the function tha
   assert.equal(plain?.window, undefined);
   assert.equal(plain?.ms, 2400);
   assert.equal(readLine(`built-in compaction on what is left, too much is still in use: ${reportLine(report)}`)?.outcome, 'too-much');
-  // Asked for with instructions after moving out made room (ADR 0031): the line src/flow.ts writes, read as summarized.
+  // Asked for with instructions after moving out made room (ADR 0036): the line src/flow.ts writes, read as summarized.
   const asked = nextStep({ trigger: 'manual', instructions: 'Summarize the conversation so far.', outcome: { messages: [], enough: true, target: 0, report }, inUse: 0, given: false, maxAfterPercent: 75, count: undefined, keepTokens: 0 });
   assert.equal(asked.step, 'summarize');
   assert.equal(readLine('line' in asked ? asked.line : '')?.outcome, 'asked');
@@ -3087,7 +3087,7 @@ test('a compaction the record says was asked for is replayed as a /compact typed
   assert.deepEqual([given.window, given.byHand], [167_000, false]);
 });
 
-test('a /compact replayed with instructions goes to the summary though moving out made room, as the hook hands it (ADR 0031)', async () => {
+test('a /compact replayed with instructions goes to the summary though moving out made room, as the hook hands it (ADR 0036)', async () => {
   const read = (id: string, text: string) => [
     JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: `/w/${id}.log` } }], usage: { input_tokens: 5, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 0 } } }),
     JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] } }),

@@ -124,7 +124,7 @@ export function apiBefore(rows: readonly Row[], line: number): unknown[] {
 
 /**
  * `instructions`: that the compaction was given some. The record does not keep their text; a summary asked for with them
- * is told by their being there (ADR 0031).
+ * is told by their being there (ADR 0036).
  */
 export async function replay(
   record: string,

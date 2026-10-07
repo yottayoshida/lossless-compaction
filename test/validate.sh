@@ -30,6 +30,10 @@ copy_to() {
 echo "== the working tree"
 $claude plugin validate --strict "$root/.claude-plugin/plugin.json"
 
+# The marketplace a person adds, and the plugin entry it offers, as Claude Code reads them.
+echo "== the marketplace"
+$claude plugin validate --strict "$root"
+
 copy_to "$scratch/unbroken"
 if ! $claude plugin validate --strict "$scratch/unbroken/.claude-plugin/plugin.json" > "$scratch/unbroken.log" 2>&1; then
   echo "== a copy with no patch applied fails: the copies below would fail for being copies" >&2

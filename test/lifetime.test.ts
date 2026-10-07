@@ -440,14 +440,15 @@ test('where what is named cannot be put back from the trash, the collection is s
   // A mv that moves nothing: the part named stays in the trash, and nothing may be collected against what it would have named.
   const stuck = await putBackNamed(files, list(files), commands(files, { mvExit: 1 }).exec, [DIR], new Set([outer]));
   assert.deepEqual(stuck, new Set([result, inner, outer]));
-  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), stuck as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  const trashSaid = (id: string) => ({ stop: `${id}: it is named and could not be put back from the trash; /lossless-store says how to go on`, kind: 'move', unread: [{ id, why: 'in-trash' }] });
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), stuck as Set<string>), trashSaid(outer));
   // The part named comes back and the part it names does not: stopped at the inner one, which only the outer names.
   const moved = commands(files).exec;
   const onlyOuter: Exec = async (argv, timeoutMs) => (argv.some((arg) => arg.includes(inner) || arg.includes(result as string)) ? { exitCode: 1, stdout: '', truncated: false } : moved(argv, timeoutMs));
   const half = await putBackNamed(files, list(files), onlyOuter, [DIR], new Set([outer]));
   assert.deepEqual(half, new Set([result, inner]));
   assert.ok(files.files.has(`${DIR}/index/${outer}.json`));
-  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), half as Set<string>), { stop: 'what is named could not be put back from the trash', kind: 'move' });
+  assert.deepEqual(await namedThroughParts(files, [DIR], new Set([outer]), half as Set<string>), trashSaid(inner));
   // A trash that cannot be listed stops it too.
   const unlisted = async (path: string) => {
     if (path.includes('/trash/')) throw new Error('EACCES');
@@ -610,7 +611,7 @@ test('what the record of the clean-up holds is read as a count and a kind of the
   assert.equal((await stateIn(files, list(files), [DIR, OLD])).tries, 0);
   await write(OLD, { lastRun: NOW + DAY, tried: NOW + 2 * DAY, tries: 3, stopped: null });
   assert.equal((await stateIn(files, list(files), [DIR, OLD])).tries, 3, 'the same end in both: the more');
-  assert.deepEqual([...STOP_KINDS].sort(), ['move', 'part', 'place', 'too-many', 'trash', 'unexpected', 'unread']);
+  assert.deepEqual([...STOP_KINDS].sort(), ['move', 'part', 'place', 'shared', 'too-many', 'trash', 'unexpected', 'unread']);
 });
 
 test("a stop is not recorded over what another session wrote since this try started: its end, or its own try, stands", async () => {
@@ -628,4 +629,27 @@ test("a stop is not recorded over what another session wrote since this try star
   await noteTried(files, DIR, await read(), NOW + DAY + 1000);
   await noteStopped(files, DIR, first, 'move', NOW + DAY + 2000);
   assert.deepEqual({ tries: (await read()).tries, stopped: (await read()).stopped }, { tries: 2, stopped: null });
+});
+
+test('a kept part whose entry does not read, its text the one stored, is read as a part: what it names comes back from the trash and is counted as named (ADR 0033)', async () => {
+  const files = new MemoryFiles();
+  const [result] = await storeWith(files, [output('read once', 40)], 3 * DAY);
+  const part = await storePart(files, `[call Read t1] {"file_path":"/p/a"}\n[result t1]\n${ticketText({ tool: 'Read', bytes: 40, id: result as string })}`, 3 * DAY);
+  const { exec } = commands(files);
+  // The result alone goes to the trash, the part named by a transcript staying; then its entry stops reading.
+  assert.deepEqual(await collect(list(files), exec, DIR, new Set([part]), NOW), { trashed: 1, restored: 0, removed: 0 });
+  files.files.set(`${DIR}/index/${part}.json`, '');
+  assert.equal(await restoreThroughParts(files, list(files), exec, [DIR], new Set(), new Set([part])), 1);
+  assert.ok(files.files.has(`${DIR}/blobs/${result}.txt`), 'what it names is back');
+  const named = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok(!('stop' in named) && named.has(result as string), 'and counted as named');
+  // An entry of another shape than every version writes reads no better: the text is read all the same.
+  files.files.set(`${DIR}/index/${part}.json`, '{}');
+  const shaped = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok(!('stop' in shaped) && shaped.has(result as string), 'an entry of another shape too');
+  // Its text changed too: not read, and the collection stops on it.
+  files.files.set(`${DIR}/blobs/${part}.txt`, 'not what was stored');
+  const stopped = await namedThroughParts(files, [DIR], new Set([part]));
+  assert.ok('stop' in stopped);
+  assert.deepEqual(stopped.unread, [{ id: part, why: 'text-changed' }]);
 });

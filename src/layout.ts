@@ -28,6 +28,9 @@ export const gcFile = (dir: string) => `${dir}/gc.json`;
 /** One file for each conversation compacted with tickets: its newest, looked for in its transcript (ADR 0027). */
 export const witnessDir = (dir: string) => `${dir}/witness`;
 export const witnessPath = (dir: string, key: string) => `${witnessDir(dir)}/${key}.json`;
+/** One file for each machine the store is used from, named by its id (ADR 0032). */
+export const machinesDir = (dir: string) => `${dir}/machines`;
+export const machinePath = (dir: string, id: string) => `${machinesDir(dir)}/${id}.json`;
 
 /** Where the text of the result `id` is. */
 export const blobPath = (dir: string, id: string) => `${blobsDir(dir)}/${id}.txt`;
