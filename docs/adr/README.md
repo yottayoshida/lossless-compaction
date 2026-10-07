@@ -87,3 +87,6 @@ Why the plugin is built the way it is, one record a decision.
   conversation Claude Code handed over with three eighths of the 4096
   entries it hands a plugin is cut down to a quarter, at a compaction
   without instructions, though its size fits.
+- [0035](0035-the-places-written-to-before-are-read.md): why the places
+  results were written to under the user's settings are noted and read after
+  the current ones, and never cleaned up.

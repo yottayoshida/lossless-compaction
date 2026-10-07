@@ -119,12 +119,15 @@ export function sizeText(bytes: number): string {
 const timeText = (ms: number) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const dayText = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const tallyText = (one: Tally) => `${one.count} (${sizeText(one.bytes)})`;
+/** What a place's trash holds, over every day. */
+const trashedOf = (one: Extract<Counted, { results: unknown }>): Tally => one.trash.reduce((sum, day) => ({ count: sum.count + day.count, bytes: sum.bytes + day.bytes }), zero());
 
 /**
- * What `/lossless-store` answers: each place results are read from, then the
- * clean-up. `setByStoreDir` says the place was chosen by the `storeDir`
- * setting, so no other place is read. Claude Code puts the plugin's name in
- * front of it, so it does not.
+ * What `/lossless-store` answers: each place of the settings in use, then the
+ * places results were kept in before, which are read and never cleaned up
+ * (#116), then the clean-up. `setByStoreDir` says the place was chosen by the
+ * `storeDir` setting. Claude Code puts the plugin's name in front of it, so it
+ * does not.
  */
 export function storeReport(
   counted: readonly Counted[],
@@ -132,6 +135,7 @@ export function storeReport(
   now: number,
   setByStoreDir: boolean,
   machines: { marks: readonly Mark[] | null; self: string | null; unread: readonly string[] | null } | null = null,
+  earlier: readonly Counted[] = [],
 ): string {
   const lines: string[] = [`Results are kept in ${counted.length === 1 ? 'one place' : `${counted.length} places`}${setByStoreDir ? ', set by storeDir' : ''}:`];
   for (const one of counted) {
@@ -147,13 +151,21 @@ export function storeReport(
         `${PLUGIN}'s own tools ${tallyText(one.from.own)}` +
         (one.from.unknown.count > 0 ? `, no readable entry ${tallyText(one.from.unknown)}` : ''),
     );
-    const trashed = one.trash.reduce((sum, day) => ({ count: sum.count + day.count, bytes: sum.bytes + day.bytes }), zero());
+    const trashed = trashedOf(one);
     lines.push(
       `  trash: ${one.trash.length === 0 ? 'empty' : `${tallyText(trashed)} files, by day moved there: ${one.trash.map((day) => `${day.day} ${tallyText(day)}`).join(', ')}`}`,
     );
     lines.push(
       `  tmp/: ${one.tmp.count === 0 ? 'empty' : `${tallyText(one.tmp)} files` + (one.tmp.stale > 0 ? `, ${one.tmp.stale} over a day old, left by a write that stopped; those can be removed by hand` : '')}`,
     );
+  }
+  if (earlier.length > 0) {
+    lines.push('', `Read as well, never cleaned up: ${earlier.length === 1 ? 'one place' : `${earlier.length} places`}, written to before under your settings or the default ones beside storeDir (docs/limits.md, "The files"):`);
+    for (const one of earlier) {
+      lines.push('', one.dir);
+      if ('missing' in one) lines.push('  not there, or not a plain directory');
+      else lines.push(`  results: ${tallyText(one.results)}; trash: ${one.trash.length === 0 ? 'empty' : `${tallyText(trashedOf(one))} files`}`);
+    }
   }
   lines.push('', 'clean-up:');
   lines.push(`  last ended: ${gc.lastRun > 0 ? timeText(gc.lastRun) : 'never'}; last tried: ${gc.tried > 0 ? timeText(gc.tried) : 'never'}`);

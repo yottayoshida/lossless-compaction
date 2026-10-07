@@ -61,17 +61,18 @@ export type Closed = { refused: string | null; warnings: string[] };
 
 /**
  * The directory written to, made private or refused: nothing is written
- * unless it is. Each other directory read from that is there as a plain
- * directory is closed too, and when that fails it is said and nothing else
- * changes: whether results can be written safely depends on the one written
- * to alone. A file or a link where an old directory was is left alone; it
+ * unless it is. Each other directory of the settings in use (`owned`, else
+ * every one read from) that is there as a plain directory is closed too, and
+ * when that fails it is said and nothing else changes: whether results can be
+ * written safely depends on the one written to alone. A file or a link where an old directory was is left alone; it
  * is read from as it always was.
  */
-export async function closeStore(files: Files, run: Run, store: { write: string; read: readonly string[] }): Promise<Closed> {
+export async function closeStore(files: Files, run: Run, store: { write: string; read: readonly string[]; owned?: readonly string[] }): Promise<Closed> {
   const refused = await ensurePrivate(files, run, store.write);
   if (refused !== null) return { refused, warnings: [] };
   const warnings: string[] = [];
-  for (const dir of store.read) {
+  // Those of the settings in use: an earlier place is read, and left as it is (#116).
+  for (const dir of store.owned ?? store.read) {
     if (dir === store.write) continue;
     const found = await statOf(files, dir);
     if (found === null || found.isLink === true || found.kind !== 'dir') continue;

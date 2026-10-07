@@ -390,6 +390,12 @@ node bench/main.ts session-report --from bench/results/2026-10-05-session
 
 ## Running it
 
+The plugin runs from its directory, as `lossless-compaction@inline`, with
+Claude Code's own configuration. It notes the places it writes to in one
+list under `~/.claude/plugins/store/` (ADR 0035), so a run reads the stores
+of earlier runs, and your default places, as well as its own box. They are
+read only, by the ids the run's conversations hold.
+
 ```sh
 export BENCH_BOX=~/somewhere/outside/the/repository
 node bench/main.ts build                                   # every conversation but `large`, which is built by name

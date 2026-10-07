@@ -245,3 +245,20 @@ test('a stop by what the clean-up follows is recorded with each id and why, read
   assert.ok(storeReport([await countStore(files, list(files), DIR, NOW)], counted, NOW, false).includes('    and 5 more, named once these are gone past'));
   assert.ok(!JSON.stringify(read).includes(PATH_MARK) && !JSON.stringify(read).includes(MARK));
 });
+
+test('the places results were kept in before are said after those of the settings in use, counted the same way, as read and never cleaned up (#116)', async () => {
+  const files = new Guarded();
+  files.dirs.add(DIR);
+  files.dirs.add('/data/earlier');
+  files.dirs.add('/data/earlier/blobs');
+  await put(files, `/data/earlier/blobs/${hex('a')}.txt`, 'x'.repeat(40), NOW - DAY);
+  const gc = await stateIn(files, list(files), [DIR]);
+  const counted = [await countStore(files, list(files), DIR, NOW)];
+  const earlier = [await countStore(files, list(files), '/data/earlier', NOW), { dir: '/media/gone', missing: true as const }];
+  const text = storeReport(counted, gc, NOW, true, null, earlier);
+  assert.match(text, /^Results are kept in one place, set by storeDir:/);
+  assert.match(text, /\n\nRead as well, never cleaned up: 2 places, written to before under your settings or the default ones beside storeDir \(docs\/limits\.md, "The files"\):\n\n\/data\/earlier\n  results: 1 \(40 B\); trash: empty\n\n\/media\/gone\n  not there, or not a plain directory\n\nclean-up:/);
+  // None before: as it was.
+  assert.equal(storeReport(counted, gc, NOW, true, null, []), storeReport(counted, gc, NOW, true));
+  assert.ok(!storeReport(counted, gc, NOW, true).includes('Read as well'));
+});

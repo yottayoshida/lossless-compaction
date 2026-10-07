@@ -193,7 +193,7 @@ test('the clean-up runs after the session starts, unwaited, and recall, find and
   assert.ok(recallHook.includes('const agentId = (e as { agentId?: string | undefined }).agentId;'), "recall, the subagent told by the event's own agentId");
   // What is put back takes along what the kept parts among it name, through earlier parts (#73).
   const restoreForAt = hooks.indexOf('async function restoreFor(');
-  assert.ok(hooks.slice(restoreForAt, hooks.indexOf('\n}\n', restoreForAt)).includes('restoreThroughParts(filesOf($), listOf($), execOf($), store.read, ids, parts)'), 'through the parts');
+  assert.ok(hooks.slice(restoreForAt, hooks.indexOf('\n}\n', restoreForAt)).includes('restoreThroughParts(filesOf($), listOf($), execOf($), ownedOf(store), ids, parts)'), 'through the parts, in the places of the settings in use: an earlier place is read alone (#116)');
   const putBack = recalled.indexOf('restoreFor($, store, new Set([id]))');
   assert.ok(recalledAt > 0 && putBack > 0 && putBack < recalled.lastIndexOf('recall(filesOf($), store.read, id)'), 'recall, put back first');
   const findHook = hooks.slice(hooks.indexOf(hookOn('tool.call', FIND_TOOL)), hooks.indexOf("on('session.compact'"));
@@ -596,7 +596,7 @@ test('recall names find in its description when find is registered, and only the
   assert.match((await run(provider, true)).said.join('\n'), /: the find tool could not be registered: refused$/m);
 });
 
-test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result (ADR 0016)', () => {
+test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result (ADR 0016, #116)', () => {
   assert.ok(hooks.includes(`on('command.run', { command: '${STORE_COMMAND}' }`), 'the matcher is spelled as STORE_COMMAND');
   const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
   assert.ok(start.includes('await $.command.register({\n        name: STORE_COMMAND,'), 'registered at the start');
@@ -605,12 +605,14 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   assert.equal(hooks.split('$.tool.register(').length - 1, 2);
   const handler = hooks.slice(hooks.indexOf("on('command.run'"), hooks.indexOf(hookOn('tool.call', RECALL_TOOL)));
   assert.ok(handler.includes('const store = await storeOf($, options);'), 'the place as the repository cannot decide it');
-  assert.ok(handler.includes('for (const dir of store.read)'), 'every place read');
-  // A place is counted as the clean-up takes it: a plain directory, not a link.
-  assert.ok(handler.includes('const there = await plainDirsOf($, store);'), 'the places the clean-up reads');
-  assert.ok(handler.includes('for (const dir of store.read) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
+  // A place is counted as the clean-up takes it: a plain directory, not a link. Those of the settings in use first.
+  assert.ok(handler.includes('const owned = ownedOf(store);\n      const there = await plainDirsOf($, owned);'), 'the places the clean-up reads');
+  assert.ok(handler.includes('for (const dir of owned) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
+  // Then every other place read, the earlier ones, counted the same way and said as never cleaned up (#116).
+  assert.ok(handler.includes('const before = store.read.filter((dir) => !owned.includes(dir));'), 'every place read');
+  assert.ok(handler.includes('for (const dir of before) earlier.push(plain.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));'));
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
-  assert.ok(collecting.includes('const dirs = await plainDirsOf($, store);'), 'the same places as the clean-up');
+  assert.ok(collecting.includes('const dirs = await plainDirsOf($, ownedOf(store));'), 'the same places as the clean-up, never an earlier one (#116)');
   const plain = hooks.slice(hooks.indexOf('async function plainDirsOf('), hooks.indexOf('async function collectOnce('));
   assert.ok(plain.includes("if (found && found.kind === 'dir' && found.isLink !== true) dirs.push(dir);"));
   // What an error says may name a path: it is not shown.
@@ -621,7 +623,7 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   // It reads this machine's id and makes none.
   assert.ok(handler.includes('const self = markName(await machineOf($, options, false), session);'));
   assert.ok(handler.includes('const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };'));
-  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set, machines) };'));
+  assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set, machines, earlier) };'));
   // What answers it reads nothing itself: no recall, no read of a file.
   assert.ok(!/recall\(|\$\.fs\.read\(|files\.read\(/.test(handler));
 });
@@ -1031,4 +1033,15 @@ test('where what Claude Code attached cannot be written, the conversation is not
   assert.match(answer.skip ?? '', /nothing could be kept \(could not write: ENOSPC\), so the summary did not run/);
   assert.equal(asked, 0);
   assert.ok(logged.includes(`${PLUGIN_NAME}: built-in compaction: what Claude Code attached to the messages could not be kept (could not write: ENOSPC)`), logged.join(' | '));
+});
+
+test("the places written to under these settings are noted in the plugin's own store and read after the current ones, with the defaults beside a storeDir of your own where the repository did not set what they are built from (#116)", () => {
+  const at = hooks.indexOf('async function storeOf(');
+  const storing = hooks.slice(at, hooks.indexOf('/** The provider', at));
+  // After the repository's settings were looked at: a place they decide is refused before anything is noted.
+  assert.ok(storing.indexOf('placeTaints(taints, options)') < storing.indexOf('earlierOf($, store.write)'));
+  assert.ok(storing.includes('const defaults = storeDirSet(options) && taints !== null && variableTaints(taints).length === 0 ? defaultPlacesOf(places) : [];'), 'the defaults only where HOME and the like are your own');
+  assert.ok(storing.includes('return withEarlier(store, [...(await earlierOf($, store.write)), ...defaults]);'));
+  const noting = hooks.slice(hooks.indexOf('function earlierOf('), hooks.indexOf('/** The provider', at));
+  assert.ok(noting.includes('() => $.store.get(PLACES_KEY),\n    (places) => $.store.set(PLACES_KEY, places),'), "in the plugin's own store, through notePlace (test/store.test.ts)");
 });

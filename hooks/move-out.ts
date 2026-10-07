@@ -22,10 +22,31 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, NOT_AN_ID, NOT_STORED, PLUGIN, RECALL, STATUS_COMMAND, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
+import {
+  FIND,
+  NOT_AN_ID,
+  NOT_STORED,
+  PLACES_KEY,
+  PLUGIN,
+  RECALL,
+  STATUS_COMMAND,
+  STORE_COMMAND,
+  configDirFrom,
+  defaultPlacesOf,
+  holds,
+  notePlace,
+  ownedOf,
+  placesOf,
+  recall,
+  recallMeant,
+  storedAs,
+  withEarlier,
+  type Recalled,
+  type StoreDirs,
+} from '../src/store.ts';
 import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
 import { recallDescription } from '../src/tools.ts';
-import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
+import { describeTaints, placeTaints, sendTaints, taintsFrom, variableTaints, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
 import {
   collect,
@@ -84,6 +105,7 @@ type WithProcess = {
   };
 };
 type WithSettings = { settings: { read: (args: { source: 'project' | 'local' | 'user' }) => Promise<unknown> } };
+type WithStore = { store: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> } };
 type WithSession = {
   session: {
     id: () => Promise<string>;
@@ -144,7 +166,7 @@ async function markRunning($: WithEnvSet & WithProcess): Promise<void> {
   }
 }
 
-/** The directory written to, made or closed to its owner alone, else why not; the others read from, closed where they can be. */
+/** The directory written to, made or closed to its owner alone, else why not; the others of the settings in use, closed where they can be. */
 async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs, sayIt: (text: string) => void = (text) => say($, text)): Promise<string | null> {
   const { refused, warnings } = await closeStore(filesOf($), runOf($), store);
   for (const warning of warnings) sayIt(`a directory results are read from could not be made private: ${warning}`);
@@ -196,8 +218,11 @@ async function taintsOf($: WithSettings, env: Seen['env'], options: PluginOption
   return taintsFrom(repo, { env, options });
 }
 
+/** Whether `storeDir` is set: then that place alone is written to. */
+const storeDirSet = (options: PluginOptions): boolean => typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
+
 /** Where results are kept, or why no place can be trusted: the repository's settings never decide it (ADR 0005). */
-async function storeOf($: WithEnv & WithFiles & WithSettings, options: PluginOptions): Promise<StoreDirs | string> {
+async function storeOf($: WithEnv & WithFiles & WithSettings & WithStore, options: PluginOptions): Promise<StoreDirs | string> {
   const env = await envOf($);
   const taints = await taintsOf($, env, options);
   const deciding = taints === null ? null : placeTaints(taints, options);
@@ -206,12 +231,22 @@ async function storeOf($: WithEnv & WithFiles & WithSettings, options: PluginOpt
       ? describeTaints(null)
       : `where results are kept would be decided by the repository (${describeTaints(deciding)}); set storeDir in your user settings`;
   }
-  const store = await placesOf(filesOf($), options['storeDir'], {
-    CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR,
-    HOME: env.HOME,
-    USERPROFILE: env.USERPROFILE,
-  });
-  return store ?? 'the place to keep results in is not an absolute path; set storeDir to one';
+  const places = { CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR, HOME: env.HOME, USERPROFILE: env.USERPROFILE };
+  const store = await placesOf(filesOf($), options['storeDir'], places);
+  if (store === null) return 'the place to keep results in is not an absolute path; set storeDir to one';
+  // Read as well, never cleaned up: the places written to under these settings before, and, beside a storeDir of your
+  // own, the defaults, where the repository's settings did not set what they are built from (#116).
+  const defaults = storeDirSet(options) && taints !== null && variableTaints(taints).length === 0 ? defaultPlacesOf(places) : [];
+  return withEarlier(store, [...(await earlierOf($, store.write)), ...defaults]);
+}
+
+/** Notes `write` as the place in use, in the plugin's own store, and returns the places written to before it (#116). */
+function earlierOf($: WithStore, write: string): Promise<string[]> {
+  return notePlace(
+    () => $.store.get(PLACES_KEY),
+    (places) => $.store.set(PLACES_KEY, places),
+    write,
+  );
 }
 
 /** The provider `find` asks, none without a key, or why not: the repository's settings never decide where it sends (ADR 0005). */
@@ -309,7 +344,7 @@ async function noteMachineOf($: WithEnv & WithFiles & WithSettings & WithProcess
  * no ticket, or where results are kept is not this user's to tell, or cannot be made private.
  */
 async function noteWitnessOf(
-  $: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess & WithStore,
   candidates: readonly string[],
   options: PluginOptions,
   keepStanding = false,
@@ -325,7 +360,7 @@ async function noteWitnessOf(
 }
 
 /** At the start of a session, the witness of a conversation resumed with tickets in it: looked for before the store is touched. */
-async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess, options: PluginOptions): Promise<void> {
+async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess & WithStore, options: PluginOptions): Promise<void> {
   try {
     const messages = (await $.session.messages()) as readonly Message[];
     if (Array.isArray(messages)) await noteWitnessOf($, witnessCandidates(messages), options, true);
@@ -334,10 +369,10 @@ async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings
   }
 }
 
-/** Puts back from the trash what the conversation's tickets name, in every place results are read from. */
+/** Puts back from the trash what the conversation's tickets name, in the places of the settings in use: an earlier one is read alone (#116). */
 async function restoreFor($: WithFiles & WithProcess, store: StoreDirs, ids: ReadonlySet<string>, parts: ReadonlySet<string> = ids): Promise<number> {
   try {
-    return await restoreThroughParts(filesOf($), listOf($), execOf($), store.read, ids, parts);
+    return await restoreThroughParts(filesOf($), listOf($), execOf($), ownedOf(store), ids, parts);
   } catch {
     // What cannot be put back is answered as not stored.
     return 0;
@@ -356,17 +391,17 @@ async function recalled($: WithFiles & WithProcess, store: StoreDirs, id: unknow
  * those the trash has held a week, still named by none, are removed (ADR
  * 0006). Run after the session has started, without being waited for.
  */
-/** The places results are read from that are there as plain directories, not links: what the clean-up and /lossless-store read. */
-async function plainDirsOf($: WithFiles, store: StoreDirs): Promise<string[]> {
+/** Those of `places` that are there as plain directories, not links: what the clean-up and /lossless-store read. */
+async function plainDirsOf($: WithFiles, places: readonly string[]): Promise<string[]> {
   const dirs: string[] = [];
-  for (const dir of store.read) {
+  for (const dir of places) {
     const found = await filesOf($).stat(dir).catch(() => null);
     if (found && found.kind === 'dir' && found.isLink !== true) dirs.push(dir);
   }
   return dirs;
 }
 
-async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess & WithSession, options: PluginOptions): Promise<void> {
+async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess & WithSession & WithStore, options: PluginOptions): Promise<void> {
   // Known once the try is noted: where, and over what, an unexpected stop is recorded.
   let tried: { dir: string; record: GcRecord } | null = null;
   // Claimed before anything is awaited, so that a second session.start right after (a /clear) does not say it
@@ -379,7 +414,7 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     if (typeof store === 'string') return;
     const files = filesOf($);
     const list = listOf($);
-    const dirs = await plainDirsOf($, store);
+    const dirs = await plainDirsOf($, ownedOf(store));
     if (dirs.length === 0) return;
     const now = Date.now();
     const state = await stateIn(files, list, dirs);
@@ -513,7 +548,7 @@ type Tried = {
  * hook's handler of a failure both start from.
  */
 async function placeOf(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   messages: readonly Message[],
   options: PluginOptions,
 ): Promise<{ store: StoreDirs } | { why: string; unkept: string }> {
@@ -541,7 +576,7 @@ async function placeOf(
  * whatever happened here.
  */
 async function attempt(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   e: Compacting,
   options: PluginOptions,
 ): Promise<Tried | HandedOver> {
@@ -652,7 +687,7 @@ async function summarizeKeeping(
  * the transcript alone, as subagents run side by side.
  */
 async function summarizeSubagent(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   e: SessionCompactInput,
   next: (e: SessionCompactInput) => Promise<SessionCompactResult>,
   options: PluginOptions,
@@ -857,17 +892,23 @@ export const register: Register = (on, options) => {
       const files = filesOf($);
       const list = listOf($);
       // The places the clean-up reads, and its record from the same places.
-      const there = await plainDirsOf($, store);
+      const owned = ownedOf(store);
+      const there = await plainDirsOf($, owned);
       const counted = [];
-      for (const dir of store.read) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
+      for (const dir of owned) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
+      // Read as well, never cleaned up: the places results were kept in before (#116), counted the same way.
+      const before = store.read.filter((dir) => !owned.includes(dir));
+      const plain = await plainDirsOf($, before);
+      const earlier = [];
+      for (const dir of before) earlier.push(plain.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
       const gc = await stateIn(files, list, there);
-      const set = typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
+      const set = storeDirSet(options);
       const marks = await marksIn(files, list, there);
       const session = await $.session.id();
       const readable = marks === null ? null : await readableSessions(files, list, gc.roots, marks);
       const self = markName(await machineOf($, options, false), session);
       const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };
-      return { text: storeReport(counted, gc, now, set, machines) };
+      return { text: storeReport(counted, gc, now, set, machines, earlier) };
     } catch {
       // What an error says may name a path: it is not shown.
       return { text: 'the store could not be counted' };

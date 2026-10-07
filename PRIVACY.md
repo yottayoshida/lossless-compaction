@@ -105,12 +105,19 @@ And in Claude Code's data directory for the plugin,
 `held`, the process ids and session ids of those whose `/compact` it held for
 that reason: about the newest fifty of each.
 
+And in the plugin's own store, a file of Claude Code's for it under
+`~/.claude/plugins/store/` (under `CLAUDE_CONFIG_DIR` likewise): the places
+results were written to under your settings, newest first, up to 16, so that
+a place set before is still read (#116). Paths only, nothing of a result.
+Claude Code writes it, mode 644 where it was measured: other users of the
+machine can read those paths, which mode 700 on the places does not cover.
+
 And `~/.local/state/lossless-compaction/machine.json`, outside Claude Code's
 directory: this machine's id, a random one made the first time it is needed
 (ADR 0032). Nothing else is in it.
 
-`roots/`, `gc.json`, `sentinel.jsonl`, `machines/`, `told`, `held` and the
-machine's id stay until you remove them. A file in `witness/` stays while its conversation's transcript,
+`roots/`, `gc.json`, `sentinel.jsonl`, `machines/`, `told`, `held`, the list
+of places and the machine's id stay until you remove them. A file in `witness/` stays while its conversation's transcript,
 or a file or folder of it other than those Claude Code keeps beside one, does,
 and goes at the clean-up after.
 
@@ -171,9 +178,11 @@ send and around a compaction. None of them connects to a network.
 
 ## Removing what it kept
 
-- `/lossless-store` says where results are kept and how much.
-- Delete that directory, and `~/.claude/jev-lossless-compaction/` if it is
-  there, and `~/.local/state/lossless-compaction/`. `recall` then finds nothing for the tickets left in a conversation.
+- `/lossless-store` says where results are kept and how much, and the
+  places results were kept in before, which are read as well.
+- Delete those directories, and `~/.claude/jev-lossless-compaction/` if it is
+  there, the plugin's file under `~/.claude/plugins/store/`, and
+  `~/.local/state/lossless-compaction/`. `recall` then finds nothing for the tickets left in a conversation.
 - `claude plugin uninstall lossless-compaction@lossless-compaction` removes
   `~/.claude/plugins/data/<plugin id>/`, unless given `--keep-data`, and does
   not remove where results are kept: delete that yourself.
