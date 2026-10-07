@@ -5,7 +5,7 @@
 
 import type { FileStat, Mover } from './types.ts';
 
-/** `/bin` first; NixOS has only `/usr/bin`, or neither. */
+/** `/bin` first, then `/usr/bin`; NixOS holds only `sh` and `env` in them. */
 export const PLACES = ['/bin', '/usr/bin'] as const;
 
 /** Starts a command by its argument vector; rejects when it cannot be started. */
