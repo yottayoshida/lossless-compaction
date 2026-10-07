@@ -283,8 +283,11 @@ any of the plugin's does, to a summary only where
   ([which results leave](limits.md#which-results-leave)).
 - **`minChars`**, default 2,000: tool results, input values (what `Write`
   was handed, a long command) and messages shorter than this many characters
-  are not moved out one by one; old short calls may still fold into a list
-  with what they returned ([in short](limits.md#in-short)).
+  are not moved out one by one; old calls whose inputs and results are all
+  shorter may still fold into a list with what they returned
+  ([in short](limits.md#in-short)), so raising it folds more of them rather
+  than keeping them: to keep more in the context, raise `targetPercent` or
+  `keepTokens` instead.
 - **`maxAfterPercent`**, default 75: where more than this percent of the
   same size is still in use after moving out, or of the model's window when
   automatic compaction is off, the oldest messages are kept in parts with no
