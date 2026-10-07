@@ -57,7 +57,7 @@
     "maxAfterPercent": {
       "type": "number",
       "title": "Largest size to go on with",
-      "description": "When the context is still over this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off), the oldest messages are kept in parts and a list of them stands in their place, with no summary. With instructions given to `/compact`, the built-in compaction runs on what is left instead. From 1 to 100; a number outside is taken as the nearest end, and the session says so.",
+      "description": "When the context is still over this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off), the oldest messages are kept in parts and a list of them stands in their place, with no summary. A `/compact` given instructions runs the built-in compaction on what is left, whatever is in use. From 1 to 100; a number outside is taken as the nearest end, and the session says so.",
       "default": 75
     }
   }

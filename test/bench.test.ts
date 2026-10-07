@@ -41,6 +41,7 @@ import { unnumbered } from '../src/changed.ts';
 import { find, lineHolds, valuesOf } from '../src/find.ts';
 import { termsOf } from '../src/select.ts';
 import { reportLine, undoneLine, type Report } from '../src/compact.ts';
+import { nextStep } from '../src/flow.ts';
 import { ID_LEAST } from '../src/store.ts';
 import type { Http } from '../src/types.ts';
 import { TOLD, ok, optionsAsked, questionsOf, recordingHttp, trusting, type Sent } from './helpers.ts';
@@ -197,6 +198,10 @@ test('the plugin\'s line is read in every form it has, and from the function tha
   assert.equal(plain?.window, undefined);
   assert.equal(plain?.ms, 2400);
   assert.equal(readLine(`built-in compaction on what is left, too much is still in use: ${reportLine(report)}`)?.outcome, 'too-much');
+  // Asked for with instructions after moving out made room (ADR 0036): the line src/flow.ts writes, read as summarized.
+  const asked = nextStep({ trigger: 'manual', instructions: 'Summarize the conversation so far.', outcome: { messages: [], enough: true, target: 0, report }, inUse: 0, given: false, maxAfterPercent: 75, count: undefined, keepTokens: 0 });
+  assert.equal(asked.step, 'summarize');
+  assert.equal(readLine('line' in asked ? asked.line : '')?.outcome, 'asked');
   assert.equal(readLine(`built-in compaction: nothing could be moved out (${reportLine({ ...report, moved: 0 })})`)?.outcome, 'nothing');
   assert.equal(readLine('lossless-compaction: built-in compaction: the conversation holds what a rebuilt message cannot carry: image')?.outcome, 'other');
   // A `/compact` left undone (ADR 0015): what was in use where Claude Code gave the figure, and no figure where it did not.
@@ -226,7 +231,7 @@ test('a conversation cut in place of a summary is read as one the summary did no
 
   // The summary ran where the plugin handed over, whatever for, and nowhere else.
   const of = (outcome: Line['outcome']): Line => ({ outcome, moved: 0, results: 0, images: 0, charsBefore: 0, charsAfter: 0, ms: 0 });
-  assert.deepEqual((['too-much', 'nothing', 'other'] as const).map((outcome) => summarizedBy(of(outcome))), [true, true, true]);
+  assert.deepEqual((['too-much', 'asked', 'nothing', 'other'] as const).map((outcome) => summarizedBy(of(outcome))), [true, true, true, true]);
   assert.deepEqual((['moved', 'undone', 'cut', 'rebuilt'] as const).map((outcome) => summarizedBy(of(outcome))), [false, false, false, false]);
 });
 
@@ -3080,6 +3085,19 @@ test('a compaction the record says was asked for is replayed as a /compact typed
   assert.deepEqual([typed.window, typed.byHand, started.window, started.byHand], [967_000, true, 967_000, false]);
   const given = await replay(record, 3, 1, 75, 167_000, false);
   assert.deepEqual([given.window, given.byHand], [167_000, false]);
+});
+
+test('a /compact replayed with instructions goes to the summary though moving out made room, as the hook hands it (ADR 0036)', async () => {
+  const read = (id: string, text: string) => [
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: `/w/${id}.log` } }], usage: { input_tokens: 5, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] } }),
+  ];
+  const said = (text: string) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
+  const boundary = JSON.stringify({ type: 'system', subtype: 'compact_boundary', compactMetadata: { trigger: 'manual', preTokens: 40_000 } });
+  const record = [said('Read the logs.'), ...read('t1', 'line of the log\n'.repeat(3000)), ...read('t2', 'another line\n'.repeat(3000)), said('go on'), boundary].join('\n');
+  const [without, withThem] = [await replay(record, 7, 1, 75, 167_000, true), await replay(record, 7, 1, 75, 167_000, false, '(given, not recorded)')];
+  assert.deepEqual([without.moved, without.cut], [1, null], 'room made: handed back as rebuilt');
+  assert.deepEqual([withThem.moved, withThem.cut], [1, { hand: 'summary' }]);
 });
 
 test('what the eight working sessions replayed in a window of 1,000,000 come to, as docs/measurements.md gives them', () => {

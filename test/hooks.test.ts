@@ -1015,6 +1015,68 @@ test('handed to the built-in summary as it was, the conversation is kept with th
   assert.ok((await partsNamed(files, conversationKept)).includes('PROBE-HOOK-WORD: walrus'));
 });
 
+test('a /compact given instructions hands what is left, once moved out, to the summary with them, though it fits; an automatic compaction handed the same instructions is handed back rebuilt (ADR 0036)', async () => {
+  forgetMove();
+  // Every result may leave, and what is left fits: the step that gives no summary, but for the instructions.
+  const hook = await compactionHook({ keepTokens: 0 });
+  const instructions = 'keep the plan';
+
+  const files = new MemoryFiles();
+  const { handed, api } = sentWithAttached();
+  const { host, logged } = mainHost(files, handed, api);
+  const given: { messages: readonly { role: string; text: string; toolResults?: readonly { text: string }[] }[]; instructions?: string }[] = [];
+  const answer = await hook(host, { trigger: 'manual', instructions, messages: handed }, nextOn(async (e) => (given.push(e as (typeof given)[number]), { messages: [SUMMARY] })));
+  assert.ok(logged.some((line) => line.includes('built-in compaction on what is left, as it was asked for with instructions: moved ')), logged.join(' | '));
+  assert.ok(!logged.some((line) => line.includes('too much is still in use')), 'it fits: not said to be too full');
+  assert.equal(given.length, 1, 'summarized once');
+  const [summarized] = given;
+  assert.equal(summarized?.instructions, instructions, 'with the instructions as they were given');
+  // What is left once moved out: the older result is a ticket (the newest call stays, as at any /compact given
+  // instructions, ADR 0023), and what Claude Code attached is named at the end (#105).
+  const results = (summarized?.messages ?? []).flatMap((message) => message.toolResults ?? []);
+  assert.deepEqual(
+    results.map((result) => result.text.startsWith('[moved out] ')),
+    [true, false],
+    JSON.stringify(results).slice(0, 300),
+  );
+  assert.ok(summarized?.messages.at(-1)?.text.startsWith(ATTACHED_KEPT));
+  // The summary, then the parts of what it replaced, kept first.
+  assert.deepEqual(answer.messages?.[0], SUMMARY);
+  const kept = answer.messages?.[1]?.text ?? '';
+  assert.ok(kept.startsWith(KEPT), JSON.stringify(answer).slice(0, 300));
+  assert.ok((await partsNamed(files, kept)).includes('[moved out] '), 'the parts hold the tickets');
+
+  // Asked for by a plugin (`$.session.compact({ instructions })`): the same.
+  const byPlugin: unknown[] = [];
+  const asked = await hook(mainHost(new MemoryFiles(), handed, api).host, { trigger: 'plugin', instructions, messages: handed }, nextOn(async (e) => (byPlugin.push(e), { messages: [SUMMARY] })));
+  assert.equal(byPlugin.length, 1);
+  assert.deepEqual(asked.messages?.[0], SUMMARY);
+
+  // Where the disk refuses the parts of the conversation, the summary does not run, and nothing is handed back (ADR 0008).
+  const full = new MemoryFiles();
+  const refusing = async (path: string, text: string) => {
+    if (text.includes('--- assistant')) throw enospc(path);
+    return full.write(path, text);
+  };
+  let summaries = 0;
+  const refused = await hook(mainHost(full, handed, api, refusing).host, { trigger: 'manual', instructions, messages: handed }, nextOn(async () => ((summaries += 1), { messages: [SUMMARY] })));
+  assert.equal(summaries, 0);
+  assert.equal(refused.messages, undefined);
+  assert.match(refused.skip ?? '', /nothing could be kept \(could not write: ENOSPC\), so the summary did not run/);
+
+  // The same conversation and instructions, at an automatic compaction: a hook above may have added them.
+  const other = new MemoryFiles();
+  const auto = await hook(
+    mainHost(other, handed, api).host,
+    { trigger: 'auto', instructions, messages: handed },
+    nextOn(async () => {
+      throw new Error('no summary is asked for');
+    }),
+  );
+  assert.ok(auto.messages?.at(-1)?.text.startsWith(ATTACHED_KEPT), JSON.stringify(auto).slice(0, 300));
+  assert.ok(!(auto.messages ?? []).some((message) => message.text.startsWith(KEPT)), 'rebuilt, with no summary');
+});
+
 test('where what Claude Code attached cannot be written, the conversation is not rebuilt: it is kept as sent, or, refused that too, the summary does not run (#105, ADR 0008)', async () => {
   forgetMove();
   // Every result may leave: none is among the newest kept.

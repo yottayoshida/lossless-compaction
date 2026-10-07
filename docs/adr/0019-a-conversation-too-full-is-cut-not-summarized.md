@@ -49,7 +49,8 @@ and too much is still in use, or nothing was moved out and 0015 does not
 leave the `/compact` undone:
 
 1. With instructions given to `/compact`, as before: kept, then summarized.
-   A summary that was asked for is given.
+   A summary that was asked for is given. (Amended by ADR 0036: also where
+   moving out made room, on what is left.)
 2. Otherwise the oldest messages are kept in parts, as 0007 keeps a
    conversation, and one message that lists the parts stands where they
    stood. Claude Code's summary is not called, and the plugin writes none.

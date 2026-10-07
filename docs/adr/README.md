@@ -90,3 +90,7 @@ Why the plugin is built the way it is, one record a decision.
 - [0035](0035-the-places-written-to-before-are-read.md): why the places
   results were written to under the user's settings are noted and read after
   the current ones, and never cleaned up.
+- [0036](0036-a-compact-given-instructions-is-summarized.md): why a
+  `/compact` given instructions, by hand or by a plugin, hands what is left
+  to Claude Code's summary whatever room moving out made, and an automatic
+  compaction does not.

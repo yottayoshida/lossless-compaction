@@ -21,6 +21,7 @@
 import { readFileSync } from 'node:fs';
 import { CHARS_PER_TOKEN, charsOf, compact, countFrom, tokensOf, weightOf, type Config } from '../src/compact.ts';
 import { decide, keepOldest } from '../src/cut.ts';
+import { summaryAskedFor } from '../src/flow.ts';
 import { messagesFromApi } from '../src/keep.ts';
 import { mediaIn } from '../src/media.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
@@ -121,7 +122,19 @@ export function apiBefore(rows: readonly Row[], line: number): unknown[] {
   return api;
 }
 
-export async function replay(record: string, line: number, targetPercent: number, maxAfterPercent: number, window = windowOf(record), byHand = triggerAt(record, line) === 'manual') {
+/**
+ * `instructions`: that the compaction was given some. The record does not keep their text; a summary asked for with them
+ * is told by their being there (ADR 0036).
+ */
+export async function replay(
+  record: string,
+  line: number,
+  targetPercent: number,
+  maxAfterPercent: number,
+  window = windowOf(record),
+  byHand = triggerAt(record, line) === 'manual',
+  instructions?: string,
+) {
   const rows = rowsOf(record);
   const api = apiBefore(rows, line);
   const read = messagesFromApi(api);
@@ -147,9 +160,13 @@ export async function replay(record: string, line: number, targetPercent: number
     Math.round(fixedTokens + (count === undefined ? charsOf(stay) / CHARS_PER_TOKEN : weightOf(stay) * count.density));
   const limit = Math.round((window * maxAfterPercent) / 100);
 
-  // What the hook does with a conversation `compact()` leaves too full or with nothing moved out, `/compact` having been given no instructions.
-  const asked = { messages: outcome.messages, tokens: outcome.report.tokensAfter, count, window, maxAfterPercent, cutTo: outcome.target, keepTokens, instructions: undefined };
-  const handedOver = (outcome.report.moved === 0 && outcome.report.inputs === 0 && (outcome.report.bodies ?? 0) === 0 && outcome.report.folded === 0) || !outcome.enough;
+  // What the hook does with a conversation `compact()` leaves too full or with nothing moved out, or that a summary was
+  // asked for with instructions (src/flow.ts `nextStep`).
+  const asked = { messages: outcome.messages, tokens: outcome.report.tokensAfter, count, window, maxAfterPercent, cutTo: outcome.target, keepTokens, instructions };
+  const handedOver =
+    (outcome.report.moved === 0 && outcome.report.inputs === 0 && (outcome.report.bodies ?? 0) === 0 && outcome.report.folded === 0) ||
+    !outcome.enough ||
+    summaryAskedFor({ trigger: triggerAt(record, line), instructions });
   const decision = handedOver ? decide(asked) : null;
   const kept = decision?.hand === 'back' && decision.at > 0 ? await keepOldest(files, config.store, asked, decision.after, decision.at) : null;
   const cut =
@@ -212,7 +229,16 @@ if (import.meta.main) {
     process.exit(2);
   }
   const record = readFileSync(file, 'utf8');
-  const hand = args.includes('--with-instructions') ? false : triggerAt(record, Number(line)) === 'manual';
-  const out = await replay(record, Number(line), Number(target ?? 1), Number(maxAfter ?? 75), window === undefined ? windowOf(record) : Number(window), hand);
+  const withInstructions = args.includes('--with-instructions');
+  const hand = withInstructions ? false : triggerAt(record, Number(line)) === 'manual';
+  const out = await replay(
+    record,
+    Number(line),
+    Number(target ?? 1),
+    Number(maxAfter ?? 75),
+    window === undefined ? windowOf(record) : Number(window),
+    hand,
+    withInstructions ? '(given, not recorded)' : undefined,
+  );
   console.log(JSON.stringify(out, null, 2));
 }

@@ -61,12 +61,12 @@ hand, then nine questions one after another:
 | Right answers, of 108            |           106 |            96 |
 | The first run cost               |      2.82 USD |      2.17 USD |
 
-- **`/compact` is instant and calls no model.** At 40 the next request was
+- **`/compact` without instructions is instant and calls no model.** At 40 the next request was
   larger in five kinds of six; at 1, the default, smaller in four
   ([both](docs/measurements.md#the-six-kinds-of-conversation-at-40-and-at-1)).
 - **What left comes back by its id.** With the plugin the agent called
   `recall`; after a summary it read files again and Claude Code's record of
-  the session. Either way, it went back into context.
+  the session. Either way it re-entered context.
 - **The cost moves.** No summary to pay for, and at 40 larger requests after it:
   the plugin cost less in five kinds, and more in the one that fills the
   window, where Claude Code wrote it to the cache again at four questions

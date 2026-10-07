@@ -52,9 +52,9 @@ export const SETTINGS: Readonly<Record<string, Setting>> = {
   'target-40': { name: 'target-40', arm: 'plugin', options: { targetPercent: 40 } },
   'target-20': { name: 'target-20', arm: 'plugin', options: { targetPercent: 20 } },
   'target-1': { name: 'target-1', arm: 'plugin', options: { targetPercent: 1 } },
-  // Moved out down to 1 %, and still over 10 % with the newest 20,000 tokens left where they are: what is left goes to the
-  // summary, what that replaces is kept first. Under 10 % after moving out, or with 10 % under what is not the conversation,
-  // the plugin would hand back what it rebuilt and no summary would run (src/compact.ts, `enough`); the driver stops then.
+  // Moved out down to 1 %, and what is left goes to the summary with the driver's instructions, what that replaces kept
+  // first. Measured while that took being still over 10 % with the newest 20,000 tokens left where they are: under it the
+  // plugin handed back what it rebuilt. Since ADR 0036 a `/compact` given instructions is summarized under it too.
   hybrid: { name: 'hybrid', arm: 'plugin', options: { targetPercent: 1, maxAfterPercent: 10 }, manual: AUTO_LINE },
 };
 
@@ -232,7 +232,7 @@ export async function drive(setting: Setting, model: string, run: number, places
       // The plugin's arms compact on their own and move out; the setting that types its `/compact` hands what is left to the summary.
       if (setting.manual !== undefined) {
         if (kind !== 'compact') throw new Error(`${out}: Claude Code compacted on its own (${boundary.trigger}) before the driver's /compact`);
-        if (line === null || line.outcome !== 'too-much') throw new Error(`${out}: the /compact did not hand what was left to the summary (${line?.outcome ?? 'no line'})`);
+        if (line === null || (line.outcome !== 'too-much' && line.outcome !== 'asked')) throw new Error(`${out}: the /compact did not hand what was left to the summary (${line?.outcome ?? 'no line'})`);
       } else if (setting.arm === 'plugin' && (line === null || summarizedBy(line))) {
         throw new Error(`${out}: the plugin handed over to the summary (${line?.outcome ?? 'no line'})`);
       }

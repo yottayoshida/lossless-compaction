@@ -298,9 +298,9 @@ export type Line = {
   /**
    * `moved`: the plugin compacted. `undone`: it left a `/compact` with nothing to move out
    * and room left as it was, and nothing was compacted. The others name why the built-in
-   * compaction ran.
+   * compaction ran: `asked`, a `/compact` given instructions, after moving out made room (ADR 0036).
    */
-  outcome: 'moved' | 'too-much' | 'nothing' | 'other' | 'undone' | 'cut' | 'rebuilt';
+  outcome: 'moved' | 'too-much' | 'asked' | 'nothing' | 'other' | 'undone' | 'cut' | 'rebuilt';
   moved: number;
   /** Long values of tool inputs moved out (ADR 0020); absent where the line names none. */
   inputs?: number;
@@ -330,7 +330,7 @@ const CUT = /no summary, messages (\d+)-(\d+) of (\d+) kept in (\d+) parts?: /;
 const REBUILT = 'no summary, nothing to cut: ';
 
 /** True when the built-in summary ran on what the plugin left: it handed over, for the size or for what it cannot rebuild. */
-export const summarizedBy = (line: Line): boolean => line.outcome === 'too-much' || line.outcome === 'nothing' || line.outcome === 'other';
+export const summarizedBy = (line: Line): boolean => line.outcome === 'too-much' || line.outcome === 'asked' || line.outcome === 'nothing' || line.outcome === 'other';
 
 /** Reads the line the plugin shows at a compaction, in any of the forms it has had since 0.5.0. */
 export function readLine(text: string): Line | null {
@@ -348,7 +348,17 @@ export function readLine(text: string): Line | null {
   const cut = CUT.exec(text);
   const got = match.groups as Record<string, string | undefined>;
   const line: Line = {
-    outcome: text.includes('too much is still in use') ? 'too-much' : text.includes('nothing could be moved out') ? 'nothing' : cut ? 'cut' : text.includes(REBUILT) ? 'rebuilt' : 'moved',
+    outcome: text.includes('too much is still in use')
+      ? 'too-much'
+      : text.includes('as it was asked for with instructions')
+        ? 'asked'
+        : text.includes('nothing could be moved out')
+          ? 'nothing'
+          : cut
+            ? 'cut'
+            : text.includes(REBUILT)
+              ? 'rebuilt'
+              : 'moved',
     moved: Number(got['moved']),
     results: Number(got['results']),
     images: Number(got['images'] ?? 0),
