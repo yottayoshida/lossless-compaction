@@ -103,7 +103,9 @@ drive is no longer only on your machine.
   machine's id (by a session's, where the machine has none), holding when it
   first and last marked the store and the ids of its latest three sessions.
 - `trash/`: results no transcript names any more, for a week before removal.
-- `tmp/`: a write in progress; a process that stopped partway can leave one.
+- `tmp/`: a write in progress; a process that stopped partway can leave one,
+  which the first clean-up that runs to its end once it is a day old
+  removes.
 
 And in Claude Code's data directory for the plugin,
 `~/.claude/plugins/data/<plugin id>/`: `told`, the process ids of the sessions it told that it is not running, and

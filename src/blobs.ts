@@ -3,7 +3,7 @@
 // no tool's name, no place of its configuration, no shape of a conversation (test/layers.test.ts). The lines that stand
 // for what is stored, and where a store is, are src/store.ts.
 
-import { blobPath, blobsDir, entryPath, indexDir, tmpDir } from './layout.ts';
+import { blobPath, blobsDir, entryPath, indexDir, tmpDir, tmpPartPath } from './layout.ts';
 import { decodeMedia, textOf, type MediaPart } from './encoded.ts';
 import type { Files } from './files.ts';
 
@@ -82,8 +82,7 @@ export async function put(files: Files, path: string, text: string, tmp: string)
       return failed(error);
     }
   }
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  const part = `${tmp}/${name}.${crypto.randomUUID()}.part`;
+  const part = tmpPartPath(tmp, path.slice(path.lastIndexOf('/') + 1));
   try {
     await files.write(part, text);
     if ((await files.read(part)) !== text) {

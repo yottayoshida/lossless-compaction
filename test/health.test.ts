@@ -47,9 +47,11 @@ async function storeIn(files: MemoryFiles, dir: string): Promise<void> {
   await put(files, `${dir}/trash/2026-10-10/${hex('e')}.txt`, `${MARK} trashed`, NOW - 10 * DAY);
   await put(files, `${dir}/trash/2026-10-10/${hex('e')}.json`, '{"bytes":1,"tool":"Read"}', NOW - 10 * DAY);
   await put(files, `${dir}/trash/2026-10-12/${hex('f')}.txt`, 'xx', NOW - 8 * DAY);
-  await put(files, `${dir}/tmp/${hex('9')}.txt.1.part`, `${MARK} half`, NOW - 2 * DAY);
-  await put(files, `${dir}/tmp/${hex('7')}.json.3.part`, '{"by', NOW - 3 * DAY);
-  await put(files, `${dir}/tmp/${hex('8')}.txt.2.part`, 'fresh', NOW - 1000);
+  // Named as a write names what it puts there (src/layout.ts), and one file of another name.
+  await put(files, `${dir}/tmp/${hex('9')}.txt.11111111-2222-4333-8444-555555555555.part`, `${MARK} half`, NOW - 2 * DAY);
+  await put(files, `${dir}/tmp/${hex('7')}.json.33333333-2222-4333-8444-555555555555.part`, '{"by', NOW - 3 * DAY);
+  await put(files, `${dir}/tmp/${hex('8')}.txt.22222222-2222-4333-8444-555555555555.part`, 'fresh', NOW - 1000);
+  await put(files, `${dir}/tmp/notes.txt`, 'left by hand', NOW - 5 * DAY);
   for (const sub of ['', '/blobs', '/index', '/trash', '/trash/2026-10-10', '/trash/2026-10-12', '/tmp', '/roots']) files.dirs.add(`${dir}${sub}`);
 }
 
@@ -80,8 +82,8 @@ test('a place is counted from the listing and the entries: by what each result w
     { day: '2026-10-10', count: 2, bytes: bytes(`${MARK} trashed`) + bytes('{"bytes":1,"tool":"Read"}') },
     { day: '2026-10-12', count: 1, bytes: 2 },
   ]);
-  // Three in tmp/, two over a day old.
-  assert.deepEqual(counted.tmp, { count: 3, bytes: bytes(`${MARK} half`) + bytes('{"by') + bytes('fresh'), stale: 2 });
+  // Two a write left, which a clean-up removes; one of another name, which it does not; and one still young.
+  assert.deepEqual(counted.tmp, { count: 4, bytes: bytes(`${MARK} half`) + bytes('{"by') + bytes('fresh') + bytes('left by hand'), stale: 2, strays: 1 });
   assert.deepEqual(await countStore(files, list(files), '/nowhere', NOW), { dir: '/nowhere', missing: true });
 });
 
@@ -114,7 +116,10 @@ test('/lossless-store says each place and the clean-up, names no path but the pl
   assert.match(text, /kept from: tool results 2 \(\d+ B\), kept conversations 1 \(\d+ B\), lossless-compaction's own tools 1 \(\d+ B\), no readable entry 1 \(\d+ B\)/);
   assert.ok(!text.includes('before a summary'));
   assert.match(text, /trash: 3 \(\d+ B\) files, by day moved there: 2026-10-10 2 \(\d+ B\), 2026-10-12 1 \(2 B\)/);
-  assert.match(text, /tmp\/: 3 \(\d+ B\) files, 2 over a day old, left by a write that stopped; those can be removed by hand/);
+  assert.match(
+    text,
+    /tmp\/: 4 \(\d+ B\) files, 2 a day old or more, left by a write that stopped; a clean-up that runs to its end removes those, 1 a day old or more that no write of the plugin left; those stay until removed by hand/,
+  );
   assert.match(text, /last ended: never; last tried: 2026-10-20 00:00 UTC/);
   assert.match(text, new RegExp(`tried since it last ended: 2; last stopped 2026-10-20 00:01 UTC: ${STOP_SAID.place}`));
   assert.match(text, /next: one was tried less than a day ago/);
@@ -142,6 +147,19 @@ test('a file under blobs/, index/ or the trash that the clean-up would not take 
   const after = await countStore(files, list(files), DIR, NOW);
   assert.ok(!('missing' in before) && !('missing' in after));
   assert.deepEqual([after.results, after.from, after.entries, after.trash], [before.results, before.from, before.entries, before.trash]);
+});
+
+test('what is under a tmp/ that is a link is not said to be removed by a clean-up, which sweeps a plain tmp/ alone (#119)', async () => {
+  const files = new Guarded();
+  await put(files, `${DIR}/blobs/${hex('e')}.txt`, 'kept', NOW - DAY);
+  await put(files, `/elsewhere/tmp/${hex('9')}.txt.11111111-2222-4333-8444-555555555555.part`, 'not ours', NOW - 3 * DAY);
+  files.links.set(`${DIR}/tmp`, '/elsewhere/tmp');
+  // As the host lists it: a path through the link lands where it leads.
+  const through = async (path: string) => files.list(path === `${DIR}/tmp` ? '/elsewhere/tmp' : path);
+  const counted = await countStore(files, through, DIR, NOW);
+  assert.ok(!('missing' in counted));
+  assert.deepEqual([counted.tmp.stale, counted.tmp.strays], [0, 1]);
+  assert.match(storeReport([counted], await stateIn(files, list(files), [DIR]), NOW, false), /1 a day old or more that no write of the plugin left; those stay until removed by hand/);
 });
 
 test('the first week is said with the day it ends, and a place not there is said as such', async () => {

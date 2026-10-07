@@ -17,6 +17,11 @@ const TRASHED = /^([0-9a-f]{64})\.(?:txt|json)$/;
 export const blobsDir = (dir: string) => `${dir}/blobs`;
 export const indexDir = (dir: string) => `${dir}/index`;
 export const tmpDir = (dir: string) => `${dir}/tmp`;
+/** Where a write puts a text before it moves it into place: under `tmp/`, named for where it goes, and made unique. */
+export const tmpPartPath = (tmp: string, name: string) => `${tmp}/${name}.${crypto.randomUUID()}.part`;
+const TMP_PART = /^[^/]+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.part$/;
+/** Whether a file of `tmp/` is one a write put there, by its name. */
+export const isTmpPartName = (name: string) => TMP_PART.test(name);
 export const trashDir = (dir: string) => `${dir}/trash`;
 export const trashDayDir = (dir: string, day: string) => `${trashDir(dir)}/${day}`;
 export const rootsDir = (dir: string) => `${dir}/roots`;

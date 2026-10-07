@@ -2753,3 +2753,26 @@ twice and once cut (`maxAfterPercent` 10), no fewer right answers.
 - `opaque`'s results open with their titles, which is the case a list by
   first lines suits best. Where the first line of a result says nothing, the
   list is no better than `recall` one by one; that was not measured.
+
+## What one `sync` costs after a compaction's writes
+
+The plugin does not ask the disk to keep its writes before a compaction lets
+go of what it moved out (`docs/invariants.md`, "A crash of the machine").
+Measured on 2026-10-07 on macOS 15.3.1, on the machine this was written on,
+before deciding whether to (#119): a Node script wrote 40 texts of 8 KB and
+their entries into a directory of its own on the same disk, each beside its
+place and moved into it with `rename` as a compaction writes them, then ran
+`/bin/sync` and timed it until it returned, 20 times over. It returned in
+53 ms at the median, 49 to 60 ms in all, with five Claude Code processes
+running beside it.
+
+- That is when `sync` returned, not when the disk had written it all: macOS's
+  `sync(2)` says it may return before the buffers are flushed.
+- `sync` writes out what every process on the machine has written, not the
+  plugin's files alone: what it costs is set by what else was writing then,
+  and was not measured with more going on.
+- Having the drive write out its own cache takes `fcntl(F_FULLFSYNC)` on the
+  file (Apple's `fsync(2)`), which no single command the plugin starts asks
+  for. Whether its writes would be there after the power went off was not
+  measured: that takes cutting the power.
+- Nothing was added: a cost is known, and what it would buy is not.
