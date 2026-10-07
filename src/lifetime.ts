@@ -16,7 +16,7 @@ import { readFoldedReadLine } from './changed.ts';
 import { ticketIdsIn } from './guard.ts';
 import { DATE, DAY, blobIdOf, blobName, blobPath, blobsDir, dayOf, entryName, entryPath, gcFile, indexDir, isRootName, rootPath, rootsDir, trashDayDir, trashDir, trashedIdOf, trashedPaths } from './layout.ts';
 import { exitOf } from './commands.ts';
-import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall } from './store.ts';
+import { idOf, isPart, readBodyTicket, readPartTicket, readTicket, recall, storedText } from './store.ts';
 import type { DirEntry, Exec, Files, Message } from './types.ts';
 
 export { dayOf };
@@ -40,12 +40,17 @@ export type List = (path: string) => Promise<DirEntry[]>;
  * (ADR 0016). The words a stop is said in name directories of other
  * repositories, and are only shown.
  */
-export const STOP_KINDS = ['unread', 'too-many', 'place', 'part', 'trash', 'move', 'unexpected'] as const;
+export const STOP_KINDS = ['unread', 'too-many', 'place', 'part', 'trash', 'move', 'shared', 'unexpected'] as const;
 export type StopKind = (typeof STOP_KINDS)[number];
-export type Stop = { stop: string; kind: StopKind };
+/** Why one stored thing a clean-up follows stopped it (#114): kept with its id, so that it can be named and gone past. */
+export const UNREAD_WHYS = ['text-missing', 'text-changed', 'text-unreadable', 'in-trash'] as const;
+export type Unread = { id: string; why: (typeof UNREAD_WHYS)[number] };
+/** How many of them a stop keeps: enough to show, not the store's contents. */
+export const UNREAD_MAX = 20;
+export type Stop = { stop: string; kind: StopKind; unread?: readonly Unread[]; more?: number };
 
 /** The last stop recorded: when, and its kind. */
-export type Stopped = { at: number; kind: StopKind };
+export type Stopped = { at: number; kind: StopKind; unread?: readonly Unread[]; more?: number };
 
 /**
  * What is kept between sessions, in the store's own directory, so that every
@@ -105,9 +110,19 @@ export async function stateIn(files: Files, list: List, dirs: readonly string[])
 
 /** A recorded stop, if it is one: only a kind of the list is read, whatever else the file holds. */
 function stoppedIn(value: unknown): Stopped | null {
-  const one = value as { at?: unknown; kind?: unknown } | null | undefined;
+  const one = value as { at?: unknown; kind?: unknown; unread?: unknown; more?: unknown } | null | undefined;
   if (typeof one?.at !== 'number' || !(STOP_KINDS as readonly unknown[]).includes(one.kind)) return null;
-  return { at: one.at, kind: one.kind as StopKind };
+  // The ids and causes of what stopped it, of the list only: nothing else the file holds is read.
+  const unread = (Array.isArray(one.unread) ? one.unread : [])
+    .filter((item): item is Unread => {
+      const { id, why } = (item ?? {}) as { id?: unknown; why?: unknown };
+      return typeof id === 'string' && /^[0-9a-f]{64}$/.test(id) && (UNREAD_WHYS as readonly unknown[]).includes(why);
+    })
+    .slice(0, UNREAD_MAX)
+    .map(({ id, why }) => ({ id, why }));
+  if (unread.length === 0) return { at: one.at, kind: one.kind as StopKind };
+  const more = typeof one.more === 'number' && Number.isInteger(one.more) && one.more > 0 ? one.more : 0;
+  return more > 0 ? { at: one.at, kind: one.kind as StopKind, unread, more } : { at: one.at, kind: one.kind as StopKind, unread };
 }
 
 /** Records `root` in `dir` unless it is there; the first record starts the wait before any collection. */
@@ -137,10 +152,14 @@ export async function noteTried(files: Files, dir: string, state: GcState, now: 
  * wrote when it started. Another session may have written since — tried
  * again, or ended — and what it wrote stands: the stop is then not recorded.
  */
-export async function noteStopped(files: Files, dir: string, record: GcRecord, kind: StopKind, now: number): Promise<void> {
+export async function noteStopped(files: Files, dir: string, record: GcRecord, kind: StopKind, now: number, unread: readonly Unread[] = [], more = 0): Promise<void> {
   const there = (await readJson(files, lastRunFile(dir))) as { lastRun?: unknown; tried?: unknown } | undefined;
   if (there?.tried !== record.tried || there.lastRun !== record.lastRun) return;
-  await files.write(lastRunFile(dir), JSON.stringify({ ...record, stopped: { at: now, kind } }));
+  // The ids of what stopped it, and why: no path, no words a command printed.
+  const named = unread.slice(0, UNREAD_MAX).map(({ id, why }) => ({ id, why }));
+  const rest = more + Math.max(0, unread.length - UNREAD_MAX);
+  const stopped = named.length === 0 ? { at: now, kind } : rest > 0 ? { at: now, kind, unread: named, more: rest } : { at: now, kind, unread: named };
+  await files.write(lastRunFile(dir), JSON.stringify({ ...record, stopped }));
 }
 
 export async function noteRun(files: Files, dir: string, now: number): Promise<void> {
@@ -430,9 +449,10 @@ export async function restoreThroughParts(
     const next: string[] = [];
     for (const id of reading) {
       try {
-        if ((await isPart(files, dirs, id)) !== true) continue;
-        const got = await recall(files, dirs, id);
-        if ('error' in got) continue;
+        // As the collection reads it: a part, or a text whose entry does not read (ADR 0033).
+        if ((await isPart(files, dirs, id)) === false) continue;
+        const got = await storedText(files, dirs, id);
+        if (!got.ok) continue;
         for (const inner of got.text.match(IN_TEXT) ?? []) {
           if (named.has(inner)) continue;
           named.add(inner);

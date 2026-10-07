@@ -74,7 +74,23 @@ Why the plugin is built the way it is, one record a decision.
 - [0030](0030-what-claude-code-attached-is-kept-at-the-end.md): why what
   Claude Code attached to the messages as it sent them is kept at each
   compaction that rebuilds, and named by one message at the end.
-- [0031](0031-a-compact-given-instructions-is-summarized.md): why a
+- [0031](0031-the-marketplace-points-at-a-release.md): why the marketplace
+  entry names no version, and why a release points it at the release's tag
+  in three steps, not at the tip of `main`.
+- [0032](0032-a-store-used-from-another-machine-is-not-cleaned-up.md): why a
+  store marked as used from another machine is not cleaned up, and why each
+  machine's id is kept outside Claude Code's directory.
+- [0033](0033-an-entry-that-does-not-read-is-read-through-its-text.md): why
+  a stored thing whose entry does not read, over a text that does, is read as
+  a kept part's by the clean-up rather than stopping it.
+- [0034](0034-a-conversation-near-what-claude-code-hands-over-is-cut.md): why a
+  conversation Claude Code handed over with three eighths of the 4096
+  entries it hands a plugin is cut down to a quarter, at a compaction
+  without instructions, though its size fits.
+- [0035](0035-the-places-written-to-before-are-read.md): why the places
+  results were written to under the user's settings are noted and read after
+  the current ones, and never cleaned up.
+- [0036](0036-a-compact-given-instructions-is-summarized.md): why a
   `/compact` given instructions, by hand or by a plugin, hands what is left
   to Claude Code's summary whatever room moving out made, and an automatic
   compaction does not.

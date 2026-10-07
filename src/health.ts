@@ -6,7 +6,8 @@
 // clean-up's own record. No stored result is opened.
 
 import { DATE, DAY, blobIdOf, blobsDir, entryIdOf, entryPath, indexDir, tmpDir, trashDayDir, trashDir, trashedIdOf } from './layout.ts';
-import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind } from './lifetime.ts';
+import { listed, whyNotNow, FIRST_WAIT_MS, GC_EVERY_MS, type GcState, type List, type StopKind, type Unread } from './lifetime.ts';
+import type { Mark } from './machine.ts';
 import { PART, PLUGIN, isOwnTool } from './store.ts';
 import type { DirEntry, Files } from './types.ts';
 
@@ -86,14 +87,26 @@ function zero(): Tally {
   return { count: 0, bytes: 0 };
 }
 
+/**
+ * What one stored thing that stopped a clean-up is, and how the clean-up goes on, in each place above that holds a file
+ * under its id. Where taking it out loses what only it names, that is said.
+ */
+export const UNREAD_HOW: Record<Unread['why'], string> = {
+  'text-missing': 'its text, blobs/<id>.txt, is not there; where you removed it yourself, remove index/<id>.json too in each place that has it, and the clean-up goes on. In a store a sync is still writing, wait for it',
+  'text-changed': 'its text, blobs/<id>.txt, is not what was stored; put the stored text back, or move both its files out of the store, after which what only it named is no longer kept',
+  'text-unreadable': 'its text, blobs/<id>.txt, could not be read; make it readable to you, or move both its files out of the store, after which what only it named is no longer kept',
+  'in-trash': 'it is named and in the trash, and could not be put back; move its files from trash/<day>/ back into blobs/ and index/, and the clean-up goes on',
+};
+
 /** What each kind of stop is said as: no path, nothing a command printed. */
 export const STOP_SAID: Record<StopKind, string> = {
   unread: 'the transcripts could not be read to the end',
   'too-many': 'one directory of transcripts held more ids than one search can return',
   place: 'a place transcripts are kept in is gone, or could not be looked at or listed',
-  part: 'a kept part of a conversation could not be read',
+  part: 'a stored thing it follows, a kept part of a conversation or what one names, could not be read',
   trash: 'the trash could not be listed, made or emptied',
   move: 'results could not be moved to or from the trash',
+  shared: 'the store is used from another machine whose transcripts this one cannot read, or the machines that use it could not be listed',
   unexpected: 'an error the clean-up does not name',
 };
 
@@ -106,14 +119,24 @@ export function sizeText(bytes: number): string {
 const timeText = (ms: number) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const dayText = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const tallyText = (one: Tally) => `${one.count} (${sizeText(one.bytes)})`;
+/** What a place's trash holds, over every day. */
+const trashedOf = (one: Extract<Counted, { results: unknown }>): Tally => one.trash.reduce((sum, day) => ({ count: sum.count + day.count, bytes: sum.bytes + day.bytes }), zero());
 
 /**
- * What `/lossless-store` answers: each place results are read from, then the
- * clean-up. `setByStoreDir` says the place was chosen by the `storeDir`
- * setting, so no other place is read. Claude Code puts the plugin's name in
- * front of it, so it does not.
+ * What `/lossless-store` answers: each place of the settings in use, then the
+ * places results were kept in before, which are read and never cleaned up
+ * (#116), then the clean-up. `setByStoreDir` says the place was chosen by the
+ * `storeDir` setting. Claude Code puts the plugin's name in front of it, so it
+ * does not.
  */
-export function storeReport(counted: readonly Counted[], gc: GcState, now: number, setByStoreDir: boolean): string {
+export function storeReport(
+  counted: readonly Counted[],
+  gc: GcState,
+  now: number,
+  setByStoreDir: boolean,
+  machines: { marks: readonly Mark[] | null; self: string | null; unread: readonly string[] | null } | null = null,
+  earlier: readonly Counted[] = [],
+): string {
   const lines: string[] = [`Results are kept in ${counted.length === 1 ? 'one place' : `${counted.length} places`}${setByStoreDir ? ', set by storeDir' : ''}:`];
   for (const one of counted) {
     lines.push('', one.dir);
@@ -128,7 +151,7 @@ export function storeReport(counted: readonly Counted[], gc: GcState, now: numbe
         `${PLUGIN}'s own tools ${tallyText(one.from.own)}` +
         (one.from.unknown.count > 0 ? `, no readable entry ${tallyText(one.from.unknown)}` : ''),
     );
-    const trashed = one.trash.reduce((sum, day) => ({ count: sum.count + day.count, bytes: sum.bytes + day.bytes }), zero());
+    const trashed = trashedOf(one);
     lines.push(
       `  trash: ${one.trash.length === 0 ? 'empty' : `${tallyText(trashed)} files, by day moved there: ${one.trash.map((day) => `${day.day} ${tallyText(day)}`).join(', ')}`}`,
     );
@@ -136,17 +159,52 @@ export function storeReport(counted: readonly Counted[], gc: GcState, now: numbe
       `  tmp/: ${one.tmp.count === 0 ? 'empty' : `${tallyText(one.tmp)} files` + (one.tmp.stale > 0 ? `, ${one.tmp.stale} over a day old, left by a write that stopped; those can be removed by hand` : '')}`,
     );
   }
+  if (earlier.length > 0) {
+    lines.push('', `Read as well, never cleaned up: ${earlier.length === 1 ? 'one place' : `${earlier.length} places`}, written to before under your settings or the default ones beside storeDir (docs/limits.md, "The files"):`);
+    for (const one of earlier) {
+      lines.push('', one.dir);
+      if ('missing' in one) lines.push('  not there, or not a plain directory');
+      else lines.push(`  results: ${tallyText(one.results)}; trash: ${one.trash.length === 0 ? 'empty' : `${tallyText(trashedOf(one))} files`}`);
+    }
+  }
   lines.push('', 'clean-up:');
   lines.push(`  last ended: ${gc.lastRun > 0 ? timeText(gc.lastRun) : 'never'}; last tried: ${gc.tried > 0 ? timeText(gc.tried) : 'never'}`);
   lines.push(`  tried since it last ended: ${gc.tries}${gc.stopped === null ? '' : `; last stopped ${timeText(gc.stopped.at)}: ${STOP_SAID[gc.stopped.kind]}`}`);
+  // What stopped it, one stored thing each, and how to go on: in whichever place above holds it (#114).
+  for (const one of gc.stopped?.unread ?? []) lines.push(`    ${one.id}: ${UNREAD_HOW[one.why]}`);
+  if ((gc.stopped?.more ?? 0) > 0) lines.push(`    and ${gc.stopped?.more} more, named once these are gone past`);
   const why = whyNotNow(gc, now);
   if (why?.kind === 'first-week') {
     lines.push(`  next: not before ${timeText(gc.firstSeen + FIRST_WAIT_MS)}, the first week after transcripts were found`);
   } else {
     lines.push(`  next: ${why?.text ?? 'tried when a session starts, once the place results are kept in is made private'}`);
   }
+  if (machines !== null) lines.push('', ...machinesText(machines.marks, machines.self, machines.unread));
   lines.push('', 'Results are plain text on this machine (docs/limits.md, "The files").');
   return lines.join('\n');
+}
+
+/**
+ * The machines a store is used from, this one first, whether their transcripts are read here, and how a clean-up
+ * stopped by one whose are not goes on (ADR 0032).
+ */
+function machinesText(marks: readonly Mark[] | null, self: string | null, unread: readonly string[] | null): string[] {
+  const lines = ['machines the store is used from:'];
+  if (marks === null) return [...lines, '  their marks could not be listed'];
+  const seen = (mark: Mark) => `first ${mark.first > 0 ? timeText(mark.first) : 'not known'}, last ${mark.last > 0 ? timeText(mark.last) : 'not known'}`;
+  const own = marks.find((mark) => mark.name === self);
+  if (self !== null) lines.push(`  this one, ${self}: ${own === undefined ? 'not marked yet' : seen(own)}`);
+  const others = marks.filter((mark) => mark.name !== self).sort((a, b) => b.last - a.last);
+  for (const mark of others) {
+    const read = unread === null ? 'whether its transcripts are read here is not known' : unread.includes(mark.name) ? 'its transcripts are not read here' : 'its transcripts are read here';
+    lines.push(`  ${mark.name}: ${seen(mark)}; ${read}`);
+  }
+  if (unread !== null && unread.length > 0) {
+    lines.push(
+      '  The clean-up does not run while a machine whose transcripts are not read here marks the store. One that no longer uses it is taken off by removing machines/<its name>.json in each place results are kept in that has it; the clean-up then runs at its next try.',
+    );
+  }
+  return lines;
 }
 
 /** How long without a clean-up that ended before a session says so: two of its weeks, so that one missed is not said (ADR 0016). */

@@ -2258,6 +2258,45 @@ Not measured: a cut in a window of 1,000,000 in Claude Code, where the two
 replays above are all there is; Opus 5.5 after a cut; and, with Sonnet 5.5,
 anything but the one `/compact` by hand above.
 
+## How many entries a conversation holds at a compaction
+
+Claude Code hands a plugin the newest 4096 entries of a conversation, and
+under the plugin the count grows from one compaction to the next (#115,
+ADR 0034). Counted on 2026-10-06 from Claude Code's records of one machine,
+the sessions changed from 2026-10-01 on, with `bench/messages.ts`: sessions
+run with `claude -p` left out, a compaction counted once where a fork
+carries it, an entry a row of a user or assistant message, the window
+taken as 1,000,000 where any request sent more than 200,000 tokens. Only
+counts were read. `targetPercent` was the default of the version in use: 40
+until 0.7.1 on 2026-10-05, 1 from then; the record does not say which ran.
+
+```text
+interactive sessions: 36; compactions: 56, 16 summaries and 40 rebuilt by the plugin
+the most a conversation held before a compaction: 2081 entries, 1475 messages
+gathered from an empty start: 42 compactions, the most 2045 entries; of them 15 started by Claude Code in a window of 1,000,000, median 1510, most 1766
+change from a compaction the plugin rebuilt to the next: -1204, -1005, -418, -111, 10, 44, 67, 85, 162, 305, 429, 567, 620, 1228
+```
+
+- An empty start is a session's first compaction, or the first after one of
+  Claude Code's summaries, which start the count over: what the
+  conversation gathered there is what one window held.
+- In the window of 1,000,000, where the plugin rebuilt one compaction after
+  another, the count before each was 1,411, 1,716, 1,801 and 1,963 in one
+  session, the last three on 2026-10-05 and 2026-10-06, and 1,585, 2,014
+  and then 2,081, at which Claude Code summarized, in another. A fall after
+  a rebuild is a cut, or a summary at the next.
+- With `targetPercent` at 1, what is in use goes down to little at a
+  compaction and the messages stay, so the next can come after as much as
+  one window holds. Where more stays in use, as in the first session above,
+  it comes sooner. None counted reached 4096.
+
+So the plugin cuts a conversation of 1,536 entries down to 1,024 messages:
+1,535 not cut and the 2,045 gathered come to 3,580, and 1,024 and 2,045 to
+3,069. Not measured: a session of another machine or another person, the
+count in a window of 200,000 apart from the one session of two compactions
+there, and how many entries the messages a cut hands back come to at the
+next compaction.
+
 ## Where the answer went, and whether the agent fetched it
 
 Whether an answer is right says nothing of why it is wrong when it is. What

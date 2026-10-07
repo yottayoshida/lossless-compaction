@@ -6,19 +6,26 @@ What the plugin does not do, and what a repository or a version can change.
 
 - **A `/compact` with nothing to move out and room left does nothing** but
   say so: Claude Code shows it as not compacted, and `/compact` with
-  instructions summarizes (ADR 0015).
+  instructions summarizes (ADR 0015). A conversation of 1,536 entries or
+  more is cut for its length instead ([below](#when-the-conversation-is-too-long)).
 - **A conversation too full is cut, not summarized.** When moving results
   out is not enough, or nothing can be moved out and the compaction is
   automatic or more than `maxAfterPercent` is in use, the oldest messages
   are kept in parts, a list of them stands in their place, and the first
   message stays. More is sent with each request than after a summary, and
   the agent knows what was cut by the list alone (ADR 0019).
+- **A conversation near the 4096 entries Claude Code hands a plugin is cut
+  too.** At a compaction without instructions, one handed over with 1,536
+  or more is cut down to 1,024 messages, however much room is left: under
+  the plugin no summary starts the count over, and one that reaches 4096 is
+  summarized with what is older not kept
+  ([below](#when-the-conversation-is-too-long), ADR 0034).
 - **Claude Code's own summary still runs** when `/compact` is given
   instructions, on what is left once results, long inputs and old calls
   are moved out, whatever room that made: a `/compact` given instructions
   moves out what it can, then runs Claude Code's summary with them on what
   is left, once the conversation is kept; where the disk refuses the write,
-  nothing runs (ADR 0031, ADR 0008). It also runs when no cut
+  nothing runs (ADR 0036, ADR 0008). It also runs when no cut
   between messages brings the conversation under `maxAfterPercent`, as with
   one very long message said last; when the plugin cannot count the
   conversation and its messages come to less than `keepTokens`; when the
@@ -87,9 +94,10 @@ Each of these in full, and the rest, below.
 
 Claude Code's built-in compaction runs instead when the conversation holds an
 image or a document outside a tool result, or any block of a kind the plugin
-does not know, has 4096 messages or more, or belongs to a subagent; when
+does not know, has 4096 messages or more (one is cut well before that,
+[below](#when-the-conversation-is-too-long)), or belongs to a subagent; when
 `/compact` was given instructions, typed or by a plugin, on what is left
-after moving out (ADR 0031; an automatic compaction handed instructions by
+after moving out (ADR 0036; an automatic compaction handed instructions by
 another hook is handed back rebuilt where moving out made room, as one
 without them, and goes to the summary where too much is still in use, as
 before); and when a conversation that is too full
@@ -328,6 +336,58 @@ lossless-compaction: no summary, messages 2-19 of 20 kept in 1 part: moved 0 of 
 Measured on Claude Code 2.1.288: with Sonnet 5.5 at a `/compact` by hand,
 and with Haiku 4.5 at one too and at compactions Claude Code started
 ([measurements](measurements.md#the-oldest-messages-kept-in-place-of-a-summary)).
+
+## When the conversation is too long
+
+Claude Code hands a plugin the newest 4096 entries of a conversation, and
+the plugin leaves one of 4096 or more to the summary, kept first, with what
+is older than the 4096 not kept
+([above](#when-the-built-in-compaction-runs-instead)). Moving results out
+leaves the messages where they were, and no summary starts the count over,
+so under the plugin it grows from one compaction to the next. How much it
+can grow by is what one window holds: from an empty start to the next
+compaction a conversation gathered 1,510 entries at the median and 2,045 at
+most, counted on one machine; after a compaction the plugin rebuilt, where
+more stayed in use, it grew by 10 to 1,228 where it grew
+(ADR 0034, [measurements](measurements.md#how-many-entries-a-conversation-holds-at-a-compaction)).
+
+At a compaction without instructions, a conversation that holds 1,536 of
+the 4,096 entries Claude Code hands a plugin is cut, its oldest messages
+kept in parts with no summary, down to 1,024 messages, however few of the
+newest `keepTokens` that leaves, so that compactions do not carry it to the
+4,096 at which the summary runs and older messages are not kept.
+
+- The entries are counted as the larger of the messages the plugin is
+  handed and the conversation as Claude Code sends it, before anything is
+  rebuilt. In a made-up session of 3,400 messages, a row of the record
+  each, Claude Code handed over 3,400, and after the cut 1,026: the 1,024
+  handed back and the two commands typed since. Whether it counts rows of
+  other kinds was not measured.
+- The 1,024 are the messages handed back, the list among them, and with
+  the message naming what Claude Code attached at the end where it added
+  any (ADR 0030), 1,025.
+- It is cut where moving results out was enough by size, and at a
+  `/compact` by hand that would otherwise be left undone. Past 1,536, each
+  compaction without instructions cuts it again.
+- The first message stays, a cut falls where a cut by size may, and the
+  list stands for what was cut, as [above](#when-the-conversation-is-too-full).
+  Where the conversation is too full as well, the cut that goes further is
+  taken; where it is too full and no cut brings it under the line with the
+  first message in front, the first message goes too, or the summary runs,
+  as above.
+- With instructions, the summary that was asked for runs, the conversation
+  kept first, and the count starts over.
+- Where no place to cut is left (one call waiting for its result through
+  all of it, say) or a part cannot be written, the compaction goes as it
+  would have.
+- `/lossless-status` says how many of the 4096 the conversation holds.
+- A conversation that gathers more than 2,560 entries between two
+  compactions, or 4096 before its first, still reaches 4096 and is
+  summarized, kept first. In a window of 1,000,000 the first takes fewer
+  than 377 tokens an entry on average (967,000 over 2,560) and the second
+  fewer than 236, less what every request carries besides the conversation
+  and what stayed in use; the most gathered counted, 2,045 entries, came to
+  about 470.
 
 ## What a summary replaces
 
@@ -841,6 +901,45 @@ set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
 `CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone choose nothing
 ([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md), [ADR 0028](adr/0028-a-key-in-the-environment-waits-for-a-choice.md)).
 
+An installed copy is replaced only when the plugin's version changes.
+Claude Code does not update it on its own unless auto-update is turned on
+for this marketplace (`/plugin`, **Marketplaces**, `lossless-compaction`,
+**Enable auto-update**); otherwise `/plugin marketplace update
+lossless-compaction` in a session, or from the shell:
+
+```sh
+claude plugin marketplace update lossless-compaction
+claude plugin update lossless-compaction@lossless-compaction
+```
+
+and the new copy loads in the next session or after `/reload-plugins`.
+`claude plugin list` names the version installed. The marketplace points at
+the tip of `main`: a copy installed between two releases can hold changes not
+yet released, under the last release's number, and keeps them until the
+version changes (#106).
+
+To stay on one release, add the marketplace at its tag, before installing:
+
+```sh
+claude plugin marketplace add yottayoshida/lossless-compaction#v0.7.1
+claude plugin install lossless-compaction@lossless-compaction
+```
+
+Each tag from `v0.4.0` installs that release (measured with `v0.7.1` on
+Claude Code 2.1.291); the two before were named `jev-lossless-compaction`. A
+marketplace that is added cannot be moved to another tag from the shell:
+adding it again from another one is refused, and with its `ref` edited in
+`~/.claude/settings.json`, `claude plugin marketplace update` and `claude
+plugin install` said it was not found (measured on 2.1.291). It is removed
+and added again, and removing it removes the plugin's settings with it,
+`storeDir` among them (measured). Note them first and set them again when
+installing, with `--config storeDir=…`: with `storeDir` not set again,
+results are written to the default place, and what was kept elsewhere is
+read only where that place is still on the list of earlier places (#116),
+which is kept apart from the settings; whether removing the plugin removes
+it was not checked. Whether an older version reads a store a newer one wrote,
+or whether its clean-up removes what the newer one keeps, was not checked.
+
 Coming from `jev-lossless-compaction` (0.3.0 and before), an installed copy
 does not follow the rename: see [moving from the old
 name](#moving-from-the-old-name).
@@ -850,6 +949,9 @@ name](#moving-from-the-old-name).
 Files are plain text under `~/.claude/lossless-compaction/`, or under
 `CLAUDE_CONFIG_DIR` when that is set. A secret in a tool result stays there
 until no conversation holds it any more, as below, or until you delete it.
+A result deleted by hand is deleted with both its files, `blobs/<id>.txt`
+and `index/<id>.json`: the entry of a kept part left without its text, while
+a conversation still names the part, stops the clean-up (#114).
 
 `/lossless-store` says how much is kept, by what it was kept from, in the
 trash and left in `tmp/`, and when the clean-up last ended and last tried,
@@ -866,10 +968,21 @@ lossless-compaction: Results are kept in one place, set by storeDir:
   trash: 3 (60 B) files, by day moved there: 2026-09-25 2 (58 B), 2026-10-01 1 (2 B)
   tmp/: 2 (35 B) files, 1 over a day old, left by a write that stopped; those can be removed by hand
 
+Read as well, never cleaned up: 2 places, written to before under your settings or the default ones beside storeDir (docs/limits.md, "The files"):
+
+/Users/you/.claude/lossless-compaction
+  results: 41 (612.0 KB); trash: empty
+
+/Users/you/.claude/jev-lossless-compaction
+  not there, or not a plain directory
+
 clean-up:
   last ended: 2026-09-21 03:40 UTC; last tried: 2026-10-03 02:40 UTC
   tried since it last ended: 2; last stopped 2026-10-03 02:42 UTC: the transcripts could not be read to the end
   next: one was tried less than a day ago
+
+machines the store is used from:
+  this one, 3f9a…: first 2026-09-30 08:12 UTC, last 2026-10-03 02:40 UTC
 ```
 
 - It counts what the host lists of the directories, with sizes and times,
@@ -879,10 +992,19 @@ clean-up:
 - Its answer is a command's output: Claude Code shows it as it is, and keeps
   it in the conversation as it keeps any command's output, so the model
   reads it with the next request (measured). It holds the places results
-  are read from, counts, times and the kind of the last stop. It is not a
-  tool: the agent is not offered it.
-- A clean-up that stops records only the kind of stop in `gc.json`, never
-  the words it is said in, which name directories of other repositories. A
+  are read from, counts, times and the kind of the last stop. Where kept
+  parts, or things named in the trash, stopped it, it names each by its id
+  with why and how the clean-up goes on: a text not there, removed by hand
+  or not yet written by a sync; a text changed or that does not read; one
+  in the trash that could not be put back. An entry that does not read, over
+  a text that is the one stored, stops nothing: the text is read as a kept
+  part's ([ADR 0033](adr/0033-an-entry-that-does-not-read-is-read-through-its-text.md)). It is not a tool: the agent
+  is not offered it.
+- A clean-up that stops records the kind of stop in `gc.json`, and the ids
+  and causes of the stored things that stopped it, every one it reaches in
+  that try, up to twenty with a count of the rest; one behind a part that
+  does not read is reached once that part is mended. Never the words it is
+  said in, which name directories of other repositories. A
   try is counted when it starts, so one a short session cut off is counted
   too; one that ends clears both.
 - It reads, and changes nothing. There is still no limit and nothing deletes
@@ -1024,6 +1146,31 @@ too, so they are counted without the plugin keeping a list of its own.
   a `CLAUDE_CONFIG_DIR` that shares a `storeDir` and has not compacted since
   — is not counted. Resuming it can find a result gone. Starting a session
   and compacting once under each configuration records its place.
+- A store is not to be shared between machines: a clean-up reads this
+  machine's transcripts only. Each session marks the store, at its start and
+  at each compaction, in `machines/<name>.json`: named by its machine's id,
+  made once in `~/.local/state/lossless-compaction/machine.json`, or by the
+  session where no id can be kept there; with the ids of the machine's latest
+  three sessions. A clean-up stops before anything moves where a mark holds
+  no session whose transcript it finds in the places recorded, and is not of
+  the session at hand — another machine using the store through a synced
+  folder, a network drive, or a `storeDir` set alike — and where the marks
+  cannot be listed ([ADR 0032](adr/0032-a-store-used-from-another-machine-is-not-cleaned-up.md)).
+  `/lossless-store` lists the marks, says whose transcripts are not read
+  here, and how to go on: remove the mark of a machine that no longer uses
+  the store; the clean-up runs at its next try, a day after the last. A mark
+  of another name whose sessions' transcripts are read here is taken off at
+  the clean-up, while those transcripts last: a container made again over
+  the same transcripts, a devcontainer that keeps `~/.claude`, which has a
+  new id; a session's own mark where no id could be kept. One still in use
+  marks the store again at its next session. Where Claude Code removed those
+  transcripts before a clean-up ran here — no session for longer than its
+  `cleanupPeriodDays` — the mark stops it until removed by hand. A machine
+  that runs an earlier version, or has not started a session since this one,
+  leaves no mark: until it does, what only its transcripts name can go as
+  before. Two machines holding one id, copied with a home directory, are not
+  told apart; nor is one whose transcript of a latest session was copied
+  here, which is taken for this machine's.
 - Any 64-hex string counts, a git object id or another hash as well; that
   keeps more, never less.
 - The trash and the removal run `mkdir`, `mv` and `rm` from `/bin` or
@@ -1071,17 +1218,43 @@ Up to 0.3.0 the plugin was named `jev-lossless-compaction`, and the directory
 with it. Results are read from both places; while the old directory exists — a
 link to it counts — new results are written there too, whether or not the new
 directory exists, since that is where the results are. It is made mode 700
-like the new one. With `storeDir` set, the old directory is neither read nor
-closed: `chmod 700 ~/.claude/jev-lossless-compaction` if an earlier version
-made it. If the old directory is a link, writing is refused as
+like the new one. With `storeDir` set, the old directory is read, as an
+earlier place, and not closed: `chmod 700 ~/.claude/jev-lossless-compaction`
+if an earlier version made it. If the old directory is a link, writing is refused as
 before and the built-in compaction runs, which the compaction says; a plain
-file in its place is not written to. A `storeDir` setting is used alone.
+file in its place is not written to. With a `storeDir` setting, that place
+alone is written to.
 Settings are kept under the plugin's id, so a `storeDir` set under the old id
 has to be set again.
 
-`recall` and `find` look where results are kept now. After the setting or
-the variables above change, results kept elsewhere are not found until they
-change back.
+`recall` and `find` read every place results were written to under your
+settings since this version, and the default places when `storeDir` is set,
+the current one first: a ticket written before `storeDir` was set or changed
+comes back. Only the current place is cleaned up, and `/lossless-store`
+names the others (#116).
+
+- The places written to are noted, newest first, in the plugin's own store
+  under Claude Code's configuration directory
+  (`~/.claude/plugins/store/`), up to 16. One not found stays on the list,
+  as a place on a disk not mounted, and is read once it is there again.
+- An earlier place is only read: not cleaned up, not made private, nothing
+  put back from its trash. What another configuration still uses there is
+  left to it. A result in its trash is not found. To be rid of an earlier
+  place, see that no conversation you keep names its results, then remove
+  it by hand; it leaves the list once 16 newer places are on it.
+- The defaults are read beside a `storeDir` only where the repository's
+  settings did not set `HOME`, `USERPROFILE` or `CLAUDE_CONFIG_DIR` (ADR
+  0005).
+- Places written to before this version are not on the list: set
+  `storeDir` back to one and start a session with it once, and it is noted.
+- A place on a disk that does not answer, a network share gone away say,
+  is waited on wherever results are read, a compaction among them. To
+  forget the earlier places, remove the plugin's file under
+  `~/.claude/plugins/store/`.
+- Two sessions with different `storeDir` settings at once, as the
+  benchmark runs them, can each note its place over the other's: one earlier
+  place can drop off the list. With one `storeDir`, the same place is
+  noted.
 
 A part kept before a summary (see above) names the results it holds, which
 no transcript names: the ids a collection keeps are those the transcripts

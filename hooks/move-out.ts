@@ -22,10 +22,31 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { closeStore, type Run } from '../src/private.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
-import { FIND, NOT_AN_ID, NOT_STORED, PLUGIN, RECALL, STATUS_COMMAND, STORE_COMMAND, configDirFrom, holds, placesOf, recall, recallMeant, storedAs, type Recalled, type StoreDirs } from '../src/store.ts';
+import {
+  FIND,
+  NOT_AN_ID,
+  NOT_STORED,
+  PLACES_KEY,
+  PLUGIN,
+  RECALL,
+  STATUS_COMMAND,
+  STORE_COMMAND,
+  configDirFrom,
+  defaultPlacesOf,
+  holds,
+  notePlace,
+  ownedOf,
+  placesOf,
+  recall,
+  recallMeant,
+  storedAs,
+  withEarlier,
+  type Recalled,
+  type StoreDirs,
+} from '../src/store.ts';
 import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
 import { recallDescription } from '../src/tools.ts';
-import { describeTaints, placeTaints, sendTaints, taintsFrom, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
+import { describeTaints, placeTaints, sendTaints, taintsFrom, variableTaints, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
 import {
   collect,
@@ -46,8 +67,10 @@ import {
   type GcRecord,
   type List,
   type StopKind,
+  type Unread,
 } from '../src/lifetime.ts';
 import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src/witness.ts';
+import { idIn, machineFileFrom, machineIdOf, markName, marksIn, noteMachine, readMarks, readableSessions, sharedWith, takeOffMarks, unreadMarks } from '../src/machine.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
 
 const FALLBACK_WINDOW = 200_000;
@@ -82,6 +105,7 @@ type WithProcess = {
   };
 };
 type WithSettings = { settings: { read: (args: { source: 'project' | 'local' | 'user' }) => Promise<unknown> } };
+type WithStore = { store: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> } };
 type WithSession = {
   session: {
     id: () => Promise<string>;
@@ -142,7 +166,7 @@ async function markRunning($: WithEnvSet & WithProcess): Promise<void> {
   }
 }
 
-/** The directory written to, made or closed to its owner alone, else why not; the others read from, closed where they can be. */
+/** The directory written to, made or closed to its owner alone, else why not; the others of the settings in use, closed where they can be. */
 async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs, sayIt: (text: string) => void = (text) => say($, text)): Promise<string | null> {
   const { refused, warnings } = await closeStore(filesOf($), runOf($), store);
   for (const warning of warnings) sayIt(`a directory results are read from could not be made private: ${warning}`);
@@ -194,8 +218,11 @@ async function taintsOf($: WithSettings, env: Seen['env'], options: PluginOption
   return taintsFrom(repo, { env, options });
 }
 
+/** Whether `storeDir` is set: then that place alone is written to. */
+const storeDirSet = (options: PluginOptions): boolean => typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
+
 /** Where results are kept, or why no place can be trusted: the repository's settings never decide it (ADR 0005). */
-async function storeOf($: WithEnv & WithFiles & WithSettings, options: PluginOptions): Promise<StoreDirs | string> {
+async function storeOf($: WithEnv & WithFiles & WithSettings & WithStore, options: PluginOptions): Promise<StoreDirs | string> {
   const env = await envOf($);
   const taints = await taintsOf($, env, options);
   const deciding = taints === null ? null : placeTaints(taints, options);
@@ -204,12 +231,22 @@ async function storeOf($: WithEnv & WithFiles & WithSettings, options: PluginOpt
       ? describeTaints(null)
       : `where results are kept would be decided by the repository (${describeTaints(deciding)}); set storeDir in your user settings`;
   }
-  const store = await placesOf(filesOf($), options['storeDir'], {
-    CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR,
-    HOME: env.HOME,
-    USERPROFILE: env.USERPROFILE,
-  });
-  return store ?? 'the place to keep results in is not an absolute path; set storeDir to one';
+  const places = { CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR, HOME: env.HOME, USERPROFILE: env.USERPROFILE };
+  const store = await placesOf(filesOf($), options['storeDir'], places);
+  if (store === null) return 'the place to keep results in is not an absolute path; set storeDir to one';
+  // Read as well, never cleaned up: the places written to under these settings before, and, beside a storeDir of your
+  // own, the defaults, where the repository's settings did not set what they are built from (#116).
+  const defaults = storeDirSet(options) && taints !== null && variableTaints(taints).length === 0 ? defaultPlacesOf(places) : [];
+  return withEarlier(store, [...(await earlierOf($, store.write)), ...defaults]);
+}
+
+/** Notes `write` as the place in use, in the plugin's own store, and returns the places written to before it (#116). */
+function earlierOf($: WithStore, write: string): Promise<string[]> {
+  return notePlace(
+    () => $.store.get(PLACES_KEY),
+    (places) => $.store.set(PLACES_KEY, places),
+    write,
+  );
 }
 
 /** The provider `find` asks, none without a key, or why not: the repository's settings never decide where it sends (ADR 0005). */
@@ -263,13 +300,51 @@ async function noteRootOf($: WithEnv & WithFiles & WithSettings & WithSession, s
   }
 }
 
+/** This machine's id once read or made in this process; not kept while it cannot be, so that a later session tries again. */
+let machine: string | undefined;
+
+/**
+ * This machine's id (ADR 0032), from a home directory no repository decided: the variables it is read from are
+ * checked as for the store. Null where it cannot be read or made.
+ */
+async function machineOf($: WithEnv & WithFiles & WithSettings & WithProcess, options: PluginOptions, make = true): Promise<string | null> {
+  if (machine !== undefined) return machine;
+  try {
+    const env = await envOf($);
+    const taints = await taintsOf($, env, options);
+    if (taints === null || placeTaints(taints, {}).length > 0) return null;
+    const path = machineFileFrom(env.HOME || env.USERPROFILE);
+    // What reports the store reads the id, and makes none.
+    const id = path === null ? null : make ? await machineIdOf(filesOf($), runOf($), path) : await idIn(filesOf($), path);
+    if (id !== null) machine = id;
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Marks the store as used by this session, on this machine: at each compaction, and at each session's start
+ * (ADR 0032). With no machine id, the mark is named by the session, so that a machine that cannot keep an id is
+ * still seen by the others.
+ */
+async function noteMachineOf($: WithEnv & WithFiles & WithSettings & WithProcess & WithSession, store: StoreDirs, options: PluginOptions): Promise<void> {
+  try {
+    const session = await $.session.id();
+    const name = markName(await machineOf($, options), session);
+    if (name !== null) await noteMachine(filesOf($), store.write, name, session, Date.now());
+  } catch {
+    // Not marked this time; the next session or compaction marks it.
+  }
+}
+
 /**
  * Notes the witness of this session's main conversation: the newest ticket it shows that the store holds (ADR 0027).
  * A clean-up looks for it in the conversation's transcript before it moves anything. Nothing is noted where there is
  * no ticket, or where results are kept is not this user's to tell, or cannot be made private.
  */
 async function noteWitnessOf(
-  $: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess & WithStore,
   candidates: readonly string[],
   options: PluginOptions,
   keepStanding = false,
@@ -285,7 +360,7 @@ async function noteWitnessOf(
 }
 
 /** At the start of a session, the witness of a conversation resumed with tickets in it: looked for before the store is touched. */
-async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess, options: PluginOptions): Promise<void> {
+async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings & WithSession & WithProcess & WithStore, options: PluginOptions): Promise<void> {
   try {
     const messages = (await $.session.messages()) as readonly Message[];
     if (Array.isArray(messages)) await noteWitnessOf($, witnessCandidates(messages), options, true);
@@ -294,10 +369,10 @@ async function noteWitnessAtStart($: WithUi & WithEnv & WithFiles & WithSettings
   }
 }
 
-/** Puts back from the trash what the conversation's tickets name, in every place results are read from. */
+/** Puts back from the trash what the conversation's tickets name, in the places of the settings in use: an earlier one is read alone (#116). */
 async function restoreFor($: WithFiles & WithProcess, store: StoreDirs, ids: ReadonlySet<string>, parts: ReadonlySet<string> = ids): Promise<number> {
   try {
-    return await restoreThroughParts(filesOf($), listOf($), execOf($), store.read, ids, parts);
+    return await restoreThroughParts(filesOf($), listOf($), execOf($), ownedOf(store), ids, parts);
   } catch {
     // What cannot be put back is answered as not stored.
     return 0;
@@ -316,17 +391,17 @@ async function recalled($: WithFiles & WithProcess, store: StoreDirs, id: unknow
  * those the trash has held a week, still named by none, are removed (ADR
  * 0006). Run after the session has started, without being waited for.
  */
-/** The places results are read from that are there as plain directories, not links: what the clean-up and /lossless-store read. */
-async function plainDirsOf($: WithFiles, store: StoreDirs): Promise<string[]> {
+/** Those of `places` that are there as plain directories, not links: what the clean-up and /lossless-store read. */
+async function plainDirsOf($: WithFiles, places: readonly string[]): Promise<string[]> {
   const dirs: string[] = [];
-  for (const dir of store.read) {
+  for (const dir of places) {
     const found = await filesOf($).stat(dir).catch(() => null);
     if (found && found.kind === 'dir' && found.isLink !== true) dirs.push(dir);
   }
   return dirs;
 }
 
-async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess, options: PluginOptions): Promise<void> {
+async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess & WithSession & WithStore, options: PluginOptions): Promise<void> {
   // Known once the try is noted: where, and over what, an unexpected stop is recorded.
   let tried: { dir: string; record: GcRecord } | null = null;
   // Claimed before anything is awaited, so that a second session.start right after (a /clear) does not say it
@@ -339,7 +414,7 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     if (typeof store === 'string') return;
     const files = filesOf($);
     const list = listOf($);
-    const dirs = await plainDirsOf($, store);
+    const dirs = await plainDirsOf($, ownedOf(store));
     if (dirs.length === 0) return;
     const now = Date.now();
     const state = await stateIn(files, list, dirs);
@@ -352,10 +427,31 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
         said = true;
       }
     }
+    // Each session marks the store as used from this machine, whether it collects or not (ADR 0032). What cannot be
+    // made private is said in the transcript: a session's start says it once, not with a notice.
+    const unsafe = await privateOf($, store, (text) => say($, text, false));
+    if (unsafe === null) await noteMachineOf($, store, options);
     if (whyNotNow(state, now) !== null) return;
-    if ((await privateOf($, store)) !== null) return;
+    if (unsafe !== null) return;
     const record = await noteTried(files, store.write, state, now);
     tried = { dir: store.write, record };
+    // A store used from another machine holds results only that machine's transcripts name: nothing moves (ADR 0032).
+    // Before the sentinel and the witnesses, which are of this machine's transcripts alone.
+    const marks = await marksIn(files, list, dirs);
+    const readable = marks === null ? null : await readableSessions(files, list, state.roots, marks);
+    const session = await $.session.id();
+    const self = markName(await machineOf($, options), session);
+    // The marks of other names whose transcripts are read here are taken off while those transcripts last.
+    if (marks !== null && readable !== null) {
+      const remove = (path: string) => moverOf(runOf($), (one) => $.fs.stat(one)).remove(path);
+      await takeOffMarks(remove, dirs, readMarks(marks, self, session, readable).map((mark) => mark.name));
+    }
+    const shared = sharedWith(marks, self, session, readable);
+    if (shared !== null) {
+      say($, `moved-out results are kept, not cleaned up: ${shared}`);
+      await stoppedAs(files, store.write, record, 'shared');
+      return;
+    }
     await writeSentinel(files, store.write);
     const live = await liveIds(files, list, execOf($), (path) => $.fs.exists(path), state.roots, sentinelOf(store.write));
     if ('stop' in live) {
@@ -382,7 +478,7 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     const named = await namedThroughParts(files, dirs, live.ids, inTrash);
     if ('stop' in named) {
       say($, `moved-out results are kept, not cleaned up: ${named.stop}`);
-      await stoppedAs(files, store.write, record, named.kind);
+      await stoppedAs(files, store.write, record, named.kind, named.unread, named.more);
       return;
     }
     // One try, one stop: the first, should more than one place stop.
@@ -407,9 +503,9 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
 }
 
 /** Records the kind of a stop; failing to changes nothing else (ADR 0016). */
-async function stoppedAs(files: Files, dir: string, record: GcRecord, kind: StopKind): Promise<void> {
+async function stoppedAs(files: Files, dir: string, record: GcRecord, kind: StopKind, unread: readonly Unread[] = [], more = 0): Promise<void> {
   try {
-    await noteStopped(files, dir, record, kind, Date.now());
+    await noteStopped(files, dir, record, kind, Date.now(), unread, more);
   } catch {
     // The stop was said; it is not recorded this time.
   }
@@ -440,6 +536,8 @@ type Tried = {
   asSent: readonly Message[];
   /** The message naming what Claude Code attached as it sent the messages, at the end of what is handed back (#105). */
   attached?: Message;
+  /** How many entries Claude Code handed over: the larger of the messages the hook was given and the conversation as sent (ADR 0034). */
+  entries: number;
 };
 
 /**
@@ -450,7 +548,7 @@ type Tried = {
  * hook's handler of a failure both start from.
  */
 async function placeOf(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   messages: readonly Message[],
   options: PluginOptions,
 ): Promise<{ store: StoreDirs } | { why: string; unkept: string }> {
@@ -461,6 +559,7 @@ async function placeOf(
   if (unsafe !== null) return { why: unsafe, unkept: 'the place to keep it in could not be made private' };
   // Before a summary can run: a kept conversation is named by this session's transcript, which a collection must read.
   await noteRootOf($, place, options);
+  await noteMachineOf($, place, options);
   // A ticket whose result a collection moved to the trash meanwhile is put back, so that it stays a ticket of this store.
   // What cannot be told or put back is answered as not stored: the place is ready all the same.
   try {
@@ -477,7 +576,7 @@ async function placeOf(
  * whatever happened here.
  */
 async function attempt(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   e: Compacting,
   options: PluginOptions,
 ): Promise<Tried | HandedOver> {
@@ -539,6 +638,7 @@ async function attempt(
       keepTokens: config.keepTokens,
       api,
       asSent,
+      entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),
     };
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
@@ -587,7 +687,7 @@ async function summarizeKeeping(
  * the transcript alone, as subagents run side by side.
  */
 async function summarizeSubagent(
-  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess,
+  $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   e: SessionCompactInput,
   next: (e: SessionCompactInput) => Promise<SessionCompactResult>,
   options: PluginOptions,
@@ -606,6 +706,7 @@ async function summarizeSubagent(
       // As before the main conversation's summary: the place its transcript is in is recorded, so that a clean-up
       // reads what names the parts kept here, and what it names that a clean-up moved to the trash comes back first.
       await noteRootOf($, store, options);
+      await noteMachineOf($, store, options);
       const messages = e.messages as readonly Message[];
       await restoreFor($, store, ticketIds(messages), partIds(messages));
       // Read with its blocks, so that an image is named where it stood; else as the hook was handed it.
@@ -630,6 +731,7 @@ async function cutKeeping(
   after: number,
   at: number,
   over: boolean,
+  held?: number,
 ): Promise<SessionCompactResult | null> {
   const { outcome } = tried;
   const started = Date.now();
@@ -637,7 +739,7 @@ async function cutKeeping(
     const cut = await keepOldest(storingFilesOf($), tried.store, { messages: outcome.messages, tokens: outcome.report.tokensAfter, count: tried.count }, after, at);
     if ('failed' in cut) return null;
     const report = { ...outcome.report, charsAfter: charsOf(cut.messages), tokensAfter: cut.tokensAfter, ms: outcome.report.ms + (Date.now() - started) };
-    say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over }));
+    say($, cutLine(report, { first: after + 1, last: at, of: outcome.messages.length, parts: cut.parts, over, ...(held === undefined ? {} : { held }) }));
     return { messages: cut.messages };
   } catch {
     return null;
@@ -660,7 +762,7 @@ async function carryOut(
       say($, step.line);
       return { messages: outcome.messages };
     case 'cut': {
-      const cut = await cutKeeping($, tried, step.after, step.at, step.over);
+      const cut = await cutKeeping($, tried, step.after, step.at, step.over, step.held);
       // A part could not be written: handed over as `otherwise` says, where what could not be kept is said, or skipped (ADR 0008).
       return cut ?? carryOut($, e, next, tried, step.otherwise);
     }
@@ -790,12 +892,23 @@ export const register: Register = (on, options) => {
       const files = filesOf($);
       const list = listOf($);
       // The places the clean-up reads, and its record from the same places.
-      const there = await plainDirsOf($, store);
+      const owned = ownedOf(store);
+      const there = await plainDirsOf($, owned);
       const counted = [];
-      for (const dir of store.read) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
+      for (const dir of owned) counted.push(there.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
+      // Read as well, never cleaned up: the places results were kept in before (#116), counted the same way.
+      const before = store.read.filter((dir) => !owned.includes(dir));
+      const plain = await plainDirsOf($, before);
+      const earlier = [];
+      for (const dir of before) earlier.push(plain.includes(dir) ? await countStore(files, list, dir, now) : skipped(dir));
       const gc = await stateIn(files, list, there);
-      const set = typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
-      return { text: storeReport(counted, gc, now, set) };
+      const set = storeDirSet(options);
+      const marks = await marksIn(files, list, there);
+      const session = await $.session.id();
+      const readable = marks === null ? null : await readableSessions(files, list, gc.roots, marks);
+      const self = markName(await machineOf($, options, false), session);
+      const machines = { marks, self, unread: marks === null || readable === null ? null : unreadMarks(marks, self, session, readable).map((mark) => mark.name) };
+      return { text: storeReport(counted, gc, now, set, machines, earlier) };
     } catch {
       // What an error says may name a path: it is not shown.
       return { text: 'the store could not be counted' };
@@ -999,13 +1112,19 @@ export const register: Register = (on, options) => {
         maxAfterPercent: tried.maxAfterPercent,
         count: tried.count,
         keepTokens: tried.keepTokens,
+        entries: tried.entries,
       });
       // What Claude Code attached as it sent the messages is kept wherever the conversation is rebuilt or summarized
       // (#105); a compaction left undone leaves the conversation, and what came with it, as it was.
       const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);
       // As after the attempt: keeping what was attached is written, and Claude Code may have gone on meanwhile.
       if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
-      if ('why' in ready) {
+      // A `/compact` by hand that would have been left undone, cut for its length (ADR 0034), is left undone where what
+      // was attached cannot be kept: no summary was asked for.
+      if ('why' in ready && step.step === 'cut' && step.otherwise.step === 'skip') {
+        say($, `not cut for its length: ${ready.why}`);
+        result = { skip: step.otherwise.why };
+      } else if ('why' in ready) {
         say($, `built-in compaction: ${ready.why}`);
         result = await summarizeKeeping($, e, next, ready.keep);
       } else {

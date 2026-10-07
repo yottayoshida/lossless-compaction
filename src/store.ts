@@ -4,8 +4,8 @@
 // the same name and the same ticket, so compacting twice writes nothing new and
 // changes nothing that an earlier compaction left in the conversation.
 
-import { dirsOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
-import { entryPath } from './layout.ts';
+import { dirsOf, idOf, look, store, type NotMoved, type Recalled } from './blobs.ts';
+import { blobPath, entryPath } from './layout.ts';
 import type { Files, Message } from './types.ts';
 
 export { MAX_BYTES, NOT_AN_ID, NOT_STORED, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
@@ -188,8 +188,56 @@ export function oldStoreDirFrom(env: Places): string | null {
   return defaultDirFrom(OLD_PLUGIN, env);
 }
 
-/** The directory results are written to, and the directories they are read from, the first being the one written to. */
-export type StoreDirs = { write: string; read: readonly string[] };
+/**
+ * The directory results are written to, and the directories they are read from, the first being the one written to.
+ * `owned`, where earlier places are read as well, is the places of the settings in use: those alone are cleaned up,
+ * made private and put back into from the trash (#116). Absent, they are all of `read`.
+ */
+export type StoreDirs = { write: string; read: readonly string[]; owned?: readonly string[] };
+
+/** The places the plugin cleans up, makes private and puts back into: those of the settings in use. */
+export const ownedOf = (store: StoreDirs): readonly string[] => store.owned ?? store.read;
+
+/**
+ * The places results were written to under these settings are kept, newest first, in the plugin's own store under the
+ * user's Claude Code directory, so that once `storeDir` changes the earlier ones are still read (#116). A place not found
+ * stays on the list, as one on a disk not mounted; the oldest goes past PLACES_KEPT.
+ */
+export const PLACES_KEY = 'places';
+export const PLACES_KEPT = 16;
+
+/** The list to keep once `write` is in use: it first, then the absolute paths the kept one held, each once. */
+export function placesAfter(kept: unknown, write: string): string[] {
+  const earlier = Array.isArray(kept) ? kept.filter((one): one is string => typeof one === 'string' && ABSOLUTE.test(one)) : [];
+  return [write, ...new Set(earlier.filter((one) => one !== write))].slice(0, PLACES_KEPT);
+}
+
+/**
+ * Notes `write` as the place in use and returns the places written to before it, newest first. Where the list cannot be
+ * read, none: it is neither read nor written over. Where it cannot be written, what was read is used.
+ */
+export async function notePlace(get: () => Promise<unknown>, set: (places: string[]) => Promise<void>, write: string): Promise<string[]> {
+  let kept: unknown;
+  try {
+    kept = await get();
+  } catch {
+    return [];
+  }
+  const places = placesAfter(kept, write);
+  if (JSON.stringify(kept) !== JSON.stringify(places)) await set(places).catch(() => undefined);
+  return places.slice(1);
+}
+
+/** The places used when `storeDir` is not set, under the current name and the old one. */
+export function defaultPlacesOf(env: Places): string[] {
+  return [storeDirFrom(undefined, env), oldStoreDirFrom(env)].filter((one): one is string => one !== null);
+}
+
+/** `store` with `earlier` read after its own places, which alone are `owned`. */
+export function withEarlier(store: StoreDirs, earlier: readonly string[]): StoreDirs {
+  const more = [...new Set(earlier)].filter((one) => !store.read.includes(one));
+  return more.length === 0 ? store : { write: store.write, read: [...store.read, ...more], owned: store.read };
+}
 
 /**
  * Results are read from two places and written to one. With a setting, that
@@ -263,6 +311,27 @@ export async function moveInputOut(files: Files, dir: string, tool: string, fiel
   return { ...ticket, text: inputTicketText(ticket) };
 }
 
+/** Why a stored text is not read: none there, one that does not read, one whose hash is no longer its name. */
+export type TextWhy = 'text-missing' | 'text-unreadable' | 'text-changed';
+
+/**
+ * The text stored under `id` in the first of `dirs` that holds an entry for it, readable or not, and its text, as
+ * `recall` finds it; or why not. Its hash is checked: a text that is not what was stored is never read as it.
+ */
+export async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string } | { ok: false; why: TextWhy }> {
+  for (const dir of dirs) {
+    if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
+    let text: string;
+    try {
+      text = await files.read(blobPath(dir, id));
+    } catch {
+      return { ok: false, why: 'text-unreadable' };
+    }
+    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };
+  }
+  return { ok: false, why: 'text-missing' };
+}
+
 /**
  * Whether `id` is a part of a kept conversation, as its entry says, in any of
  * `dirs`; null when the entry is there and cannot be read.
@@ -272,7 +341,9 @@ export async function isPart(files: Files, dirs: readonly string[], id: string):
     if ((await look(files, entryPath(dir, id))) !== 'file') continue;
     try {
       const entry: unknown = JSON.parse(await files.read(entryPath(dir, id)));
-      return typeof entry === 'object' && entry !== null && (entry as { tool?: unknown }).tool === PART;
+      // Every version writes `{bytes, tool}`: an entry of another shape is not read as saying "not a part" (#114).
+      const tool = typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? (entry as { tool?: unknown }).tool : undefined;
+      return typeof tool === 'string' ? tool === PART : null;
     } catch {
       return null;
     }

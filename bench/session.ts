@@ -54,7 +54,7 @@ export const SETTINGS: Readonly<Record<string, Setting>> = {
   'target-1': { name: 'target-1', arm: 'plugin', options: { targetPercent: 1 } },
   // Moved out down to 1 %, and what is left goes to the summary with the driver's instructions, what that replaces kept
   // first. Measured while that took being still over 10 % with the newest 20,000 tokens left where they are: under it the
-  // plugin handed back what it rebuilt. Since ADR 0031 a `/compact` given instructions is summarized under it too.
+  // plugin handed back what it rebuilt. Since ADR 0036 a `/compact` given instructions is summarized under it too.
   hybrid: { name: 'hybrid', arm: 'plugin', options: { targetPercent: 1, maxAfterPercent: 10 }, manual: AUTO_LINE },
 };
 

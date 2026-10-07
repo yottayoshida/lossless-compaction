@@ -23,8 +23,6 @@ const base = (over: Partial<StatusInput> = {}): StatusInput => ({
 
 test('the version is the one the plugin is published under', () => {
   for (const file of ['../.claude-plugin/plugin.json', '../package.json']) assert.equal((JSON.parse(read(file)) as { version: string }).version, VERSION, file);
-  const market = JSON.parse(read('../.claude-plugin/marketplace.json')) as { plugins: { version: string }[] };
-  assert.equal(market.plugins[0]?.version, VERSION);
 });
 
 test('/lossless-status says it runs, its version and Claude Code\'s, and each setting in use, as Claude Code hands the defaults over', () => {
@@ -34,7 +32,7 @@ test('/lossless-status says it runs, its version and Claude Code\'s, and each se
   assert.equal(lines[2], 'settings in use: targetPercent 1 (the default), keepTokens 20000 (the default), minChars 2000 (the default), maxAfterPercent 75 (the default)');
   assert.equal(lines[3], "find's settings: provider auto, model the default, apiKey not set, cloudflareAccountId none");
   assert.equal(lines[4], 'storeDir: the default; /lossless-store says where results are kept and how much, or why none can be');
-  assert.equal(lines[5], 'this conversation: 0 tickets of what was moved out');
+  assert.equal(lines[5], 'this conversation: 0 tickets of what was moved out, in 0 of the 4096 entries Claude Code hands a plugin');
   assert.match(statusReport(base({ claudeCode: null })), /on Claude Code \(version not known\): running/);
 });
 
@@ -124,5 +122,9 @@ test("the conversation's tickets are counted by their shape: of results, inputs,
     // The same ticket again is the same result.
     { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 't3', text: ticketText({ tool: 'Read', bytes: 900, id: ID('a') }), isError: false }] },
   ];
-  assert.match(statusReport(base({ messages })), /^this conversation: 3 tickets of what was moved out$/m);
+  assert.match(statusReport(base({ messages })), /^this conversation: 3 tickets of what was moved out, in 6 of the 4096 entries Claude Code hands a plugin$/m);
+  // From CUT_AT entries on, the next compaction cuts it for its length (ADR 0034).
+  const long = Array.from({ length: 1536 }, (): Message => ({ role: 'user', text: 'x', toolUses: [] }));
+  assert.match(statusReport(base({ messages: long })), /, in 1536 of the 4096 entries Claude Code hands a plugin; a compaction without instructions cuts it for its length where it can$/m);
+  assert.doesNotMatch(statusReport(base({ messages: long.slice(1) })), /cuts it for its length/);
 });

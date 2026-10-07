@@ -163,3 +163,13 @@ test('on Windows nothing is run: the profile keeps others out', async () => {
   assert.equal(await ensurePrivate(files, run, 'C:\\Users\\u\\.claude\\lossless-compaction'), null);
   assert.deepEqual(ran, []);
 });
+
+test('a place read from as one results were kept in before is not made private: those of the settings in use alone are (#116)', async () => {
+  const files = new MemoryFiles();
+  files.dirs.add(OLD);
+  files.dirs.add('/data/earlier');
+  const { run, ran } = commands(files);
+  assert.deepEqual(await closeStore(files, run, { write: DIR, read: [DIR, OLD, '/data/earlier'], owned: [DIR, OLD] }), { refused: null, warnings: [] });
+  assert.ok(ran.some((argv) => argv.includes(OLD)), 'the old place of these settings is closed as before');
+  assert.ok(ran.every((argv) => !argv.includes('/data/earlier')), 'nothing is run on the earlier place');
+});

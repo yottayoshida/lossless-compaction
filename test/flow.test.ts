@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { reportLine, tokensOf, undoneLine, type Count, type Report } from '../src/compact.ts';
-import { cutLine, decide } from '../src/cut.ts';
+import { CUT_AT, CUT_TO, cutLine, decide } from '../src/cut.ts';
 import { NUMBER_SETTINGS, beforeTrying, configFrom, failedLine, nextStep, settingNotes, settingOf, summaryAskedFor, type Step, type Tried } from '../src/flow.ts';
 import { PLUGIN } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
@@ -70,7 +70,7 @@ test('a /compact by hand with nothing to move out and room left is left undone, 
   }
 });
 
-test('a summary asked for with instructions, by hand or by a plugin, is given on what is left though moving out made room; not one an automatic compaction is handed (ADR 0031)', () => {
+test('a summary asked for with instructions, by hand or by a plugin, is given on what is left though moving out made room; not one an automatic compaction is handed (ADR 0036)', () => {
   const moved = { report: { moved: 3 }, enough: true, instructions: 'keep the plan' } as const;
   const summarized = { step: 'summarize', line: `built-in compaction on what is left, as it was asked for with instructions: ${reportLine(report({ moved: 3 }))}`, of: 'rebuilt' };
   assert.deepEqual(nextStep(tried(WIDE, { ...moved, trigger: 'manual' })), summarized);
@@ -120,7 +120,7 @@ test('without instructions the oldest messages are cut where src/cut.ts says, an
   });
   const some = nextStep(tried(WIDE, { report: { moved: 3, tokensAfter: WIDE_TOKENS } })) as Extract<Step, { step: 'cut' }>;
   assert.equal(some.step, 'cut');
-  assert.equal(some.otherwise.of, 'rebuilt');
+  assert.deepEqual(some.otherwise, { step: 'summarize', line: `built-in compaction on what is left, too much is still in use: ${reportLine(report({ moved: 3, tokensAfter: WIDE_TOKENS }))}`, of: 'rebuilt' });
 });
 
 test('under the line once rebuilt, counted from what stays: handed back with nothing cut, said as a cut of nothing', () => {
@@ -259,4 +259,53 @@ test('the line of a compaction hook that failed says what failed, in one line of
     failedLine({ kind: 'throw', message: 'late' }, true),
     'the compaction stopped (throw: late) after the built-in summary was asked for; what it came to stands, the conversation kept beside it where it can be',
   );
+});
+
+test('a conversation holding CUT_AT entries is cut where moving results out was enough, and where a /compact by hand would be left undone (#115)', () => {
+  const long = talk(800, 30);
+  // Results moved out and enough by size: cut all the same, its length named.
+  const enough = nextStep(tried(long, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT }));
+  assert.equal(enough.step, 'cut', JSON.stringify(enough).slice(0, 200));
+  // Typed by hand with nothing to move out and room left: cut, not left undone.
+  const byHand = nextStep(tried(long, { trigger: 'manual', report: { candidates: 0, results: 0, tokensAfter: 20_000 }, inUse: 20_000, entries: CUT_AT }));
+  assert.equal(byHand.step, 'cut', JSON.stringify(byHand).slice(0, 200));
+  // Short of CUT_AT, the same compactions go as before.
+  assert.equal(nextStep(tried(long, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT - 1 })).step, 'back');
+  assert.equal(nextStep(tried(long, { trigger: 'manual', report: { candidates: 0, results: 0, tokensAfter: 20_000 }, inUse: 20_000, entries: CUT_AT - 1 })).step, 'skip');
+  // Where the cut cannot be written, or no place to cut is left, it goes as it would have gone: handed back as rebuilt, or left undone.
+  assert.deepEqual((enough as Extract<Step, { step: 'cut' }>).otherwise, { step: 'back', line: reportLine(report({ moved: 3, tokensAfter: 20_000 })) });
+  assert.equal((byHand as Extract<Step, { step: 'cut' }>).otherwise.step, 'skip');
+  // No place to cut at, a call waiting for its result from the second message to the last: as before.
+  const oneTurn: Message[] = [
+    { role: 'user', text: 'go', toolUses: [] },
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'w', tool: 'Task', input: {} }] },
+    ...Array.from({ length: 2_100 }, (_, at): Message => (at % 2 === 0 ? { role: 'user', text: `note ${at}`, toolUses: [] } : { role: 'assistant', text: 'ok', toolUses: [] })),
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'w', text: 'done', isError: false }] },
+  ];
+  assert.deepEqual(nextStep(tried(oneTurn, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT })), { step: 'back', line: reportLine(report({ moved: 3, tokensAfter: 20_000 })) });
+  // With instructions the summary that was asked for runs, as for any conversation.
+  assert.equal(nextStep(tried(long, { report: { moved: 3, tokensAfter: 20_000 }, enough: true, entries: CUT_AT, instructions: 'keep the plan' })).step, 'back');
+  assert.equal(nextStep(tried(long, { report: { tokensAfter: 20_000 }, entries: CUT_AT, instructions: 'keep the plan' })).step, 'summarize');
+});
+
+test('a long conversation that fits with no place to cut at is handed back as it was rebuilt, and one whose size was not counted is cut for its length alone (#115)', () => {
+  const oneTurn: Message[] = [
+    { role: 'user', text: 'go', toolUses: [] },
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'w', tool: 'Task', input: {} }] },
+    ...Array.from({ length: 2_100 }, (_, at): Message => (at % 2 === 0 ? { role: 'user', text: `note ${at}`, toolUses: [] } : { role: 'assistant', text: 'ok', toolUses: [] })),
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'w', text: 'done', isError: false }] },
+  ];
+  // Automatic, nothing moved out, under the line: as below CUT_AT, nothing cut and no summary.
+  const fits = tried(oneTurn, { report: { tokensAfter: 20_000 }, entries: CUT_AT });
+  assert.deepEqual(nextStep(fits), nextStep({ ...fits, entries: CUT_AT - 1 }));
+  assert.equal(nextStep(fits).step, 'back');
+  // Results moved out and enough, the size not counted: cut for its length, to CUT_TO, not down to keepTokens.
+  const long = talk(800, 30);
+  // Its size as a compaction that could not count it estimates it, from characters: a cut by size would go down to keepTokens.
+  const size = Math.round(tokensOf(long, undefined));
+  const step = nextStep(tried(long, { report: { moved: 3, tokensAfter: size }, enough: true, inUse: size, entries: CUT_AT, count: undefined, target: 1_000 }));
+  assert.equal(step.step, 'cut', JSON.stringify(step).slice(0, 200));
+  const { after, at, held } = step as Extract<Step, { step: 'cut' }>;
+  assert.equal(held, CUT_AT, 'said as a cut for its length');
+  assert.ok(after + 1 + long.length - at > CUT_TO - 4);
 });
