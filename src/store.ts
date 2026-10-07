@@ -165,8 +165,16 @@ export function readTicket(text: string): Ticket | null {
   return { tool, bytes: Number(bytes), id };
 }
 
-/** How many lines a text holds, as a folded call's line counts them: none in an empty text. */
-export const linesOf = (text: string): number => (text === '' ? 0 : text.split('\n').length);
+/**
+ * How many lines a text holds, as a folded call's line counts them: none in an empty text, else one more than its line
+ * breaks. Counted without splitting it: every result a part keeps is counted, up to six million characters at once.
+ */
+export function linesOf(text: string): number {
+  if (text === '') return 0;
+  let lines = 1;
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) lines += 1;
+  return lines;
+}
 
 // The name of an input's field as a ticket spells it. A tool of anyone's names its fields as it likes; a name of
 // any other shape is written `value`, so that nothing of another's wording stands in the line.
