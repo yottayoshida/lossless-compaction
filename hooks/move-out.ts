@@ -528,7 +528,7 @@ async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & With
     }
     // A conversation compacted with tickets that is still there, and whose noted ticket the search did not find, is
     // read by the search no longer as it was written: nothing it names would be counted (ADR 0027).
-    const unseen = await checkWitnesses(files, list, execOf($), (path) => moverOf(runOf($), (one) => $.fs.stat(one)).remove(path), store.write, live.roots);
+    const unseen = await checkWitnesses(files, list, execOf($), (path) => moverOf(runOf($), (one) => $.fs.stat(one)).remove(path), store.write, live.roots, live.grep);
     if (unseen !== null) {
       say($, `moved-out results are kept, not cleaned up: ${unseen.stop}`);
       await stoppedAs(files, store.write, record, unseen.kind);

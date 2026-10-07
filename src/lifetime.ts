@@ -255,12 +255,36 @@ export function idsIn(stdout: string, into: Set<string> = new Set()): Set<string
 }
 
 export const GREP = ['/usr/bin/grep', '/bin/grep'] as const;
+/** How long the small search a grep is chosen by may take. */
+export const CHOOSE_WITHIN_MS = 30_000;
+
+/**
+ * The grep a collection uses: the first of GREP that starts, seen by a search of the sentinel alone. The host refuses
+ * both a command it cannot start and one still running at its time in the same way, so which of the two can start is
+ * told here, where little can run long; a search that does not come back afterwards did not end in its time, and is
+ * not run again with the other (#118). Where none starts, why the last did not.
+ */
+export async function grepOf(exec: Exec, sentinel: string): Promise<{ grep: string } | { why: string }> {
+  const whys: string[] = [];
+  for (const grep of GREP) {
+    try {
+      await exec([grep, '-F', '-q', '--', SENTINEL_ID, sentinel], CHOOSE_WITHIN_MS);
+      return { grep };
+    } catch (error) {
+      // Not there, no commands on this host, or not answering this little in its time: the next, then none. Each is
+      // said: macOS has no /bin/grep, and its refusal would hide why /usr/bin/grep did not answer.
+      whys.push(`${grep}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { why: `no grep could be run (${whys.join('; ')})` };
+}
 
 /**
  * Every id in the transcripts under `roots`, one search per project directory,
- * and the roots that are still there. A root that is gone is dropped: no
- * conversation can be resumed from it. Anything else that keeps a project from
- * being read in full stops it all, and nothing is collected.
+ * and the roots that are still there, with the grep that read them (null where
+ * there was nothing to search). A root that is gone is dropped: no conversation
+ * can be resumed from it. Anything else that keeps a project from being read in
+ * full stops it all, and nothing is collected.
  */
 export async function liveIds(
   files: Files,
@@ -269,7 +293,9 @@ export async function liveIds(
   exists: (path: string) => Promise<boolean>,
   roots: readonly string[],
   sentinel: string,
-): Promise<{ ids: Set<string>; roots: string[] } | Stop> {
+): Promise<{ ids: Set<string>; roots: string[]; grep: string | null } | Stop> {
+  // Chosen before the first search, after the places are looked at: what stops a collection there stops it as before.
+  let grep: string | null = null;
   const ids = new Set<string>();
   const kept: string[] = [];
   for (const recorded of roots) {
@@ -295,14 +321,19 @@ export async function liveIds(
       // grep -r does not follow it: what is in it would not be counted. The host lists a link as `other`.
       if (project.isLink) return { stop: `${root}/${project.name} is a link, which a search does not follow`, kind: 'place' };
       if (project.kind !== 'dir') continue;
-      const found = await search(exec, `${root}/${project.name}`, sentinel);
+      if (grep === null) {
+        const chosen = await grepOf(exec, sentinel);
+        if ('why' in chosen) return { stop: chosen.why, kind: 'unread' };
+        grep = chosen.grep;
+      }
+      const found = await search(exec, grep, `${root}/${project.name}`, sentinel);
       if ('stop' in found) return found;
       idsIn(found.stdout, ids);
     }
   }
   if (kept.length === 0) return { stop: 'none of the places transcripts were found in is there', kind: 'place' };
   ids.delete(SENTINEL_ID);
-  return { ids, roots: kept };
+  return { ids, roots: kept, grep };
 }
 
 /**
@@ -317,24 +348,20 @@ export async function writeSentinel(files: Files, dir: string): Promise<void> {
   await files.write(sentinelOf(dir), `"${SENTINEL_ID}"\n`);
 }
 
-async function search(exec: Exec, dir: string, sentinel: string): Promise<{ stdout: string } | Stop> {
-  let why = 'no grep could be run';
-  for (const grep of GREP) {
-    let result;
-    try {
-      result = await exec([grep, '-rahoE', '[0-9a-f]{64}', '--include=*.jsonl', '--', dir, sentinel], SEARCH_WITHIN_MS);
-    } catch (error) {
-      // Not there, or out of time: the host says which.
-      why = `grep did not run to the end on ${dir}: ${error instanceof Error ? error.message : String(error)}`;
-      continue;
-    }
-    // With the sentinel, something always matches: 0 is the only answer; 1 or 2 is a search that did not finish.
-    if (result.exitCode !== 0) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
-    if (result.truncated) return { stop: `the ids in ${dir} are more than one search can return`, kind: 'too-many' };
-    if (!result.stdout.split('\n').includes(SENTINEL_ID)) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
-    return { stdout: result.stdout };
+async function search(exec: Exec, grep: string, dir: string, sentinel: string): Promise<{ stdout: string } | Stop> {
+  let result;
+  try {
+    result = await exec([grep, '-rahoE', '[0-9a-f]{64}', '--include=*.jsonl', '--', dir, sentinel], SEARCH_WITHIN_MS);
+  } catch (error) {
+    // The grep was seen to start: one that does not come back did not end in its time (or was stopped), and is not
+    // run again with the other grep, which would take as long (#118).
+    return { stop: `grep did not run to the end on ${dir}: ${error instanceof Error ? error.message : String(error)}`, kind: 'unread' };
   }
-  return { stop: why, kind: 'unread' };
+  // With the sentinel, something always matches: 0 is the only answer; 1 or 2 is a search that did not finish.
+  if (result.exitCode !== 0) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
+  if (result.truncated) return { stop: `the ids in ${dir} are more than one search can return`, kind: 'too-many' };
+  if (!result.stdout.split('\n').includes(SENTINEL_ID)) return { stop: `grep did not read all of ${dir}`, kind: 'unread' };
+  return { stdout: result.stdout };
 }
 
 /** One result in the trash: the day it was moved there and its id. */

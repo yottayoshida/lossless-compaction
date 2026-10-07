@@ -7,7 +7,7 @@
 // anything moves, each conversation's own transcript, `<session>.jsonl`, is looked at for its witness. Not found
 // there, or the transcript under another name, stops the clean-up. Nothing of the conversation left lets it go.
 
-import { GREP, listed, type Stop } from './lifetime.ts';
+import { listed, type Stop } from './lifetime.ts';
 import { put } from './blobs.ts';
 import { tmpDir, witnessDir, witnessPath } from './layout.ts';
 import { idOf, readBodyTicket, readPartTicket, readTicket } from './store.ts';
@@ -87,18 +87,17 @@ export async function noteWitness(
   return null;
 }
 
-/** Whether `id` is written in the file at `path`: null when no grep could be run on it. */
-async function writtenIn(exec: Exec, id: string, path: string): Promise<boolean | null> {
-  for (const grep of GREP) {
-    try {
-      const { exitCode } = await exec([grep, '-F', '-q', '--', id, path], 30_000);
-      if (exitCode === 0) return true;
-      if (exitCode === 1) return false;
-    } catch {
-      // Not there, or out of time: the next grep, if any.
-    }
+/**
+ * Whether `id` is written in the file at `path`, by the grep the search used: null when it could not read the file or
+ * did not end in its time. That grep is known to start, so no other is tried (#118).
+ */
+async function writtenIn(exec: Exec, grep: string, id: string, path: string): Promise<boolean | null> {
+  try {
+    const { exitCode } = await exec([grep, '-F', '-q', '--', id, path], 30_000);
+    return exitCode === 0 ? true : exitCode === 1 ? false : null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 type Found = { transcript: string } | { left: string } | { gone: true } | null;
@@ -140,6 +139,7 @@ export async function checkWitnesses(
   remove: (path: string) => Promise<void>,
   dir: string,
   roots: readonly string[],
+  grep: string | null,
 ): Promise<Stop | null> {
   let projects: string[] | null = null;
   const seen = new Map<string, Promise<DirEntry[] | null>>();
@@ -170,8 +170,10 @@ export async function checkWitnesses(
       continue;
     }
     if ('left' in found) return { stop: `a conversation compacted with tickets is still there (${found.left}), where the search does not read it`, kind: 'unread' };
-    const written = await writtenIn(exec, witness.id, found.transcript);
-    if (written === null) return { stop: 'no grep could be run on the transcript of a conversation compacted with tickets', kind: 'unread' };
+    // No grep where the search had nothing to read: one transcript here is something it would have read.
+    if (grep === null) return { stop: 'no grep could be run on the transcript of a conversation compacted with tickets', kind: 'unread' };
+    const written = await writtenIn(exec, grep, witness.id, found.transcript);
+    if (written === null) return { stop: 'grep did not read to the end the transcript of a conversation compacted with tickets', kind: 'unread' };
     if (!written) return { stop: 'the transcript of a conversation compacted with tickets does not hold its newest ticket as the search reads one', kind: 'unread' };
   }
   return null;
