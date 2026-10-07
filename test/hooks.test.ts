@@ -609,7 +609,7 @@ test('recall names find in its description when find is registered, and only the
   assert.match((await run(provider, true)).said.join('\n'), /: the find tool could not be registered: refused$/m);
 });
 
-test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result (ADR 0016, #116)', () => {
+test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result read but under check (ADR 0016, #116, #117)', () => {
   assert.ok(hooks.includes(`on('command.run', { command: '${STORE_COMMAND}' }`), 'the matcher is spelled as STORE_COMMAND');
   const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
   assert.ok(start.includes('await $.command.register({\n        name: STORE_COMMAND,'), 'registered at the start');
@@ -639,6 +639,14 @@ test('/lossless-store is a command, not a tool: registered at the start, answere
   assert.ok(handler.includes('return { text: storeReport(counted, gc, now, set, machines, earlier) };'));
   // What answers it reads nothing itself: no recall, no read of a file.
   assert.ok(!/recall\(|\$\.fs\.read\(|files\.read\(/.test(handler));
+  // But under check, which reads each text kept, in every place read, through src/check.ts alone, with the time the
+  // command has (#117); and only that word: another is answered, not taken for none.
+  assert.ok(start.includes("argumentHint: '[check]',"));
+  const checking = handler.slice(handler.indexOf('const check = checkAsked(asked);'), handler.indexOf("if (asked !== '')"));
+  assert.ok(checking.includes('const places = store.read.map((dir) => ({ dir, there: read.includes(dir), putsBack: owned.includes(dir) }));'), 'every place recall reads, and whether it puts back from its trash');
+  assert.ok(checking.includes('await checkPlaces(filesOf($), listOf($), places, Date.now(), () => next.budget.remainingMs, check.from)'), 'with the time the hook has left, from where a run stopped');
+  assert.ok(checking.includes('return { text: checkReport(done.checked, done.next, Date.now() - began) };'));
+  assert.ok(handler.indexOf('const check = checkAsked(asked);') < handler.indexOf('const now = Date.now();'), 'answered before anything is counted');
 });
 
 test('/lossless-status is a command, registered at the start, that opens no place results are kept in and hands statusReport no key variable (#108)', async () => {

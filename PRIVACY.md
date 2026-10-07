@@ -52,6 +52,10 @@ puts together some other way.
   names of the files and directories in those places are looked at, for
   that conversation's session id
   ([ADR 0027](docs/adr/0027-a-clean-up-first-finds-what-was-seen.md)).
+- What it kept, every text and entry in every place results are read from,
+  when you type `/lossless-store check`: each text is read to compute its
+  hash, and what it answers holds counts and the first 16 characters of the
+  ids of what is damaged, nothing of a text.
 - Your settings files (user, project and local), for the plugin's settings and
   to tell a value a repository put there from one you set.
 - The environment variables `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`,
