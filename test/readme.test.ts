@@ -49,6 +49,15 @@ const linksOf = (text: string) =>
   [...prose(text).matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+[^)]*)?\)/g), ...prose(text).matchAll(/^\[[^\]]+\]:\s*<?([^\s>]+)/gm)]
     .map((match) => match[1] ?? '')
     .filter((target) => !/^[a-z]+:/.test(target));
+/** That every link of a document of its own reaches a file, and a heading where it names one: read from where the document is. */
+function assertLinksReach(document: string): void {
+  for (const target of linksOf(read(document))) {
+    const [path = '', anchor] = target.split('#');
+    const file = path === '' ? document : join(dirname(document), path);
+    assert.ok(existsSync(join(ROOT, file)), `${document} links to ${target}: no such file`);
+    if (anchor !== undefined && file.endsWith('.md')) assert.ok(anchorsOf(read(file)).has(anchor), `${document} links to ${target}: no such heading`);
+  }
+}
 /** Every Markdown file under a directory, by its path from the root. */
 const documentsUnder = (dir: string): string[] =>
   readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) =>
@@ -82,12 +91,7 @@ test('what is counted of a page: a table however it is aligned, and nothing insi
 });
 
 test('the README: every link of its own reaches a file, and a heading where it names one; so does every link to it from another document', () => {
-  for (const target of linksOf(README)) {
-    const [path = '', anchor] = target.split('#');
-    const file = path === '' ? 'README.md' : path;
-    assert.ok(existsSync(join(ROOT, file)), `README.md links to ${target}: no such file`);
-    if (anchor !== undefined && file.endsWith('.md')) assert.ok(anchorsOf(read(file)).has(anchor), `README.md links to ${target}: no such heading`);
-  }
+  assertLinksReach('README.md');
   const headings = anchorsOf(README);
   const others = ['CHANGELOG.md', 'bench/README.md', ...documentsUnder('docs')];
   for (const document of others) {
@@ -102,13 +106,52 @@ test('the README: every link of its own reaches a file, and a heading where it n
 
 test('PRIVACY.md, which the README links to: every link of its own reaches a file, and a heading where it names one', () => {
   const page = read('PRIVACY.md');
-  for (const target of linksOf(page)) {
-    const [path = '', anchor] = target.split('#');
-    const file = path === '' ? 'PRIVACY.md' : path;
-    assert.ok(existsSync(join(ROOT, file)), `PRIVACY.md links to ${target}: no such file`);
-    if (anchor !== undefined && file.endsWith('.md')) assert.ok(anchorsOf(read(file)).has(anchor), `PRIVACY.md links to ${target}: no such heading`);
-  }
+  assertLinksReach('PRIVACY.md');
   assert.ok(linksOf(page).some((target) => target.includes('#')), 'PRIVACY.md names the sections of the docs it draws on');
+});
+
+test("every setting's description fits under 250 characters, gives its default and names the Settings section of docs/usage.md, which is there (#142)", () => {
+  // What the settings dialog shows below the setting chosen, all of it, wrapped: at 100 columns a description of 766 characters took eight lines.
+  const manifest = JSON.parse(read('.claude-plugin/plugin.json')) as { userConfig: Record<string, { description: string; default?: unknown }> };
+  assert.ok(anchorsOf(read('docs/usage.md')).has('settings'), 'docs/usage.md has a Settings section');
+  for (const [name, { description, default: fallback }] of Object.entries(manifest.userConfig)) {
+    assert.ok([...description].length < 250, `${name}: ${[...description].length} characters`);
+    assert.ok(description.endsWith('See "Settings" in docs/usage.md.'), name);
+    if (fallback === undefined) assert.match(description, /\bUnset\b/, name);
+    else assert.ok(description.includes(`Default ${typeof fallback === 'number' ? fallback.toLocaleString('en-US') : String(fallback)}.`), name);
+  }
+  assert.equal(Object.keys(manifest.userConfig).length, 9);
+  // What a description cut short said wrong or left out, as the first review of #142 found it: with no key set, one in the
+  // environment is still sent once a provider is chosen (ADR 0028); a /compact given instructions is summarized whatever is
+  // in use, and one without them reaches into the newest results (ADR 0036, src/compact.ts); a directory pointed at is made
+  // private, and an older one is written to.
+  const said: Record<string, string[]> = {
+    // Read below the API key's field, "no key" is that field: a key in the environment goes once a provider is chosen (the second review).
+    provider: ['Set to one, a key in the environment is used', 'with no key at all, nothing is sent'],
+    apiKey: ['a key in the environment is used once provider is typesafe or cloudflare or an account id is entered', 'with none, nothing is sent'],
+    maxAfterPercent: ['after moving out', '/compact with instructions summarizes'],
+    keepTokens: ['A /compact without instructions reaches into them'],
+    storeDir: ['mode 700', 'jev-lossless-compaction'],
+  };
+  for (const [name, phrases] of Object.entries(said)) {
+    for (const phrase of phrases) assert.ok(manifest.userConfig[name]?.description.includes(phrase), `${name}: ${phrase}`);
+  }
+});
+
+test('docs/usage.md, which the descriptions name: every link reaches a file and a heading, and its Settings section says what the descriptions alone said before (#142)', () => {
+  const page = read('docs/usage.md');
+  assertLinksReach('docs/usage.md');
+  const at = page.indexOf('\n## Settings\n');
+  assert.ok(at >= 0, 'docs/usage.md has a Settings section');
+  const section = page.slice(at);
+  const flat = section.replace(/\s+/g, ' ');
+  // Found in no document before the descriptions were cut down: the size a share is of when automatic compaction is off,
+  // what minChars holds back besides messages, and the model asked for by default.
+  for (const phrase of ["the model's window when automatic compaction is off", 'tool results, input values', 'jev-latest']) assert.ok(flat.includes(phrase), phrase);
+  // Each aim the table gives says where it was measured.
+  const rows = section.split('\n').filter((line) => line.startsWith('| ') && !line.startsWith('| To ') && !/^\|[\s|:-]+\|$/.test(line));
+  assert.ok(rows.length >= 3, `${rows.length} rows`);
+  for (const row of rows) assert.ok(row.includes('](measurements.md#'), row);
 });
 
 test('how links and headings are read: a link with a title, a reference defined below, a heading that holds a link or closes with hashes', () => {

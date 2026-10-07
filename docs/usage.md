@@ -1,7 +1,8 @@
 # Usage
 
 Three things, in the order you will meet them, and a command that says how
-the plugin stands.
+the plugin stands. [Settings](#settings), at the end, says which to change
+for what.
 
 **`/lossless-status`.** Typed at the prompt, it says that the plugin runs in
 this session, its version and Claude Code's, the value each number setting is
@@ -164,3 +165,68 @@ Shapes of secrets are blanked before anything is sent, which is a courtesy
 and not a guarantee. A result that holds an image is not offered, and nothing
 of it is sent. Without a key `find` looks on this machine, and nothing is
 sent.
+
+## Settings
+
+Each setting's description in the settings dialog says, in under 250
+characters, what it does, the values it takes and its default, and names
+this section, which says what to change for each aim that was measured.
+They are set with `/plugin configure lossless-compaction@lossless-compaction`
+in your user settings
+([what a repository can change](limits.md#what-a-repository-can-change)).
+
+| To | Change | As measured |
+| --- | --- | --- |
+| Leave more in place after a compaction | `targetPercent` to 40 | About 65,000 tokens left in use against 26,000 at 1; five compactions against three or four, and a quarter more to pay ([one session](measurements.md#one-session-that-compacts-several-times-under-each-setting)) |
+| Move out all that may leave, and compact less often | Nothing: `targetPercent` 1 is the default | About 26,000 tokens left in use, three or four compactions ([one session](measurements.md#one-session-that-compacts-several-times-under-each-setting)) |
+| Have Claude Code summarize what is left | Nothing; type `/compact` with instructions before the conversation fills | About 9,000 tokens left, each compaction waiting 24 to 44 seconds for the summary ([one session](measurements.md#one-session-that-compacts-several-times-under-each-setting), as `hybrid`) |
+
+At 40, what stays is chosen by how much a result shares with what you are
+working on, not by how new it is; the newest results stay by `keepTokens`.
+The third row was measured on 0.7.0 with `maxAfterPercent` at 10 and the
+`/compact` typed before each turn that would fill the conversation; a
+`/compact` given instructions now goes to the summary whatever
+`maxAfterPercent` is (ADR 0036). An automatic compaction in between goes as
+any of the plugin's does, to a summary only where
+[the built-in compaction runs instead](limits.md#when-the-built-in-compaction-runs-instead).
+
+- **`targetPercent`**, default 1: how far a compaction goes, in percent of
+  the size at which Claude Code compacts on its own, or of the model's
+  window when automatic compaction is off
+  ([how far a compaction goes](limits.md#how-far-a-compaction-goes)).
+- **`keepTokens`**, default 20,000: the newest tool results that stay,
+  the newest always, and 0 keeps that one alone; long inputs and long
+  messages have as many of their own, and a `/compact` typed without
+  instructions reaches into all three, up to the last thing you said, where
+  that is not enough. Where the oldest messages are kept in place of a
+  summary, the newest messages stay up to as many
+  ([which results leave](limits.md#which-results-leave)).
+- **`minChars`**, default 2,000: tool results, input values (what `Write`
+  was handed, a long command) and messages shorter than this many characters
+  are not moved out one by one; old short calls may still fold into a list
+  with what they returned ([in short](limits.md#in-short)).
+- **`maxAfterPercent`**, default 75: where more than this percent of the
+  same size is still in use after moving out, or of the model's window when
+  automatic compaction is off, the oldest messages are kept in parts with no
+  summary; a `/compact` given instructions goes to the summary whatever is
+  in use. A `/compact` typed without them, with nothing to move out and no
+  more than this in use, leaves the conversation as it is, unless it holds
+  1,536 of the entries Claude Code hands a plugin
+  ([too full](limits.md#when-the-conversation-is-too-full),
+  [too long](limits.md#when-the-conversation-is-too-long)).
+- **`provider`**, **`apiKey`** and **`cloudflareAccountId`**: where `find`
+  asks Jev, as `find` above says
+  ([setting it up](limits.md#setting-it-up)).
+- **`model`**, default `jev-latest`: the Jev model TypeSafe is asked for. On
+  Cloudflare the model is `typesafe/jev` whatever this says.
+- **`storeDir`**: where moved-out results are kept, an absolute directory
+  set in your user settings; one from a repository's settings stops the
+  plugin. It is made mode 700 before anything is written, so point it at a
+  directory of its own
+  ([how long results are kept](limits.md#how-long-results-are-kept)). Unset,
+  it is `lossless-compaction` under `CLAUDE_CONFIG_DIR`, else under
+  `~/.claude`, or an existing `jev-lossless-compaction` there from 0.3.0 and
+  before ([the files](limits.md#the-files)).
+
+A number outside its range is taken as the nearest end of it, and the
+first session after says so ([setting it up](limits.md#setting-it-up)).

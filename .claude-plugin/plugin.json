@@ -14,53 +14,53 @@
     "provider": {
       "type": "string",
       "title": "Jev provider",
-      "description": "Where Jev is asked when the find tool is called: auto, typesafe or cloudflare. auto asks Cloudflare when an account id is entered here and TypeSafe when none is. A key in the environment is used only once this is set to typesafe or cloudflare, or an account id is entered: on auto with none, only the key set here is. Leave the key unset to send nothing: find then looks through what was moved out on this machine, and recall works as with a key.",
+      "description": "Where find asks Jev: auto, typesafe or cloudflare. auto asks Cloudflare when an account id is entered, else TypeSafe. Set to one, a key in the environment is used; with no key at all, nothing is sent. Default auto. See \"Settings\" in docs/usage.md.",
       "default": "auto"
     },
     "apiKey": {
       "type": "string",
       "title": "API key",
-      "description": "The key for Jev, used by the find tool only. With provider left on auto, it is sent to Cloudflare when an account id is entered here and to TypeSafe when none is. Unset, TYPESAFE_API_KEY is read from the environment once provider is set to typesafe, and CLOUDFLARE_API_TOKEN once Cloudflare is chosen, unless a repository's settings put it there; left on auto with no account id, a key in the environment is not used. Set it in your user settings.",
+      "description": "The key for Jev, used by find alone; set it in your user settings. Unset, a key in the environment is used once provider is typesafe or cloudflare or an account id is entered; with none, nothing is sent. See \"Settings\" in docs/usage.md.",
       "sensitive": true
     },
     "cloudflareAccountId": {
       "type": "string",
       "title": "Cloudflare account id",
-      "description": "32 hexadecimal characters, for Jev on Cloudflare Workers AI. With provider left on auto, entering one sends the key to Cloudflare; leave it empty for TypeSafe. Unset, CLOUDFLARE_ACCOUNT_ID is read only when provider is cloudflare and the key comes from the environment too."
+      "description": "32 hexadecimal characters, for Jev on Cloudflare Workers AI. With provider on auto, entering one sends the key to Cloudflare; leave it empty for TypeSafe. Unset by default. See \"Settings\" in docs/usage.md."
     },
     "model": {
       "type": "string",
       "title": "Jev model",
-      "description": "Model name for the typesafe provider.",
+      "description": "The Jev model the typesafe provider asks for; on Cloudflare the model is always typesafe/jev. Default jev-latest. See \"Settings\" in docs/usage.md.",
       "default": "jev-latest"
     },
     "storeDir": {
       "type": "string",
       "title": "Where moved-out results are kept",
-      "description": "An absolute directory, set in your user settings: one from a repository's settings stops the plugin. It is made, or closed, to mode 700 before anything is written, so give it a directory of its own. Unset, lossless-compaction under CLAUDE_CONFIG_DIR when that is set, else under ~/.claude; an existing jev-lossless-compaction directory there, from earlier versions, is written to instead, and both are read."
+      "description": "Its own absolute directory, made mode 700, in your user settings (a repository's stops the plugin). Unset, lossless-compaction, or an older jev-lossless-compaction, under CLAUDE_CONFIG_DIR or ~/.claude. See \"Settings\" in docs/usage.md."
     },
     "targetPercent": {
       "type": "number",
       "title": "Target size",
-      "description": "Results are moved out until the context is estimated to be under this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off); only where it is not reached do long inputs, the middles of long messages and old calls leave after them. At 1, the default, it is not reached in a window of 200,000: everything that may leave does, at every compaction, but the newest keepTokens of results, of long inputs and of long messages, and the calls among the newest keepTokens of the conversation. Set it higher to leave more in place. Where the oldest messages are kept in place of a summary, they are cut down to the same size. From 1 to 99; a number outside is taken as the nearest end, and the session says so.",
+      "description": "How far a compaction goes, in percent of where Claude Code compacts on its own (else the model's window): higher can leave more in place. From 1 to 99, else the nearest end. Default 1. See \"Settings\" in docs/usage.md.",
       "default": 1
     },
     "keepTokens": {
       "type": "number",
       "title": "Newest results to leave alone, in tokens",
-      "description": "The newest tool result that could leave always stays; the ones before it stay while they and the newest add up to this many tokens (three characters to a token). 0 keeps the newest one only. Long inputs have an allowance of this size of their own, and so do long messages. A /compact typed without instructions reaches into them too where that is not enough, up to the last thing you said. Where the oldest messages are kept in place of a summary, the newest messages stay while they add up to this many tokens, unless fewer have to stay for the conversation to fit. From 0 to 1,000,000; a number outside is taken as the nearest end, and the session says so.",
+      "description": "Tokens of the newest tool results left in place, the newest always; long inputs and messages get as many. A /compact without instructions reaches into them. From 0 to 1,000,000, else the nearest end. Default 20,000. See \"Settings\" in docs/usage.md.",
       "default": 20000
     },
     "minChars": {
       "type": "number",
       "title": "Smallest result to move out",
-      "description": "Tool results, input values and messages shorter than this many characters are not moved out one by one. Old short calls may still fold into a list with what they returned. From 0 to 10,000,000; a number outside is taken as the nearest end, and the session says so.",
+      "description": "Results, input values and messages shorter than this, in characters, are not moved out one by one. From 0 to 10,000,000, else the nearest end. Default 2,000. See \"Settings\" in docs/usage.md.",
       "default": 2000
     },
     "maxAfterPercent": {
       "type": "number",
       "title": "Largest size to go on with",
-      "description": "When the context is still over this share, in percent, of the size at which Claude Code compacts on its own (the model's window when auto-compaction is off), the oldest messages are kept in parts and a list of them stands in their place, with no summary. A `/compact` given instructions runs the built-in compaction on what is left, whatever is in use. From 1 to 100; a number outside is taken as the nearest end, and the session says so.",
+      "description": "Over this percent of where Claude Code compacts (else the model's window) after moving out, old messages are kept in parts; /compact with instructions summarizes. From 1 to 100, else the nearest end. Default 75. See \"Settings\" in docs/usage.md.",
       "default": 75
     }
   }
