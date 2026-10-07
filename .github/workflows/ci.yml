@@ -45,3 +45,8 @@ jobs:
         run: |
           "$CLAUDE" --version
           sh test/validate.sh
+      # hooks/move-out.ts against the declarations that Claude Code writes when it loads the
+      # plugin, with no sign-in: the working tree passes, and a copy whose shape of $ is not
+      # Claude Code's fails where $ is handed to it (test/fixtures/typecheck).
+      - name: Type check of the hook file against Claude Code's declarations
+        run: sh test/typecheck-hooks.sh
