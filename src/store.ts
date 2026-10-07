@@ -19,6 +19,9 @@ export const FIND = 'find';
 export const STORE_COMMAND = 'lossless-store';
 /** The slash command that says the plugin runs, its version, its settings in use and whether `find` is there (#108). */
 export const STATUS_COMMAND = 'lossless-status';
+/** The slash commands that take one conversation's results to another machine (#116, src/carry.ts). */
+export const EXPORT_COMMAND = 'lossless-export';
+export const IMPORT_COMMAND = 'lossless-import';
 /** The names the model calls this plugin's tools by. */
 export const RECALL_TOOL = `mcp__${PLUGIN}__${RECALL}`;
 export const FIND_TOOL = `mcp__${PLUGIN}__${FIND}`;
@@ -36,6 +39,16 @@ const OWN = new Map([
 /** True for the name of one of this plugin's own tools, as a call or as a ticket spells it. */
 export function isOwnTool(tool: string): boolean {
   return OWN.has(tool) || tool === RECALL || tool === FIND;
+}
+
+// What a ticket names, in any wording this plugin wrote: the recall tool's name, then `id` and the 64 characters, as a
+// result's, an input's, a part's, a message's middle and a folded Read's line all have it, the old name's too. A bare 64
+// characters in a text, a hash a tool printed, is no ticket.
+const NAMED = new RegExp(`(?:${RECALL_TOOL}|${OLD_RECALL_TOOL})(?: with)? id ([0-9a-f]{64})`, 'g');
+
+/** The ids a text names in the shape of a ticket, wherever in it, inside an input's JSON among them (#116). */
+export function namedInText(text: string): string[] {
+  return [...text.matchAll(NAMED)].map((match) => match[1] as string);
 }
 
 const movedOut = (recallTool: string) =>

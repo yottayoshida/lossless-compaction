@@ -15,6 +15,19 @@ bug report needs. Where Claude Code does not know the command, the plugin is
 not running ([function hooks](limits.md#function-hooks)). `/lossless-store`
 says where results are kept and how much.
 
+**`/lossless-export` and `/lossless-import`.** `/lossless-export <directory>`
+writes the results the conversation's tickets name, through the tickets in
+its kept parts, into a new directory; `/lossless-import <directory>` takes
+such a directory, or an earlier place, into the store, each result checked
+against its name, so that the conversation resumed on another machine gives
+them back. To go on with a conversation elsewhere: export into a new
+directory outside any repository, copy it and the conversation's record
+(`<session id>.jsonl` under Claude Code's `projects/`) to the other
+machine, put the record in the folder of `projects/` for the directory you
+resume it from there, resume the conversation and type `/lossless-import`
+with the directory
+([what is written and checked](limits.md#to-another-machine)).
+
 **A compaction.** A line starting `lossless-compaction:` says what each one
 did. From a real session of `Read` results, with `targetPercent` at 40:
 

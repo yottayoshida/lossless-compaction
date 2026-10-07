@@ -20,7 +20,8 @@ import { attachedOf } from '../src/attached.ts';
 import { keepAttached, keepThenSummarize, messagesFromApi, namedThroughParts, type ToKeep } from '../src/keep.ts';
 import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
-import { closeStore, type Run } from '../src/private.ts';
+import { WINDOWS, closeStore, ensurePrivate, type Run } from '../src/private.ts';
+import { EXPORT_MARK, exportedLine, importedLine, insideRepository, namedThrough, plainPath, readIn, writeOut } from '../src/carry.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
 import {
   FIND,
@@ -30,6 +31,8 @@ import {
   PLUGIN,
   RECALL,
   STATUS_COMMAND,
+  EXPORT_COMMAND,
+  IMPORT_COMMAND,
   STORE_COMMAND,
   configDirFrom,
   defaultPlacesOf,
@@ -216,6 +219,35 @@ async function taintsOf($: WithSettings, env: Seen['env'], options: PluginOption
     }
   }
   return taintsFrom(repo, { env, options });
+}
+
+/** /lossless-export and /lossless-import do not run on Windows, where no mode keeps a directory to you alone (#116). */
+const onWindows = (path: string): boolean => WINDOWS.test(path);
+const NOT_ON_WINDOWS = 'this does not run on Windows';
+
+/** Typed by you, at the prompt or through Remote Control: what /lossless-export and /lossless-import run on (#116). */
+const byPerson = (origin: { kind: string } | undefined): boolean => origin?.kind === 'composer' || origin?.kind === 'bridge';
+
+/**
+ * What /lossless-export and /lossless-import leave of the hook's own time before they stop and say what is left: the time
+ * stands still while the host reads and writes, so what spends it is checking each result's SHA-256.
+ */
+const BUDGET_LEFT_MS = 2_000;
+
+/** Whether `path` is inside a repository (src/carry.ts), its nearest directory that is there resolved through links. */
+function insideRepositoryOf($: WithFiles & WithProcess, path: string): Promise<boolean> {
+  return insideRepository(
+    path,
+    (one) => $.fs.exists(one),
+    async (dir) => {
+      try {
+        const { exitCode, stdout } = await execOf($)(['/bin/sh', '-c', 'cd -- "$1" && pwd -P', 'sh', dir], 5_000);
+        return exitCode === 0 && stdout.trim() !== '' ? stdout.trim() : null;
+      } catch {
+        return null;
+      }
+    },
+  );
 }
 
 /** Whether `storeDir` is set: then that place alone is written to. */
@@ -883,6 +915,17 @@ export const register: Register = (on, options) => {
     } catch (error) {
       say($, `the /${STATUS_COMMAND} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
     }
+    // The two that take one conversation's results to another machine (#116): not mid-turn, since they write.
+    for (const [name, description] of [
+      [EXPORT_COMMAND, `Writes the results this conversation names into a new directory, to take to another machine`],
+      [IMPORT_COMMAND, `Reads results written out by /${EXPORT_COMMAND}, or an earlier place, into where ${PLUGIN} keeps them`],
+    ] as const) {
+      try {
+        await $.command.register({ name, description });
+      } catch (error) {
+        say($, `the /${name} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     // Not waited for: reading every transcript can take a minute, and the session should not.
     void collectOnce($, options);
     // Not waited for either: a resumed conversation's witness, read from its transcript.
@@ -949,6 +992,59 @@ export const register: Register = (on, options) => {
   });
 
   // Spelled out, not imported: Claude Code reads the matcher from this file. A test holds it to RECALL_TOOL.
+  // Spelled out, not imported: a test holds them to EXPORT_COMMAND and IMPORT_COMMAND. Each writes only when you type it,
+  // at the prompt or through Remote Control: a channel, another agent or a scheduled run cannot have results written
+  // anywhere (#116).
+  on('command.run', { command: 'lossless-export' }, async ($, e, next) => {
+    try {
+      if (!byPerson(e.origin)) return { text: `/${EXPORT_COMMAND} writes only when you type it` };
+      const to = e.args.trim();
+      if (!plainPath(to)) return { text: `give the directory to write to, one not there yet, from / with no . or .. in it: /${EXPORT_COMMAND} /path/to/new/directory` };
+      // A directory this command made is gone on with, typed again; any other that is there is refused.
+      const again = await $.fs.exists(to);
+      if (again && !(await $.fs.exists(`${to}/${EXPORT_MARK}`))) return { text: 'that is there already: give a directory not there yet' };
+      if (await insideRepositoryOf($, to)) return { text: 'that is inside a repository, where a commit could take what is written: give one outside any' };
+      const store = await storeOf($, options);
+      if (typeof store === 'string') return { text: `nothing can be read: ${store}` };
+      if (onWindows(store.write)) return { text: NOT_ON_WINDOWS };
+      const messages = (await $.session.messages()) as readonly Message[];
+      if (!Array.isArray(messages)) return { text: 'the conversation could not be read' };
+      // Put back from the trash first, as a recall would: what the conversation names is written out whole.
+      await restoreFor($, store, ticketIds(messages), partIds(messages));
+      const ids = await namedThrough(filesOf($), store.read, messages);
+      if ((await ensurePrivate(filesOf($), runOf($), to)) !== null) return { text: 'that directory could not be made readable by you alone, and nothing was written' };
+      if (!again) await filesOf($).write(`${to}/${EXPORT_MARK}`, `written by /${EXPORT_COMMAND}\n`);
+      const out = await writeOut(storingFilesOf($), store.read, ids, to, () => next.budget.remainingMs > BUDGET_LEFT_MS);
+      if ('reason' in out) return { text: `stopped: a result could not be written${out.code === undefined ? '' : ` (${out.code})`}` };
+      return { text: exportedLine(out, to, await $.session.id()) };
+    } catch {
+      // What an error says may name a path: it is not shown.
+      return { text: 'nothing could be written out' };
+    }
+  });
+
+  on('command.run', { command: 'lossless-import' }, async ($, e, next) => {
+    try {
+      if (!byPerson(e.origin)) return { text: `/${IMPORT_COMMAND} reads in only when you type it` };
+      const from = e.args.trim();
+      if (!plainPath(from)) return { text: `give the directory to read in, from / with no . or .. in it: /${IMPORT_COMMAND} /path/to/directory` };
+      const store = await storeOf($, options);
+      if (typeof store === 'string') return { text: `nothing can be written: ${store}` };
+      if (onWindows(store.write)) return { text: NOT_ON_WINDOWS };
+      if ((await privateOf($, store)) !== null) return { text: 'the place results are kept in cannot be made private, and nothing was read in' };
+      const done = await readIn(storingFilesOf($), listOf($), from, store.write, () => next.budget.remainingMs > BUDGET_LEFT_MS);
+      if ('reason' in done) return { text: `stopped: a result could not be written${done.code === undefined ? '' : ` (${done.code})`}` };
+      // Named by this conversation, what was read in is counted by the clean-up as any result its record names: the place
+      // of the record and a witness of it are noted, as at a compaction (ADR 0006, 0027).
+      await noteRootOf($, store, options);
+      const messages = (await $.session.messages()) as readonly Message[];
+      if (Array.isArray(messages)) await noteWitnessOf($, witnessCandidates(messages), options, true);
+      return { text: importedLine(done) };
+    } catch {
+      return { text: 'nothing could be read in' };
+    }
+  });
+
   on('tool.call', { tool: 'mcp__lossless-compaction__recall' }, async ($, e) => {
     const store = await storeOf($, options);
     if (typeof store === 'string') return { result: `[${PLUGIN}] Nothing is read: ${store}.` };

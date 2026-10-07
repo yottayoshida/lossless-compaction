@@ -1258,6 +1258,50 @@ names the others (#116).
   place can drop off the list. With one `storeDir`, the same place is
   noted.
 
+### To another machine
+
+`/lossless-export <directory>` writes the results the conversation's tickets
+name, through the tickets in its kept parts, into a new directory;
+`/lossless-import <directory>` takes such a directory, or an earlier place,
+into the store, each result checked against its name, so that the
+conversation resumed on another machine gives them back (#116).
+
+- Each runs only when you type it, at the prompt or through Remote Control:
+  from `claude -p`, a channel, another agent or a scheduled run it writes
+  nothing.
+- The directory is given from `/`, with no `.` or `..` in it; a drive
+  letter's form is refused, so this does not run on Windows.
+  `/lossless-export` writes only into one not there yet, made readable by
+  you alone, or one it made before, to go on; it refuses one inside a
+  repository: a `.git`, a directory or a
+  worktree's file, in it or above it, as the path is written and through
+  links.
+- Written out: what the conversation's tickets name, and in each kept part
+  what has the shape of a ticket; a hash a tool printed in a part is not
+  followed. What was in the trash is put back first, as for `recall`, and
+  what is kept nowhere here is counted. Each result goes with its entry, in
+  the store's own shape (`blobs/`, `index/`), and stays where it was.
+- Read in: each result whose text has the SHA-256 it is named by and whose
+  entry says what it is; any other is refused and counted, and one there
+  already is passed over. Each stops while some of the hook's own time is
+  left, which the host's reads and writes do not spend, and says how many
+  are left: type the same command again to go on, and what is there
+  already is passed over.
+- Of a conversation longer than the 4096 entries Claude Code hands a
+  plugin, what only the older messages name is not written out, nor counted.
+- The clean-up keeps what the records of conversations name. Where the
+  conversation's record is copied in and resumed, what was read in is named
+  by it; the place of the record and a witness are noted, as at a
+  compaction. Read in from another conversation, it is named by no record
+  here, and the clean-up takes it as it would any result no record names.
+- The record is found by the folder Claude Code keeps for the working
+  directory a conversation was started in, under `projects/`: put it in the
+  one for the directory you resume it from there (start Claude Code there
+  once to make it).
+- Nothing is sent anywhere. The directory written holds the results as they
+  were returned, a secret among them: keep it as you keep the conversation.
+  On Windows no mode is set (see above), and the commands do not run there.
+
 A part kept before a summary (see above) names the results it holds, which
 no transcript names: the ids a collection keeps are those the transcripts
 name and every id written in a part they name, through the parts of earlier
