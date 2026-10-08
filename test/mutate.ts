@@ -1,12 +1,19 @@
 // Breaks, one at a time, the lines of the code listed here, each one that a promise of docs/invariants.md rests on, runs the tests, and says
-// whether the test the document names for it fails. Run by hand (`npm run mutate`, about two minutes): it changes files
-// under src/ while it runs and puts each back. test/invariants.test.ts holds this list and the document together.
+// whether the test the document names for it fails. Run by hand (`npm run mutate`), in a git checkout. It works on a
+// copy of the tree, the files git keeps or would keep, so that stopped or killed it leaves yours as it was. The copy
+// is removed when the run ends, or stops on an error of its own; stopped from outside, it is left in the system's
+// temporary directory. For each mutation it runs the test file that holds the test named, alone: whether that test
+// fails is all that is read, and `node --test` runs each file in a process of its own. Before anything is broken, each
+// named test has to pass with every test run and with its file run alone, or nothing is broken.
+// test/invariants.test.ts holds this list and the document together.
 //
 //   node test/mutate.ts            every mutation
 //   node test/mutate.ts I4         those of one promise
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export type Mutation = {
@@ -500,34 +507,133 @@ export const MUTATIONS: readonly Mutation[] = [
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The names of the tests that fail with the code as it stands. */
-function failing(): Set<string> {
-  const ran = spawnSync('node', ['--test', '--test-reporter=tap', 'test/**/*.test.ts'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  // Stopped from outside, the tests say nothing of the line that was broken: the run ends here, and the line is put back.
-  if (ran.signal !== null || ran.error !== undefined) throw new Error(`the tests were stopped (${ran.signal ?? ran.error?.message})`);
-  return new Set([...`${ran.stdout}`.matchAll(/^not ok \d+ - (.+)$/gm)].map((match) => (match[1] ?? '').replace(/\\(.)/g, '$1')));
+/**
+ * How long one test may run before it is failed. A broken line that waits for ever fails its test this way, and the
+ * file's run is made to end (`--test-force-exit`); one that loops without waiting is ended with its run, below.
+ */
+const TEST_TIMEOUT_MS = 20_000;
+/**
+ * How long a run of every test, and a run of one file, may take: past it the run is killed, and with it this one, the
+ * mutation then applied named. A file is run in the process of its runner (`--test-isolation=none`), so that killing
+ * the run leaves no process of it behind. A file's fifteen times a test's: a line broken so that several tests of its
+ * file wait for ever still ends with each of them failed.
+ */
+const WHOLE_TIMEOUT_MS = 10 * 60_000;
+const FILE_TIMEOUT_MS = 15 * TEST_TIMEOUT_MS;
+
+/** A test's name as written, in a test file's quotes or in TAP, with what was escaped there put back. */
+const unescaped = (written: string): string => written.replace(/\\(.)/g, '$1');
+
+/** The test files of `root`, each with the names of the tests written in it as `test('<name>'`. */
+export function testsIn(root: string): Map<string, string[]> {
+  const files = new Map<string, string[]>();
+  for (const file of readdirSync(join(root, 'test')).filter((name) => name.endsWith('.test.ts'))) {
+    files.set(file, [...readFileSync(join(root, 'test', file), 'utf8').matchAll(/^test\('((?:[^'\\]|\\.)*)'/gm)].map((match) => unescaped(match[1] ?? '')));
+  }
+  return files;
+}
+
+/** The one test file that holds the test named `name`. */
+export function fileOf(tests: Map<string, string[]>, name: string): string {
+  const holding = [...tests].filter(([, names]) => names.includes(name)).map(([file]) => file);
+  if (holding.length !== 1) throw new Error(`"${name}" is in ${holding.length} test files, not one`);
+  return holding[0] ?? '';
+}
+
+/**
+ * What of `git ls-files -z` output is copied: each file. A repository or worktree nested in the tree and not ignored
+ * is listed as its directory, with a slash at the end, and is left out, as git leaves it out of the tree.
+ */
+export function filesToCopy(listed: string): string[] {
+  return listed.split('\0').filter((path) => path !== '' && !path.endsWith('/'));
+}
+
+/** Whether `path` is `root` or under it, both as the system resolves them. */
+export function inside(path: string, root: string): boolean {
+  const from = relative(realpathSync(root), realpathSync(path));
+  return from === '' || (from !== '..' && !from.startsWith(`..${sep}`) && !isAbsolute(from));
+}
+
+/**
+ * Copies the files git keeps or would keep into `copy`: the mutations are written there, never here. A file deleted
+ * in the working tree is left out, as it is from the tests run here.
+ */
+function fillCopy(copy: string): void {
+  const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (listed.status !== 0) throw new Error(`git ls-files could not list the tree: ${listed.stderr || listed.error?.message}`);
+  for (const path of filesToCopy(listed.stdout)) {
+    if (!existsSync(join(ROOT, path))) continue;
+    mkdirSync(dirname(join(copy, path)), { recursive: true });
+    copyFileSync(join(ROOT, path), join(copy, path));
+  }
+}
+
+type Ran = { passed: Set<string>; failed: Set<string> };
+
+/** The tests that passed and those that failed, by name, running `files` in `copy`; it throws when the run did not end. */
+function run(copy: string, files: string[], alone: boolean): Ran {
+  const ran = spawnSync(
+    'node',
+    ['--test', '--test-reporter=tap', `--test-timeout=${TEST_TIMEOUT_MS}`, '--test-force-exit', ...(alone ? ['--test-isolation=none'] : []), ...files],
+    { cwd: copy, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: alone ? FILE_TIMEOUT_MS : WHOLE_TIMEOUT_MS, killSignal: 'SIGKILL' },
+  );
+  if (ran.signal !== null || ran.error !== undefined) throw new Error(`the tests did not end (${ran.signal ?? ran.error?.message})`);
+  const passed = new Set<string>();
+  const failed = new Set<string>();
+  for (const match of `${ran.stdout}`.matchAll(/^(not )?ok \d+ - (.+)$/gm)) (match[1] === undefined ? passed : failed).add(unescaped(match[2] ?? ''));
+  return { passed, failed };
+}
+
+/**
+ * Whether the test named failed, `killed`, or passed. A run that says neither, a runner stopped by a signal it handles
+ * or a file that did not load, says nothing of the line that was broken: it throws.
+ */
+export function verdictOf(ran: Ran, name: string): 'killed' | 'survived' {
+  if (ran.failed.has(name)) return 'killed';
+  if (ran.passed.has(name)) return 'survived';
+  throw new Error(`the run says nothing of "${name}": the tests were stopped, or its file did not load`);
+}
+
+/** Stops before anything is broken when a test named is not there passing: it would be counted as caught by every mutation, or by none. */
+function passing(ran: Ran, names: Iterable<string>, how: string): void {
+  const not = [...names].filter((name) => !ran.passed.has(name));
+  if (not.length > 0) throw new Error(`before anything is broken, ${how}, these named tests do not pass: ${not.join('; ')}`);
 }
 
 if (import.meta.main) {
   const only = process.argv[2];
-  const before = failing();
-  if (before.size > 0) throw new Error(`tests fail before anything is broken: ${[...before].join('; ')}`);
-  let survived = 0;
-  for (const mutation of MUTATIONS.filter((one) => only === undefined || one.promise === only)) {
-    const path = `${ROOT}${mutation.file}`;
-    const original = readFileSync(path, 'utf8');
-    if (original.split(mutation.find).length !== 2) throw new Error(`${mutation.file}: not found once: ${mutation.find}`);
-    writeFileSync(path, original.replace(mutation.find, () => mutation.replace));
-    let failed: Set<string>;
-    try {
-      failed = failing();
-    } finally {
-      // Put back whatever ended the run of the tests, a Ctrl-C too: `failing` throws when the tests were stopped.
-      writeFileSync(path, original);
+  const chosen = MUTATIONS.filter((one) => only === undefined || one.promise === only);
+  const tests = testsIn(ROOT);
+  const fileFor = new Map(chosen.map((one) => [one.killedBy, fileOf(tests, one.killedBy)]));
+  const byFile = new Map<string, string[]>();
+  for (const [name, file] of fileFor) byFile.set(file, [...(byFile.get(file) ?? []), name]);
+  // A temporary directory inside the tree would put the copy among your files, there after a stop.
+  if (inside(tmpdir(), ROOT)) throw new Error(`the temporary directory ${tmpdir()} is inside the tree; set TMPDIR to one outside it`);
+  const copy = mkdtempSync(join(tmpdir(), 'lossless-mutate-'));
+  try {
+    fillCopy(copy);
+    passing(run(copy, ['test/**/*.test.ts'], false), chosen.map((one) => one.killedBy), 'with every test run');
+    for (const [file, names] of byFile) passing(run(copy, [`test/${file}`], true), names, `with ${file} run alone`);
+    let survived = 0;
+    for (const mutation of chosen) {
+      const path = join(copy, mutation.file);
+      const original = readFileSync(path, 'utf8');
+      if (original.split(mutation.find).length !== 2) throw new Error(`${mutation.file}: not found once: ${mutation.find}`);
+      writeFileSync(path, original.replace(mutation.find, () => mutation.replace));
+      let ran: Ran;
+      try {
+        ran = run(copy, [`test/${fileFor.get(mutation.killedBy)}`], true);
+      } catch (error) {
+        throw new Error(`with ${mutation.promise} ${mutation.breaks}: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        writeFileSync(path, original);
+      }
+      const killed = verdictOf(ran, mutation.killedBy) === 'killed';
+      if (!killed) survived += 1;
+      console.log(`${killed ? 'KILLED  ' : 'SURVIVED'} ${mutation.promise} ${mutation.breaks} (${ran.failed.size} failed in its file${killed ? '' : `: ${[...ran.failed].slice(0, 4).join('; ')}`})`);
     }
-    const killed = failed.has(mutation.killedBy);
-    if (!killed) survived += 1;
-    console.log(`${killed ? 'KILLED  ' : 'SURVIVED'} ${mutation.promise} ${mutation.breaks} (${failed.size} failed${killed ? '' : `: ${[...failed].slice(0, 4).join('; ')}`})`);
+    process.exitCode = survived > 0 ? 1 : 0;
+  } finally {
+    rmSync(copy, { recursive: true, force: true });
   }
-  process.exit(survived > 0 ? 1 : 0);
 }

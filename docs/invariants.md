@@ -3,7 +3,8 @@
 The plugin is called lossless for these eight promises, and for nothing
 beyond them. Each names the tests that keep it. `test/mutate.ts` lists lines
 of the code that a promise rests on and breaks them one at a time, and the
-test named beside each has to fail: `npm run mutate` runs that, by hand, and
+test named beside each has to fail: `npm run mutate` runs that, by hand, on
+a copy of the tree, so that stopping it leaves yours as it was, and
 `test/invariants.test.ts` holds this page, the tests and that list together.
 The lines are those of `src/`; the order things are done in by
 `hooks/move-out.ts` is held by `test/hooks.test.ts`, which reads its text.
