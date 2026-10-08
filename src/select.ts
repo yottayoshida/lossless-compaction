@@ -1,6 +1,7 @@
 // Which tool results may leave the conversation, and the order they leave in
 // when nothing but rules decides it.
 
+import { WHY, type Why } from './reasons.ts';
 import { PLUGIN, readBodyTicket, readInputTicket } from './store.ts';
 import type { Message, ToolUse } from './types.ts';
 
@@ -305,10 +306,10 @@ const REBUILT = new Set(['text', 'tool_use', 'tool_result', 'tool_reference', 't
  * every message of it can be rebuilt. `api` is the conversation with its
  * blocks intact.
  */
-export function whyNotRebuilt(messages: readonly Message[], api: unknown): string | null {
-  if (!Array.isArray(api)) return 'the conversation could not be read with its blocks';
+export function whyNotRebuilt(messages: readonly Message[], api: unknown): Why | null {
+  if (!Array.isArray(api)) return WHY.unreadBlocks();
   if (messages.length >= HOST_SHOWS || api.length >= HOST_SHOWS) {
-    return `the conversation has ${HOST_SHOWS} messages or more, and older ones may not have been shown`;
+    return WHY.tooManyMessages(HOST_SHOWS);
   }
   const kinds = new Set<string>();
   // `inResult` holds for the blocks of a tool result that is a message's own block
@@ -318,13 +319,13 @@ export function whyNotRebuilt(messages: readonly Message[], api: unknown): strin
     if (typeof node !== 'object' || node === null) return;
     const block = node as Record<string, unknown>;
     const kind = block['type'];
-    if (typeof kind !== 'string') kinds.add('a block without a kind');
+    if (typeof kind !== 'string') kinds.add(WHY.blockWithoutKind());
     else if (kind === 'image' && inResult) return;
-    else if (!REBUILT.has(kind)) kinds.add(/^[a-z_]{1,40}$/.test(kind) ? kind : 'a kind with an unusual name');
+    else if (!REBUILT.has(kind)) kinds.add(/^[a-z_]{1,40}$/.test(kind) ? kind : WHY.unusualKind());
     visit(block['content'], depth + 1, kind === 'tool_result' && depth === 0);
   };
   for (const message of api) visit((message as { content?: unknown } | null)?.content, 0, false);
-  return kinds.size === 0 ? null : `the conversation holds what a rebuilt message cannot carry: ${[...kinds].sort().join(', ')}`;
+  return kinds.size === 0 ? null : WHY.cannotCarry(WHY.kinds([...kinds].sort()));
 }
 
 /** What the person is working on: what they asked the compaction to keep, then their latest turns. */

@@ -16,6 +16,7 @@
 
 import { leftUndone, noticeLine, noticeSize, reportLine, tokensOf, undoneLine, whatOf, type Config, type Count, type Outcome } from './compact.ts';
 import { cutLine, cutNotice, decide, isLong } from './cut.ts';
+import { WHY, builtInLine } from './reasons.ts';
 import { PLUGIN } from './store.ts';
 
 /** What the hook does before trying anything: skip the compaction, keep a subagent's and hand it to the summary, or try. */
@@ -138,7 +139,7 @@ export function nextStep(tried: Tried): Step {
   const summarize: Summarize = nothing
     ? {
         step: 'summarize',
-        line: `built-in compaction: nothing could be moved out: ${reportLine(report, 'given')}`,
+        line: builtInLine(WHY.nothingMoved(reportLine(report, 'given'))),
         notice: "nothing could be moved out: Claude Code's summary runs on the whole conversation",
         of: 'given',
       }

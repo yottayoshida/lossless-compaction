@@ -32,7 +32,7 @@ Press `y` if asked, choose **Install for you**, then Esc. The plugin runs in tha
 asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#function-hooks)):
 `/lossless-status` says it runs, its version and settings.
 `/compact` and automatic compaction go through it, each with a
-`lossless-compaction:` line ([other setups](docs/limits.md#setting-it-up)).
+`lossless-compaction:` line ([other setups](docs/usage.md#setting-it-up)).
 
 ## What it does
 
@@ -66,8 +66,8 @@ questions one after another:
   request was smaller in five kinds of six, and larger in the one of thinking,
   in both runs.
 - **What left comes back.** With the plugin the agent called
-  `recall` and `find`; after a summary it read files again and Claude Code's
-  record of the session. Either way it re-entered context.
+  `recall` and `find`; after a summary it read files again and the
+  transcript. Either way it re-entered context.
 - **It cost less.** No summary to pay for: in the first run the plugin cost
   less in each of the six kinds, its questions alone more in four of them
   ([every table](docs/measurements.md#every-kind-of-conversation-at-the-default)).
@@ -83,9 +83,10 @@ questions one after another:
 
 ## Docs
 
-- [Usage](docs/usage.md) — what a compaction prints, `recall`, what `find` sends
+- [Troubleshooting](docs/troubleshooting.md)
+- [Usage](docs/usage.md) — setup, what a compaction prints, `recall`, what `find` sends
 - [How it works](docs/how-it-works.md) — what is stored, leaves or is deleted
-- [Limits](docs/limits.md) — when the summary still runs, what is not kept, setup
+- [Limits](docs/limits.md) — when the summary still runs, what is not kept
 - [Comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
 - [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](docs/usage.md#settings), [privacy](PRIVACY.md) and [decision records](docs/adr/)
 

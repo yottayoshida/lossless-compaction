@@ -1,8 +1,125 @@
 # Usage
 
-Three things, in the order you will meet them, and a command that says how
-the plugin stands. [Settings](#settings), at the end, says which to change
-for what.
+How to set the plugin up, then three things, in the order you will meet
+them, and a command that says how the plugin stands. [Settings](#settings),
+at the end, says which to change for what. A line you saw and do not
+understand: [troubleshooting](troubleshooting.md).
+
+## Setting it up
+
+The README's quick start installs from a Claude Code session, where
+`--marketplace` takes this repository on Claude Code 2.1.275 or later.
+**Install for you** records the plugin in `~/.claude/settings.json` (under
+`CLAUDE_CONFIG_DIR` when that is set), **Install for you, in this repo only**
+in the repository's `.claude/settings.local.json`, and **Install for all
+collaborators on this repository** in its `.claude/settings.json`, which you
+commit and each collaborator installs from again. Installed in a session, the
+plugin runs in that session: measured on Claude Code 2.1.289 with a copy of
+the plugin under another name, from a marketplace in a directory, installed
+before the first message and again after two in another session, the install
+said `Plugin is now active.`, `/plugin` said one mod was active, `recall` was
+among the agent's tools, and a `/compact` went through the plugin. Claude
+Code's documentation says it holds an install whose reload would make the
+next request read the conversation again uncached, and asks for
+`/reload-plugins --force`; that was not met. Where the plugin is installed
+already there is nothing to do: typed there, the line opened the plugin's
+options and, those closed with Esc, said `Already installed
+lossless-compaction.` and changed no setting (measured on 2.1.289, with the
+marketplace added from this repository).
+
+From the shell, or a script, it is two commands, and the plugin loads in the
+next session or after `/reload-plugins`:
+
+```sh
+claude plugin marketplace add yottayoshida/lossless-compaction
+claude plugin install lossless-compaction@lossless-compaction
+```
+
+To use the plugin in one repository only, add `--scope local` to the install
+and run it there; set the key without `--scope`.
+
+Nothing is to be set for the plugin to run: the variable the quick start
+asked for before Claude Code 2.1.287 is ignored from that version on and can
+be removed ([function hooks](limits.md#function-hooks)). The plugin is not on
+npm; it installs from this repository.
+
+The four number settings each take a value in a range: `targetPercent` 1 to
+99, `keepTokens` 0 to 1,000,000, `minChars` 0 to 10,000,000 and
+`maxAfterPercent` 1 to 100. A number outside its range is taken as the
+nearest end of it, never as the setting's default, and the first session
+after says so in one line; so is a value left empty, which is taken at the
+default. A value that is not a number at all, such as `"40"` written in
+quotes, keeps Claude Code from loading the plugin: `/compact` is then
+Claude Code's own (measured on Claude Code 2.1.291).
+
+The key for `find` is set with
+`/plugin configure lossless-compaction@lossless-compaction`. `provider` is
+`auto` unless you change it: an account id entered there chooses Cloudflare
+and none chooses TypeSafe. When the account id is not 32 hexadecimal
+characters, or `provider` is `typesafe` while an account id is entered,
+nothing is sent: with a key for the provider chosen, `find` is not
+registered and a line at the start of the session says why; with none,
+`find` is there with no key, as for any setup without one, looking on this
+machine and sending nothing (#110). A key in the environment
+(`TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`) is used only where the
+plugin's own settings choose the provider: `provider` set to `typesafe` or
+`cloudflare`, or a Cloudflare account id entered. Left on `auto` with no
+account id, nothing is sent without a key in the plugin's settings: a key
+exported for another tool does not make `find` send anything, and nothing is said of it
+at the start of a session; `/lossless-status` says it is there and what
+would use it.
+Where the settings choose the provider and hold no key, the key of the
+provider chosen is read from the environment, unless a repository's settings
+set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
+`CLOUDFLARE_API_TOKEN` once Cloudflare is chosen, by the account id or by
+`provider` set to `cloudflare`; only the latter also reads
+`CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone choose nothing
+([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md), [ADR 0028](adr/0028-a-key-in-the-environment-waits-for-a-choice.md)).
+
+An installed copy is replaced only when the plugin's version changes.
+Claude Code does not update it on its own unless auto-update is turned on
+for this marketplace (`/plugin`, **Marketplaces**, `lossless-compaction`,
+**Enable auto-update**); otherwise `/plugin marketplace update
+lossless-compaction` in a session, or from the shell:
+
+```sh
+claude plugin marketplace update lossless-compaction
+claude plugin update lossless-compaction@lossless-compaction
+```
+
+and the new copy loads in the next session or after `/reload-plugins`.
+`claude plugin list` names the version installed. The marketplace points at
+the tip of `main`: a copy installed between two releases can hold changes not
+yet released, under the last release's number, and keeps them until the
+version changes (#106).
+
+To stay on one release, add the marketplace at its tag, before installing:
+
+```sh
+claude plugin marketplace add yottayoshida/lossless-compaction#v0.7.1
+claude plugin install lossless-compaction@lossless-compaction
+```
+
+Each tag from `v0.4.0` installs that release (measured with `v0.7.1` on
+Claude Code 2.1.291); the two before were named `jev-lossless-compaction`. A
+marketplace that is added cannot be moved to another tag from the shell:
+adding it again from another one is refused, and with its `ref` edited in
+`~/.claude/settings.json`, `claude plugin marketplace update` and `claude
+plugin install` said it was not found (measured on 2.1.291). It is removed
+and added again, and removing it removes the plugin's settings with it,
+`storeDir` among them (measured). Note them first and set them again when
+installing, with `--config storeDir=…`: with `storeDir` not set again,
+results are written to the default place, and what was kept elsewhere is
+read only where that place is still on the list of earlier places (#116),
+which is kept apart from the settings; whether removing the plugin removes
+it was not checked. Whether an older version reads a store a newer one wrote,
+or whether its clean-up removes what the newer one keeps, was not checked.
+
+Coming from `jev-lossless-compaction` (0.3.0 and before), an installed copy
+does not follow the rename: see [moving from the old
+name](limits.md#moving-from-the-old-name).
+
+## Using it
 
 **`/lossless-status`.** Typed at the prompt, it says that the plugin runs in
 this session, its version and Claude Code's, the value each number setting is
@@ -12,7 +129,7 @@ from or why it is not. It prints no key and reads no stored result: of
 `find`'s settings it shows `provider` when it is `auto`, `typesafe` or
 `cloudflare`, and of the others only whether they are set. What it says stays
 in the conversation, as any command's output does. Its first lines are what a
-bug report needs. Where Claude Code does not know the command, the plugin is
+bug report needs; its last names [troubleshooting](troubleshooting.md). Where Claude Code does not know the command, the plugin is
 not running ([function hooks](limits.md#function-hooks)). `/lossless-store`
 says where results are kept and how much.
 
@@ -299,7 +416,7 @@ any of the plugin's does, to a summary only where
   [too long](limits.md#when-the-conversation-is-too-long)).
 - **`provider`**, **`apiKey`** and **`cloudflareAccountId`**: where `find`
   asks Jev, as `find` above says
-  ([setting it up](limits.md#setting-it-up)).
+  ([setting it up](#setting-it-up)).
 - **`model`**, default `jev-latest`: the Jev model TypeSafe is asked for. On
   Cloudflare the model is `typesafe/jev` whatever this says.
 - **`storeDir`**: where moved-out results are kept, an absolute directory
@@ -312,4 +429,4 @@ any of the plugin's does, to a summary only where
   before ([the files](limits.md#the-files)).
 
 A number outside its range is taken as the nearest end of it, and the
-first session after says so ([setting it up](limits.md#setting-it-up)).
+first session after says so ([setting it up](#setting-it-up)).

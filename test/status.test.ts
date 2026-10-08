@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { configFrom } from '../src/flow.ts';
-import { NOT_TAKEN, VERSION, findFrom, statusReport, type StatusInput } from '../src/status.ts';
+import { NOT_TAKEN, TROUBLESHOOTING, VERSION, findFrom, statusReport, type StatusInput } from '../src/status.ts';
 import { bodyTicketText, partTicketText, ticketText } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 
@@ -21,6 +21,12 @@ const base = (over: Partial<StatusInput> = {}): StatusInput => ({
   ...over,
 });
 
+test('the page /lossless-status names for a line is the troubleshooting page, at the address the manifest gives its documentation (#140)', () => {
+  const documentation = (JSON.parse(read('../.claude-plugin/plugin.json')) as { documentationUrl: string }).documentationUrl;
+  assert.equal(TROUBLESHOOTING, documentation.replace(/README\.md$/, 'docs/troubleshooting.md'));
+  assert.ok(read('../docs/troubleshooting.md').startsWith('# Troubleshooting\n'));
+});
+
 test('the version is the one the plugin is published under', () => {
   for (const file of ['../.claude-plugin/plugin.json', '../package.json']) assert.equal((JSON.parse(read(file)) as { version: string }).version, VERSION, file);
 });
@@ -33,6 +39,8 @@ test('/lossless-status says it runs, its version and Claude Code\'s, and each se
   assert.equal(lines[3], "find's settings: provider auto, model the default, apiKey not set, cloudflareAccountId none");
   assert.equal(lines[4], 'storeDir: the default; /lossless-store says where results are kept and how much, or why none can be');
   assert.equal(lines[5], 'this conversation: 0 tickets of what was moved out, in 0 of the 4096 entries Claude Code hands a plugin');
+  assert.equal(lines[6], `a line of the plugin's you do not understand: ${TROUBLESHOOTING}`);
+  assert.equal(lines.length, 7);
   assert.match(statusReport(base({ claudeCode: null })), /on Claude Code \(version not known\): running/);
 });
 
