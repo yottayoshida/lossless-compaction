@@ -30,7 +30,10 @@ whose `plugin.json` gives `targetPercent` 1; with no key for Jev, so with
 `targetPercent`: its figures are those of the run below, on the same
 conversations and the same Claude Code, its answers graded with that run and
 these with this one, by Sonnet 5.5 both. The units, their grades and the
-tables are in `bench/results/2026-10-07-at-1/`.
+tables are in `bench/results/2026-10-07-at-1/`. Released in 0.8.0 without
+being measured again: since `b4b090a` a ticket also counts its result's lines
+(#149), a few tokens a ticket, so the plugin's token figures are of the code
+before that.
 
 The first run, as the README gives it. In every cell the plugin's figure is
 first and the built-in compaction's second:

@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-08
+
 ### Added
 
 - `/lossless-list` lists what was moved out of this conversation, the last 50, the newest at the bottom (`all` for every one, a word to keep the lines that hold it), a line each with its id's first 12 characters, size, lines, call and first line; `/lossless-show <id>` names, on a line of its own, the file one is kept in, for you to open with a tool of your own (#138, ADR 0044). Both say what they find on the screen alone: measured on Claude Code 2.1.293, the model could not read those lines, live or after a resume, and what it reads of either command is one line that names no result. Open the file to read only: saved, `recall` refuses it.
