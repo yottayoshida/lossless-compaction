@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { configFrom } from '../src/flow.ts';
-import { NOT_TAKEN, TROUBLESHOOTING, VERSION, findFrom, statusReport, type StatusInput } from '../src/status.ts';
+import { NOT_TAKEN, TROUBLESHOOTING, VERSION, findDeniedIn, findFrom, statusReport, type StatusInput } from '../src/status.ts';
 import { bodyTicketText, partTicketText, ticketText } from '../src/store.ts';
 import type { Message } from '../src/types.ts';
 
@@ -16,6 +16,7 @@ const base = (over: Partial<StatusInput> = {}): StatusInput => ({
   options: { provider: 'auto', model: 'jev-latest', targetPercent: 1, keepTokens: 20_000, minChars: 2000, maxAfterPercent: 75 },
   atStart: { registered: true, local: true, why: 'no key' },
   now: { registered: true, local: true, why: 'no key' },
+  deniedIn: [],
   keysIn: NONE,
   messages: [],
   ...over,
@@ -136,4 +137,34 @@ test("the conversation's tickets are counted by their shape: of results, inputs,
   const long = Array.from({ length: 1536 }, (): Message => ({ role: 'user', text: 'x', toolUses: [] }));
   assert.match(statusReport(base({ messages: long })), /, in 1536 of the 4096 entries Claude Code hands a plugin; a compaction without instructions cuts it for its length where it can$/m);
   assert.doesNotMatch(statusReport(base({ messages: long.slice(1) })), /cuts it for its length/);
+});
+
+test("find is said to be denied where Claude Code's permissions deny it, whatever registered it, naming the settings (#127)", () => {
+  const deny = (...rules: unknown[]) => ({ permissions: { deny: rules } });
+  for (const rule of ['mcp__lossless-compaction__find', 'mcp__lossless-compaction', 'mcp__lossless-compaction__*']) {
+    assert.deepEqual(findDeniedIn({ project: deny(rule) }), ['.claude/settings.json'], rule);
+  }
+  // Another tool's rule, recall's alone, an allow, or settings of no such shape: not denied.
+  for (const settings of [deny('mcp__lossless-compaction__recall'), deny('Bash', 3), { permissions: { allow: ['mcp__lossless-compaction__find'] } }, { permissions: { deny: 'mcp__lossless-compaction__find' } }, {}, null, 'text']) {
+    assert.deepEqual(findDeniedIn({ project: settings }), [], JSON.stringify(settings));
+  }
+  // A form not measured is not counted: said as registered rather than as sending nothing.
+  for (const rule of [' mcp__lossless-compaction__find ', 'mcp__*', 'mcp__lossless-compaction__f*']) {
+    assert.deepEqual(findDeniedIn({ project: deny(rule) }), [], rule);
+  }
+  // Managed settings that keep to their own permission rules: another file's deny is not in effect, theirs is.
+  const managedOnly = { allowManagedPermissionRulesOnly: true };
+  assert.deepEqual(findDeniedIn({ project: deny('mcp__lossless-compaction__find'), local: deny('mcp__lossless-compaction'), policy: managedOnly }), []);
+  assert.deepEqual(findDeniedIn({ project: deny('mcp__lossless-compaction__find'), policy: { ...managedOnly, ...deny('mcp__lossless-compaction__find') } }), ['managed settings']);
+  assert.deepEqual(findDeniedIn({ project: deny('mcp__lossless-compaction__find'), policy: { allowManagedPermissionRulesOnly: 'yes' } }), ['.claude/settings.json'], 'only true keeps to them');
+  const find = deny('mcp__lossless-compaction__find');
+  assert.deepEqual(findDeniedIn({ user: find, local: find, flag: find, policy: find }), ['your user settings', '.claude/settings.local.json', '--settings', 'managed settings']);
+  // Started in the home directory, the project file is the user file.
+  assert.deepEqual(findDeniedIn({ user: find, project: deny('mcp__lossless-compaction__find') }), ['your user settings']);
+
+  // Registered, with a key, and denied: the line says denied, and not where it would send.
+  const said = statusReport(base({ options: { ...base().options, apiKey: 'set' }, atStart: { registered: true, kind: 'typesafe' }, now: { registered: true, kind: 'typesafe' }, deniedIn: ['.claude/settings.local.json'] }));
+  assert.match(said, /^find: denied in Claude Code's permissions \(\.claude\/settings\.local\.json\): the agent is not offered it, and nothing is sent$/m);
+  assert.ok(!said.includes('asks TypeSafe'), said);
+  assert.match(statusReport(base()), /^find: registered in this session/m, 'denied nowhere: as before');
 });

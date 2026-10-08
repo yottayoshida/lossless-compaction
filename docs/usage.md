@@ -330,6 +330,10 @@ the key nor the provider, and you are told nothing of it. Every
 answer that says Jev could not be asked ends saying `recall` still reads a
 result by its id.
 
+To keep `find` from sending in a repository, or on every machine an
+organization's managed settings reach, deny it in Claude Code's permissions
+there ([stopping `find`](limits.md#stopping-find)).
+
 With a key set, each call to `find` sends the provider:
 
 - the agent's question;

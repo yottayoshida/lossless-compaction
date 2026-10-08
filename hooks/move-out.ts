@@ -49,7 +49,7 @@ import {
   type Recalled,
   type StoreDirs,
 } from '../src/store.ts';
-import { NOT_TAKEN, VERSION, findFrom, statusReport, type Find } from '../src/status.ts';
+import { NOT_TAKEN, VERSION, findDeniedIn, findFrom, statusReport, type Find } from '../src/status.ts';
 import { TOLD_KEY, changesNotice, changesToTell, setupFrom } from '../src/changes.ts';
 import { SETTINGS_SOURCES, preCompactHooksIn, unrunLine, unrunNotice, type SettingsSource } from '../src/precompact.ts';
 import { recallDescription } from '../src/tools.ts';
@@ -347,6 +347,19 @@ export async function tellOnce($: WithUi & { session: { id: () => Promise<string
   say($, line, toast ?? true);
 }
 
+/** Every settings source as `$.settings.read` gives it; one that cannot be read is left out. */
+async function readSettings($: WithSettings): Promise<Partial<Record<SettingsSource, unknown>>> {
+  const read: Partial<Record<SettingsSource, unknown>> = {};
+  for (const source of SETTINGS_SOURCES) {
+    try {
+      read[source] = await $.settings.read({ source });
+    } catch {
+      // Left unread.
+    }
+  }
+  return read;
+}
+
 /**
  * Names, once a session, the settings files holding a PreCompact hook, after a compaction that did not use Claude
  * Code's summary, inside which alone they run (#126, ADR 0043). A file that cannot be read names nothing, and nothing
@@ -354,15 +367,7 @@ export async function tellOnce($: WithUi & { session: { id: () => Promise<string
  */
 async function tellUnrun($: WithUi & WithSettings & { session: { id: () => Promise<string> } }, trigger: string, signal: AbortSignal): Promise<void> {
   try {
-    const read: Partial<Record<SettingsSource, unknown>> = {};
-    for (const source of SETTINGS_SOURCES) {
-      try {
-        read[source] = await $.settings.read({ source });
-      } catch {
-        // Left unread.
-      }
-    }
-    const where = preCompactHooksIn(read, trigger);
+    const where = preCompactHooksIn(await readSettings($), trigger);
     // Claude Code gone on without the hook, before the settings were read or while they were.
     if (where.length > 0 && !signal.aborted) await tellOnce($, unrunLine(where), unrunNotice(where));
   } catch {
@@ -1284,6 +1289,8 @@ export const register: Register = (on, options) => {
           options,
           atStart: findAtStart,
           now: findFrom(now),
+          // Registered by the plugin, `find` may still be kept from the agent by Claude Code's permissions (#127).
+          deniedIn: findDeniedIn(await readSettings($)),
           keysIn: { TYPESAFE_API_KEY: (env.TYPESAFE_API_KEY ?? '').trim() !== '', CLOUDFLARE_API_TOKEN: (env.CLOUDFLARE_API_TOKEN ?? '').trim() !== '' },
           messages,
         }),

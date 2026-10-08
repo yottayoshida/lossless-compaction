@@ -18,7 +18,9 @@ puts together some other way.
   set to `typesafe` or `cloudflare`, or a Cloudflare account id entered. Left
   on `auto` with no account id, nothing is sent without a key in the
   plugin's settings. With a key set, each call to `find` sends the
-  provider you chose what [Usage](docs/usage.md) lists. Nothing is ever sent
+  provider you chose what [Usage](docs/usage.md) lists; a `permissions.deny`
+  of `find` in a repository's settings, or in managed settings, keeps it
+  from being called where those hold ([Limits](docs/limits.md#stopping-find)). Nothing is ever sent
   to the maintainer: there is no telemetry, crash report or update check.
 - **What it keeps stays on your machine**, in plain files, while a
   conversation Claude Code can resume names it, and for one to three weeks
