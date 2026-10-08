@@ -92,9 +92,9 @@ claude plugin update lossless-compaction@lossless-compaction
 
 and the new copy loads in the next session or after `/reload-plugins`.
 `claude plugin list` names the version installed. The marketplace points at
-the tip of `main`: a copy installed between two releases can hold changes not
-yet released, under the last release's number, and keeps them until the
-version changes (#106).
+the tag of the latest release: a new install takes that release, and what is
+merged after it waits for the next one (#106,
+[ADR 0031](adr/0031-the-marketplace-points-at-a-release.md)).
 
 The first session you are at after the version went up says, a line each,
 what the releases since the version it last told changed of a default or of

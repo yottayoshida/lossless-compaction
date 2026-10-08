@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The marketplace points at the tag of the latest release, `v0.8.0`, and its commit: a new install takes that release, and what is merged after it waits for the next one, where it took the tip of `main` under the last release's number (#106, ADR 0031). CI asks this repository that the tag is that commit (`test/marketplace-tag.sh`).
+
 ## [0.8.0] - 2026-10-08
 
 ### Added
