@@ -13,6 +13,14 @@ Everything that decides something is in `src/` and is tested there with a file
 system and an HTTP client held in memory. `hooks/move-out.ts` only connects
 Claude Code's events to `src/`.
 
+`npm run mutate` breaks, in a copy of the tree, each line of `src/` that a
+promise of [invariants.md](invariants.md) rests on, and checks that the test
+named for it fails. CI runs it as the last step of `test`, on every pull
+request and on `main` after each merge: a pull request whose named test no
+longer catches its line does not pass. `main` does not require a pull request
+to be up to date with it, so two that passed apart are checked together only
+on `main`, after the second merge.
+
 ## Checks that need Claude Code
 
 ```sh

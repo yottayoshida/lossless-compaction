@@ -50,3 +50,8 @@ jobs:
       # Claude Code's fails where $ is handed to it (test/fixtures/typecheck).
       - name: Type check of the hook file against Claude Code's declarations
         run: sh test/typecheck-hooks.sh
+      # Each line of src/ that a promise of docs/invariants.md rests on, broken in a copy of the tree, has to fail the
+      # test named for it: a test that stops catching its line fails the pull request (#125). Last, so that the steps
+      # above are seen whatever this says.
+      - name: Mutations of docs/invariants.md
+        run: npm run mutate

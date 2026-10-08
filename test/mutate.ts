@@ -1,5 +1,6 @@
 // Breaks, one at a time, the lines of the code listed here, each one that a promise of docs/invariants.md rests on, runs the tests, and says
-// whether the test the document names for it fails. Run by hand (`npm run mutate`), in a git checkout. It works on a
+// whether the test the document names for it fails. Run by `npm run mutate`, in a git checkout, and by CI on every pull
+// request (the last step of .github/workflows/ci.yml, #125). It works on a
 // copy of the tree, the files git keeps or would keep, so that stopped or killed it leaves yours as it was. The copy
 // is removed when the run ends, or stops on an error of its own; stopped from outside, it is left in the system's
 // temporary directory. For each mutation it runs the test file that holds the test named, alone: whether that test
@@ -600,7 +601,9 @@ function passing(ran: Ran, names: Iterable<string>, how: string): void {
   if (not.length > 0) throw new Error(`before anything is broken, ${how}, these named tests do not pass: ${not.join('; ')}`);
 }
 
-if (import.meta.main) {
+// Started as the script, not imported by a test. Not `import.meta.main`, which an early Node 24 does not have: there
+// the run would try nothing and pass.
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const only = process.argv[2];
   const chosen = MUTATIONS.filter((one) => only === undefined || one.promise === only);
   const tests = testsIn(ROOT);
@@ -632,7 +635,9 @@ if (import.meta.main) {
       if (!killed) survived += 1;
       console.log(`${killed ? 'KILLED  ' : 'SURVIVED'} ${mutation.promise} ${mutation.breaks} (${ran.failed.size} failed in its file${killed ? '' : `: ${[...ran.failed].slice(0, 4).join('; ')}`})`);
     }
-    process.exitCode = survived > 0 ? 1 : 0;
+    // What was tried, so that a run that tried nothing is seen as that.
+    console.log(`${chosen.length} mutations, ${survived} survived`);
+    process.exitCode = survived > 0 || chosen.length === 0 ? 1 : 0;
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }
