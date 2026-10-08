@@ -59,7 +59,9 @@ another tool is in the same place.
 - Someone whose only key is `TYPESAFE_API_KEY` in the environment, with
   `provider` left on `auto`, has no `find` after updating, and is not told at
   the start of a session. The changelog says how to have it again: set
-  `provider` to `typesafe`.
+  `provider` to `typesafe`. (Amended by #139: the first session a person is
+  at after the update that brought this says it once, where 0.7.1 sent that
+  key; decision 3 stands for every session after.)
 - The benchmark is unchanged: it sets `provider` and hands the key over in
   the environment.
 - #103 asked for a test that the start-up line names the environment as the

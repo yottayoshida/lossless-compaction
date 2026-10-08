@@ -66,8 +66,9 @@ plugin's own settings choose the provider: `provider` set to `typesafe` or
 `cloudflare`, or a Cloudflare account id entered. Left on `auto` with no
 account id, nothing is sent without a key in the plugin's settings: a key
 exported for another tool does not make `find` send anything, and nothing is said of it
-at the start of a session; `/lossless-status` says it is there and what
-would use it.
+at the start of a session but once, after the update that brought this, where
+0.7.1 sent it ([updating](#updating)); `/lossless-status` says it is there and
+what would use it.
 Where the settings choose the provider and hold no key, the key of the
 provider chosen is read from the environment, unless a repository's settings
 set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
@@ -75,6 +76,8 @@ set it: `TYPESAFE_API_KEY` once `provider` is `typesafe`, or
 `provider` set to `cloudflare`; only the latter also reads
 `CLOUDFLARE_ACCOUNT_ID`. The two Cloudflare variables alone choose nothing
 ([ADR 0009](adr/0009-an-account-id-is-enough-to-choose-cloudflare.md), [ADR 0028](adr/0028-a-key-in-the-environment-waits-for-a-choice.md)).
+
+### Updating
 
 An installed copy is replaced only when the plugin's version changes.
 Claude Code does not update it on its own unless auto-update is turned on
@@ -92,6 +95,23 @@ and the new copy loads in the next session or after `/reload-plugins`.
 the tip of `main`: a copy installed between two releases can hold changes not
 yet released, under the last release's number, and keeps them until the
 version changes (#106).
+
+The first session you are at after the version went up says, a line each,
+what the releases since the version it last told changed of a default or of
+what a setting means, where that changes what your settings and environment
+do: with the release it came with and what to set instead, once a version
+(#139). A new install is told nothing. A session nobody is at (`claude -p`,
+the SDK) says nothing and leaves it to the next; whether Claude Code's
+desktop app and IDE extensions count as a session you are at was not
+checked. Whether a change applies is decided once, in that first session,
+from its settings and environment, so a key exported in some shells alone,
+or a repository's settings that put a key or a proxy there, can miss it; two sessions started together can each say it. Versions before
+this one kept no record: updating from one says every such change since
+0.7.1, from 0.7.1 too, where results were kept before, and nothing where none
+ever were, as for a new install; a new install whose `storeDir` is a
+directory already there is told as if updated. Going back to an older
+version that keeps this record, and up again, says it again; going back to
+0.7.1 or before does not.
 
 To stay on one release, add the marketplace at its tag, before installing:
 

@@ -117,7 +117,9 @@ that reason: about the newest fifty of each.
 And in the plugin's own store, a file of Claude Code's for it under
 `~/.claude/plugins/store/` (under `CLAUDE_CONFIG_DIR` likewise): the places
 results were written to under your settings, newest first, up to 16, so that
-a place set before is still read (#116). Paths only, nothing of a result.
+a place set before is still read (#116), and the version of the plugin it
+last told what changed since the one before (#139). Paths and a version
+only, nothing of a result.
 Claude Code writes it, mode 644 where it was measured: other users of the
 machine can read those paths, which mode 700 on the places does not cover.
 
@@ -132,7 +134,7 @@ directory: this machine's id, a random one made the first time it is needed
 (ADR 0032). Nothing else is in it.
 
 `roots/`, `gc.json`, `sentinel.jsonl`, `machines/`, `told`, `held`, the list
-of places and the machine's id stay until you remove them. A file in `witness/` stays while its conversation's transcript,
+of places, the version last told and the machine's id stay until you remove them. A file in `witness/` stays while its conversation's transcript,
 or a file or folder of it other than those Claude Code keeps beside one, does,
 and goes at the clean-up after.
 

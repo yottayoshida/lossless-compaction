@@ -83,10 +83,10 @@ questions one after another:
 ## Docs
 
 - [Troubleshooting](docs/troubleshooting.md)
-- [Usage](docs/usage.md) — setup, what a compaction prints, `recall`, what `find` sends
+- [Usage](docs/usage.md) — setup, [updating](docs/usage.md#updating), what a compaction prints, `recall`, what `find` sends
 - [How it works](docs/how-it-works.md) — what is stored, what leaves, what is deleted
 - [Limits](docs/limits.md) — when the summary still runs, what is not kept
-- [Comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
+- [Comparison](docs/comparison.md) and [measurements](docs/measurements.md)
 - [Development](docs/development.md), [CHANGELOG](CHANGELOG.md), [settings](docs/usage.md#settings), [privacy](PRIVACY.md) and [decision records](docs/adr/)
 
 The idea comes from [fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction), with which this shares no code. Not affiliated with TypeSafe AI or Anthropic.

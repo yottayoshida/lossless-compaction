@@ -232,7 +232,10 @@ with nothing else merged between them:
 1. A pull request raises the version (`package.json` and both its places in
    `package-lock.json`, `plugin.json`, `VERSION` in `src/status.ts`, and,
    once the README is read as "The README" above says, the line naming the
-   version it was read against) and dates the CHANGELOG's section. It sets
+   version it was read against) and dates the CHANGELOG's section. Where the
+   release changes a default or what a setting means, `src/changes.ts` has its
+   line, under this version (a changed default fails `test/changes.test.ts`
+   until it does): the first session after an update says it. It sets
    the entry's source back to `"./"`, and the paragraph of `docs/usage.md`
    back to saying the marketplace points at the tip of `main`, where a
    release before pointed them at its tag: the tag's tree then installs as
