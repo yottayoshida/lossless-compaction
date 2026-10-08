@@ -84,7 +84,7 @@ questions one after another:
 ## Docs
 
 - [Troubleshooting](docs/troubleshooting.md)
-- [Usage](docs/usage.md) — setup, what a compaction prints, `recall`, what `find` sends
+- [Usage](docs/usage.md) — setup, [updating](docs/usage.md#updating), what a compaction prints, `recall`, what `find` sends
 - [How it works](docs/how-it-works.md) — what is stored, leaves or is deleted
 - [Limits](docs/limits.md) — when the summary still runs, what is not kept
 - [Comparison](docs/comparison.md) and every [measurement](docs/measurements.md)
