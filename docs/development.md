@@ -188,7 +188,7 @@ The same test checks what a machine can: that the README's links reach a
 file, and a heading where they name one; that links to its headings from
 other documents do; and that the names it gives are the ones the code has
 (the line that installs the plugin and the two commands for the shell in
-`docs/limits.md`, the version the plugin needs, the tools, the mark of the
+`docs/usage.md`, the version the plugin needs, the tools, the mark of the
 plugin's lines), and that it asks for no setting. The figures it gives are held
 to the published units in `test/bench.test.ts`.
 
@@ -233,7 +233,7 @@ with nothing else merged between them:
    `package-lock.json`, `plugin.json`, `VERSION` in `src/status.ts`, and,
    once the README is read as "The README" above says, the line naming the
    version it was read against) and dates the CHANGELOG's section. It sets
-   the entry's source back to `"./"`, and the paragraph of `docs/limits.md`
+   the entry's source back to `"./"`, and the paragraph of `docs/usage.md`
    back to saying the marketplace points at the tip of `main`, where a
    release before pointed them at its tag: the tag's tree then installs as
    itself, and `#vX.Y.Z` added to the marketplace installs X.Y.Z.
@@ -241,7 +241,7 @@ with nothing else merged between them:
    Release.
 3. A pull request points the entry at the tag: `{"source": "url", "url":
    "https://github.com/yottayoshida/lossless-compaction.git", "ref": "vX.Y.Z",
-   "sha": "<the tag's commit>"}`, rewrites the paragraph of `docs/limits.md`
+   "sha": "<the tag's commit>"}`, rewrites the paragraph of `docs/usage.md`
    that says the marketplace points at the tip of `main` (a test holds the
    two together), and, the first time, adds a check that the entry's `ref` and
    `sha` are a tag of this repository and its commit. Until it is merged, new
