@@ -22,6 +22,7 @@ import { IMAGE_TOKENS, blocksOf, mediaIn } from '../src/media.ts';
 import { ownProcessId } from '../src/mark.ts';
 import { WINDOWS, closeStore, ensurePrivate, type Run } from '../src/private.ts';
 import { EXPORT_MARK, exportedLine, importedLine, insideRepository, namedThrough, plainPath, readIn, writeOut } from '../src/carry.ts';
+import { WHY, builtInLine, type Why } from '../src/reasons.ts';
 import { goalOf, whyNotRebuilt } from '../src/select.ts';
 import {
   FIND,
@@ -184,10 +185,10 @@ async function markRunning($: WithEnvSet & WithProcess): Promise<void> {
 }
 
 /** The directory written to, made or closed to its owner alone, else why not; the others of the settings in use, closed where they can be. */
-async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs, sayIt: (text: string) => void = (text) => say($, text)): Promise<string | null> {
+async function privateOf($: WithUi & WithFiles & WithProcess, store: StoreDirs, sayIt: (text: string) => void = (text) => say($, text)): Promise<Why | null> {
   const { refused, warnings } = await closeStore(filesOf($), runOf($), store);
   for (const warning of warnings) sayIt(`a directory results are read from could not be made private: ${warning}`);
-  return refused === null ? null : `the place results are kept in cannot be made private: ${refused}`;
+  return refused === null ? null : WHY.notPrivate(refused);
 }
 
 function hostOf($: WithFiles & WithProcess): Host {
@@ -268,18 +269,16 @@ function insideRepositoryOf($: WithFiles & WithProcess, path: string): Promise<b
 const storeDirSet = (options: PluginOptions): boolean => typeof options['storeDir'] === 'string' && options['storeDir'].trim() !== '';
 
 /** Where results are kept, or why no place can be trusted: the repository's settings never decide it (ADR 0005). */
-async function storeOf($: WithEnv & WithFiles & WithSettings & WithStore, options: PluginOptions): Promise<StoreDirs | string> {
+async function storeOf($: WithEnv & WithFiles & WithSettings & WithStore, options: PluginOptions): Promise<StoreDirs | Why> {
   const env = await envOf($);
   const taints = await taintsOf($, env, options);
   const deciding = taints === null ? null : placeTaints(taints, options);
   if (deciding === null || deciding.length > 0) {
-    return deciding === null
-      ? describeTaints(null)
-      : `where results are kept would be decided by the repository (${describeTaints(deciding)}); set storeDir in your user settings`;
+    return deciding === null ? WHY.settingsUnread() : WHY.decidedByRepository(describeTaints(deciding));
   }
   const places = { CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR, HOME: env.HOME, USERPROFILE: env.USERPROFILE };
   const store = await placesOf(filesOf($), options['storeDir'], places);
-  if (store === null) return 'the place to keep results in is not an absolute path; set storeDir to one';
+  if (store === null) return WHY.notAbsolute();
   // Read as well, never cleaned up: the places written to under these settings before, and, beside a storeDir of your
   // own, the defaults, where the repository's settings did not set what they are built from (#116).
   const defaults = storeDirSet(options) && taints !== null && variableTaints(taints).length === 0 ? defaultPlacesOf(places) : [];
@@ -584,7 +583,7 @@ async function stoppedAs(files: Files, dir: string, record: GcRecord, kind: Stop
  * Why the built-in compaction runs on the conversation as it is, and what of
  * it can be kept first, or why nothing of it can be.
  */
-type HandedOver = { why: string; keep: { store: StoreDirs; messages: readonly Message[] } | { unkept: string } };
+type HandedOver = { why: Why; keep: { store: StoreDirs; messages: readonly Message[] } | { unkept: string } };
 
 /**
  * What a compaction came to, and what it was measured with: what was in use
@@ -620,7 +619,7 @@ async function placeOf(
   $: WithUi & WithEnv & WithFiles & WithSession & WithSettings & WithProcess & WithStore,
   messages: readonly Message[],
   options: PluginOptions,
-): Promise<{ store: StoreDirs } | { why: string; unkept: string }> {
+): Promise<{ store: StoreDirs } | { why: Why; unkept: string }> {
   const place = await storeOf($, options);
   if (typeof place === 'string') return { why: place, unkept: 'there is no place to keep it in' };
   // Before anything is written: what cannot be made private is not written to, the conversation included.
@@ -666,7 +665,7 @@ async function attempt(
     const api = await $.session.messages({ as: 'api' });
     asSent = messagesFromApi(api) ?? messages;
     const media = mediaIn(api);
-    const why = whyNotRebuilt(messages, api) ?? (media.why === null ? null : `the conversation holds what a rebuilt message cannot carry: ${media.why}`);
+    const why = whyNotRebuilt(messages, api) ?? (media.why === null ? null : WHY.cannotCarry(media.why));
     if (why !== null) {
       // Not rebuilt is not lost: the text of what it holds is kept all the same, from its
       // blocks where they can be read, else from the messages the hook was handed.
@@ -713,7 +712,7 @@ async function attempt(
       entries: Math.max(messages.length, Array.isArray(api) ? api.length : 0),
     };
   } catch (error) {
-    const why = error instanceof Error ? error.message : String(error);
+    const why = WHY.failed(error instanceof Error ? error.message : String(error));
     return { why, keep: store === null ? { unkept: 'the place to keep it in could not be read' } : { store, messages: asSent } };
   }
 }
@@ -725,7 +724,7 @@ async function attempt(
  * it is kept as it was sent, attachments and all, before the built-in summary, as one that cannot be rebuilt is.
  */
 async function withAttached($: WithFiles & WithProcess, e: SessionCompactInput, tried: Tried): Promise<Tried | HandedOver> {
-  const unkept = (why: string): HandedOver => ({ why: `what Claude Code attached to the messages could not be kept: ${why}`, keep: { store: tried.store, messages: tried.asSent } });
+  const unkept = (detail: string): HandedOver => ({ why: WHY.attachedNotKept(detail), keep: { store: tried.store, messages: tried.asSent } });
   try {
     const attached = attachedOf(e.messages as readonly Message[], tried.api);
     if (attached.length === 0) return tried;
@@ -1271,7 +1270,7 @@ export const register: Register = (on, options) => {
     if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
     let result: SessionCompactResult;
     if ('why' in tried) {
-      say($, `built-in compaction: ${tried.why}`);
+      say($, builtInLine(tried.why));
       result = await summarizeKeeping($, e, next, tried.keep);
     } else {
       const step = nextStep({
@@ -1296,7 +1295,7 @@ export const register: Register = (on, options) => {
         say($, `not cut for its length: ${ready.why}`);
         result = { skip: step.otherwise.why };
       } else if ('why' in ready) {
-        say($, `built-in compaction: ${ready.why}`);
+        say($, builtInLine(ready.why));
         result = await summarizeKeeping($, e, next, ready.keep);
       } else {
         result = await carryOut($, e, next, ready, step);

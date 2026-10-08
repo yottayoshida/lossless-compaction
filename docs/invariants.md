@@ -132,7 +132,7 @@ it.
 
 **I8. A conversation holding what a rebuilt message cannot carry is not
 rebuilt.** Where a conversation holds a block of a kind the plugin does not
-know, an image or a document outside a tool result, or as many messages as
+know, an image outside a tool result, a document anywhere, or as many messages as
 Claude Code shows a plugin at most, the plugin moves nothing out of it. One
 is cut for its length well before that, where a compaction comes in time
 ([limits](limits.md#when-the-conversation-is-too-long), ADR 0034).

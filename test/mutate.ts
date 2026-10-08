@@ -491,7 +491,7 @@ export const MUTATIONS: readonly Mutation[] = [
     promise: 'I8',
     breaks: 'a conversation holding a block no rebuilt message carries is rebuilt without it',
     file: 'src/select.ts',
-    find: "    else if (!REBUILT.has(kind)) kinds.add(/^[a-z_]{1,40}$/.test(kind) ? kind : 'a kind with an unusual name');\n",
+    find: '    else if (!REBUILT.has(kind)) kinds.add(/^[a-z_]{1,40}$/.test(kind) ? kind : WHY.unusualKind());\n',
     replace: '',
     killedBy: 'a conversation is rebuilt only when every block in it is of a kind a rebuilt message carries',
   },

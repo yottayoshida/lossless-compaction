@@ -141,6 +141,9 @@ test("every setting's description fits under 250 characters, gives its default a
 test('docs/usage.md, which the descriptions name: every link reaches a file and a heading, and its Settings section says what the descriptions alone said before (#142)', () => {
   const page = read('docs/usage.md');
   assertLinksReach('docs/usage.md');
+  // The pages that name its sections, which moved between them (#140).
+  assertLinksReach('docs/troubleshooting.md');
+  assertLinksReach('docs/limits.md');
   const at = page.indexOf('\n## Settings\n');
   assert.ok(at >= 0, 'docs/usage.md has a Settings section');
   const section = page.slice(at);
@@ -163,17 +166,17 @@ test('how links and headings are read: a link with a title, a reference defined 
   ]);
 });
 
-/** The repository the plugin installs from, as the marketplace source the README and docs/limits.md give. */
+/** The repository the plugin installs from, as the marketplace source the README and docs/usage.md give. */
 const SOURCE = 'yottayoshida/lossless-compaction';
 
 test('the README names what the code names: the line that installs the plugin, the version it needs, the tools and the mark of its lines', () => {
   const plugin = (JSON.parse(read('.claude-plugin/plugin.json')) as { name: string }).name;
   const marketplace = (JSON.parse(read('.claude-plugin/marketplace.json')) as { name: string }).name;
-  // Typed in a session, one line adds the marketplace and installs; from the shell it is two commands, which docs/limits.md keeps.
+  // Typed in a session, one line adds the marketplace and installs; from the shell it is two commands, which docs/usage.md keeps.
   assert.ok(README.includes(`\n/plugin install ${plugin} --marketplace ${SOURCE}\n`), 'the line that installs the plugin');
-  const limits = read('docs/limits.md');
-  assert.ok(limits.includes(`claude plugin marketplace add ${SOURCE}\n`), 'the marketplace to add from the shell');
-  assert.ok(limits.includes(`claude plugin install ${plugin}@${marketplace}\n`), 'the plugin to install from the shell');
+  const usage = read('docs/usage.md');
+  assert.ok(usage.includes(`claude plugin marketplace add ${SOURCE}\n`), 'the marketplace to add from the shell');
+  assert.ok(usage.includes(`claude plugin install ${plugin}@${marketplace}\n`), 'the plugin to install from the shell');
   // The version the README gives is the one the plugin itself names when it is not running. Nothing is to be set: from that
   // version on Claude Code ignores the variable early access asked for, so a page that still asked for it would cost a step.
   const version = /^version=(\d+\.\d+\.\d+)$/m.exec(read('hooks/notice.sh'))?.[1];
@@ -193,12 +196,12 @@ test('a version is not raised without coming to the README: the two files that n
   // Claude Code takes the version from plugin.json first and says nothing of another in the entry when it installs: one place holds it.
   const entries = (JSON.parse(read('.claude-plugin/marketplace.json')) as { plugins: Record<string, unknown>[] }).plugins;
   assert.ok(entries.every((entry) => !('version' in entry)), 'the marketplace entry names no version');
-  // docs/limits.md says where new installs come from as the entry says it: the tip of main while its source is
+  // docs/usage.md says where new installs come from as the entry says it: the tip of main while its source is
   // "./", a release once it points at one (docs/development.md, "Releasing").
-  const limits = read('docs/limits.md').replace(/\s+/g, ' ');
+  const usage = read('docs/usage.md').replace(/\s+/g, ' ');
   const relative = typeof entries[0]?.['source'] === 'string';
   for (const said of ['The marketplace points at the tip of `main`', 'can hold changes not yet released, under the last release\'s number']) {
-    assert.equal(limits.includes(said), relative, `docs/limits.md, where the entry is ${relative ? 'a path' : 'a release'}: ${said}`);
+    assert.equal(usage.includes(said), relative, `docs/usage.md, where the entry is ${relative ? 'a path' : 'a release'}: ${said}`);
   }
   const readAt = /^README read against version: `(\d+\.\d+\.\d+)`$/m.exec(read('docs/development.md'))?.[1];
   assert.equal(readAt, version, `the version is ${version} and the README was last read against ${readAt}: read it as docs/development.md says ("The README"), then name ${version} there`);

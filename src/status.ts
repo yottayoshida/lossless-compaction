@@ -19,6 +19,12 @@ import type { Message } from './types.ts';
 export const VERSION = '0.7.1';
 
 /**
+ * The page a line of the plugin's can be looked up on (#140): said last, since what this command says is read by the
+ * model too, and a line said on the screen alone is not. A test holds it to the manifest's address and the page.
+ */
+export const TROUBLESHOOTING = 'https://github.com/yottayoshida/lossless-compaction/blob/main/docs/troubleshooting.md';
+
+/**
  * What became of `find` at the start of a session: registered, asking which provider; registered with no key, looking
  * on this machine alone, and why there is none (#110); or not, and why.
  */
@@ -141,5 +147,6 @@ export function statusReport(input: StatusInput): string {
     `this conversation: ${held} ${held === 1 ? 'ticket' : 'tickets'} of what was moved out, in ${input.messages.length} of the ${HOST_SHOWS} entries Claude Code hands a plugin` +
       (input.messages.length >= CUT_AT ? '; a compaction without instructions cuts it for its length where it can' : ''),
   );
+  lines.push(`a line of the plugin's you do not understand: ${TROUBLESHOOTING}`);
   return lines.join('\n');
 }
