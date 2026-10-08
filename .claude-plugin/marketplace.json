@@ -8,7 +8,12 @@
   "plugins": [
     {
       "name": "lossless-compaction",
-      "source": "./",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/yottayoshida/lossless-compaction.git",
+        "ref": "v0.8.0",
+        "sha": "4776f29aba4d5f0156ea4d2ecbc35244d6b8d970"
+      },
       "description": "Lossless context compaction for Claude Code: old tool output moves to local files and comes back unchanged by id, or by what it is about with a Jev key.",
       "license": "MIT OR Apache-2.0"
     }

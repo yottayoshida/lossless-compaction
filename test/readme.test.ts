@@ -203,6 +203,17 @@ test('a version is not raised without coming to the README: the two files that n
   for (const said of ['The marketplace points at the tip of `main`', 'can hold changes not yet released, under the last release\'s number']) {
     assert.equal(usage.includes(said), relative, `docs/usage.md, where the entry is ${relative ? 'a path' : 'a release'}: ${said}`);
   }
+  assert.equal(usage.includes('The marketplace points at the tag of the latest release'), !relative, 'docs/usage.md says where new installs come from');
+  // Pointed at a release, the entry names this repository, the tag of the version plugin.json gives, and a commit:
+  // test/marketplace-tag.sh, which CI runs, asks the repository that the tag is that commit (ADR 0031).
+  if (!relative) {
+    const source = entries[0]?.['source'] as Record<string, unknown>;
+    assert.deepEqual(Object.keys(source).sort(), ['ref', 'sha', 'source', 'url']);
+    assert.equal(source['source'], 'url');
+    assert.equal(source['url'], `https://github.com/${SOURCE}.git`);
+    assert.equal(source['ref'], `v${version}`);
+    assert.match(String(source['sha']), /^[0-9a-f]{40}$/);
+  }
   const readAt = /^README read against version: `(\d+\.\d+\.\d+)`$/m.exec(read('docs/development.md'))?.[1];
   assert.equal(readAt, version, `the version is ${version} and the README was last read against ${readAt}: read it as docs/development.md says ("The README"), then name ${version} there`);
 });

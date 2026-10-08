@@ -32,6 +32,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # Once the marketplace entry points at a release, the tag it names is that commit in this repository (ADR 0031):
+      # asked of the repository, as the checkout fetches no tags.
+      - name: The tag the marketplace points at
+        run: sh test/marketplace-tag.sh
       # Into a directory of its own, not the project: npm may block an install script it was
       # not told to allow (npm 12 does), so Claude Code's own is run by name; running it twice is harmless.
       - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}

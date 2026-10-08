@@ -254,9 +254,11 @@ with nothing else merged between them:
    "https://github.com/yottayoshida/lossless-compaction.git", "ref": "vX.Y.Z",
    "sha": "<the tag's commit>"}`, rewrites the paragraph of `docs/usage.md`
    that says the marketplace points at the tip of `main` (a test holds the
-   two together), and, the first time, adds a check that the entry's `ref` and
-   `sha` are a tag of this repository and its commit. Until it is merged, new
-   installs take the tip of `main`, which is the release's commit.
+   two together). `test/marketplace-tag.sh`, which CI runs, asks this
+   repository that the entry's `ref` is a tag and `sha` its commit, and
+   `test/readme.test.ts` that `ref` is the tag of the version `plugin.json`
+   gives (added with 0.8.0). Until it is merged, new installs take the tip of
+   `main`, which is the release's commit.
 
 `claude plugin validate --strict` reads the marketplace too (`npm run
 validate`); it cannot tell that the tag exists.
