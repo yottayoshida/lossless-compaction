@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { fileOf, filesToCopy, inside, MUTATIONS, testsIn, verdictOf } from './mutate.ts';
+import { fileOf, filesToCopy, inside, MUTATIONS, nodeArgs, notPassing, testsIn, verdictOf } from './mutate.ts';
 
 // docs/invariants.md says what "lossless" holds to and names, for each promise, the tests that keep it. Here the page,
 // the tests and the list of what `npm run mutate` breaks are held together: a test renamed or removed, a promise with
@@ -85,6 +85,14 @@ test('npm run mutate copies files only, takes a run that names a test neither wa
   assert.equal(verdictOf(ran, 'kept'), 'survived');
   // A run the runner was stopped in, or whose file did not load, says nothing: it is not taken for a survivor.
   assert.throws(() => verdictOf(ran, 'not in the run'), /says nothing/);
+  // Before anything is broken: a named test that failed is told from one a run that ended early never reached.
+  assert.deepEqual(notPassing(ran, ['kept', 'caught', 'not in the run']), ['"caught" failed', '"not in the run" is not in the run']);
+  // Each file alone, in the process of its runner, as the mutations run it: no run of every test, which once stopped it in CI (#125).
+  const args = nodeArgs('store.test.ts');
+  assert.deepEqual(args.filter((arg) => !arg.startsWith('--')), ['test/store.test.ts']);
+  assert.ok(args.includes('--test-isolation=none') && args.includes('--test-reporter=tap'));
+  // And before anything is broken, each file with named tests is run so, its named tests to pass.
+  assert.ok(read('test/mutate.ts').includes('for (const [file, names] of byFile) passing(run(copy, file), names, file);'));
 
   const root = mkdtempSync(join(tmpdir(), 'lossless-inside-'));
   try {
