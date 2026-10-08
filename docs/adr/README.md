@@ -109,3 +109,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0042](0042-transcripts-are-read-a-set-at-a-time.md): why a clean-up
   reads a project directory's transcripts a set at a time, and keeps nothing
   of what it read between collections.
+- [0043](0043-precompact-hooks-a-compaction-skips-are-named.md): why a
+  compaction the plugin makes itself names the settings files whose
+  `PreCompact` hooks did not run, and does not run them.

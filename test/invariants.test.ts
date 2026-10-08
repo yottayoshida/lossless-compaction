@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { MUTATIONS } from './mutate.ts';
+import { fileOf, filesToCopy, inside, MUTATIONS, testsIn, verdictOf } from './mutate.ts';
 
 // docs/invariants.md says what "lossless" holds to and names, for each promise, the tests that keep it. Here the page,
 // the tests and the list of what `npm run mutate` breaks are held together: a test renamed or removed, a promise with
 // nothing that breaks it, or a line of the code a mutation rests on that has changed, fails here. Whether each test
-// does fail with its line broken is what `npm run mutate` runs; it takes two minutes and changes src/ while it runs.
+// does fail with its line broken is what `npm run mutate` runs, on a copy of the tree.
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -26,13 +27,9 @@ function promisesIn(page: string): Map<string, string[]> {
   return promises;
 }
 
-/** The names of every test of the repository, as they are written in its test files. */
+/** The names of every test of the repository, as they are written in its test files: read as `npm run mutate` reads them. */
 function testNames(): Set<string> {
-  const names = new Set<string>();
-  for (const file of readdirSync(join(ROOT, 'test')).filter((name) => name.endsWith('.test.ts'))) {
-    for (const match of read(`test/${file}`).matchAll(/^test\('((?:[^'\\]|\\.)*)'/gm)) names.add((match[1] ?? '').replace(/\\(.)/g, '$1'));
-  }
-  return names;
+  return new Set([...testsIn(ROOT).values()].flat());
 }
 
 test('every promise of docs/invariants.md names tests that exist, and each of them is the test a broken line has to fail', () => {
@@ -49,8 +46,11 @@ test('every promise of docs/invariants.md names tests that exist, and each of th
       assert.ok(MUTATIONS.some((one) => one.promise === id && one.killedBy === name), `${id}: nothing in test/mutate.ts is to be caught by "${name}"`);
     }
   }
+  const tests = testsIn(ROOT);
   for (const mutation of MUTATIONS) {
     assert.ok(promises.get(mutation.promise)?.includes(mutation.killedBy), `test/mutate.ts: "${mutation.killedBy}" is not named under ${mutation.promise} in docs/invariants.md`);
+    // `npm run mutate` runs the one file that holds it, alone.
+    assert.doesNotThrow(() => fileOf(tests, mutation.killedBy));
   }
 });
 
@@ -69,4 +69,31 @@ test('how the page is read: a promise with its tests, and nothing under what is 
     ['I1', ['first test', 'second, with a `tick`']],
     ['I2', ['third']],
   ]);
+});
+
+test('npm run mutate copies files only, takes a run that names a test neither way for a stopped one, and keeps its copy outside the tree (#125)', () => {
+  // A nested repository or worktree is listed as its directory, with a slash: copying it as a file would fail.
+  assert.deepEqual(filesToCopy('src/a.ts\0nested/\0.claude/worktrees/one/\0test/b.test.ts\0'), ['src/a.ts', 'test/b.test.ts']);
+  assert.deepEqual(filesToCopy(''), []);
+
+  const ran = { passed: new Set(['kept']), failed: new Set(['caught']) };
+  assert.equal(verdictOf(ran, 'caught'), 'killed');
+  assert.equal(verdictOf(ran, 'kept'), 'survived');
+  // A run the runner was stopped in, or whose file did not load, says nothing: it is not taken for a survivor.
+  assert.throws(() => verdictOf(ran, 'not in the run'), /says nothing/);
+
+  const root = mkdtempSync(join(tmpdir(), 'lossless-inside-'));
+  try {
+    mkdirSync(join(root, 'tree', 'tmp'), { recursive: true });
+    mkdirSync(join(root, 'tree', '..tmp'));
+    mkdirSync(join(root, 'tree..beside'));
+    assert.equal(inside(join(root, 'tree', 'tmp'), join(root, 'tree')), true);
+    // Named with two dots, and inside all the same.
+    assert.equal(inside(join(root, 'tree', '..tmp'), join(root, 'tree')), true);
+    assert.equal(inside(join(root, 'tree'), join(root, 'tree')), true);
+    assert.equal(inside(join(root, 'tree..beside'), join(root, 'tree')), false);
+    assert.equal(inside(root, join(root, 'tree')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

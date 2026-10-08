@@ -57,7 +57,13 @@ puts together some other way.
   hash, and what it answers holds counts and the first 16 characters of the
   ids of what is damaged, nothing of a text.
 - Your settings files (user, project and local), for the plugin's settings and
-  to tell a value a repository put there from one you set.
+  to tell a value a repository put there from one you set; and, after a
+  compaction it made without Claude Code's summary, those and the settings of
+  `--settings` and your organization's managed settings, for the
+  `PreCompact` hooks they hold, which it names and does not run
+  ([Limits](docs/limits.md#other-hooks-at-a-compaction)). Of those hooks it
+  writes only which of the files hold one, in the line it says; nothing of
+  the hooks is kept or sent.
 - The environment variables `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`,
   `TYPESAFE_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, the
   proxy and certificate variables named in [Limits](docs/limits.md#what-a-repository-can-change),
