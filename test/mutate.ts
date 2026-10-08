@@ -5,7 +5,8 @@
 // is removed when the run ends, or stops on an error of its own; stopped from outside, it is left in the system's
 // temporary directory. For each mutation it runs the test file that holds the test named, alone: whether that test
 // fails is all that is read, and `node --test` runs each file in a process of its own. Before anything is broken, each
-// named test has to pass with every test run and with its file run alone, or nothing is broken.
+// named test has to pass with its file run alone, as the mutations run it, or nothing is broken; that every test passes
+// is `npm test`'s to say, which CI runs before this.
 // test/invariants.test.ts holds this list and the document together.
 //
 //   node test/mutate.ts            every mutation
@@ -514,12 +515,11 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
  */
 const TEST_TIMEOUT_MS = 20_000;
 /**
- * How long a run of every test, and a run of one file, may take: past it the run is killed, and with it this one, the
- * mutation then applied named. A file is run in the process of its runner (`--test-isolation=none`), so that killing
- * the run leaves no process of it behind. A file's fifteen times a test's: a line broken so that several tests of its
- * file wait for ever still ends with each of them failed.
+ * How long a run of one file may take: past it the run is killed, and with it this one, the mutation then applied named.
+ * A file is run in the process of its runner (`--test-isolation=none`), so that killing the run leaves no process of it
+ * behind. Fifteen times a test's: a line broken so that several tests of its file wait for ever still ends with each
+ * of them failed.
  */
-const WHOLE_TIMEOUT_MS = 10 * 60_000;
 const FILE_TIMEOUT_MS = 15 * TEST_TIMEOUT_MS;
 
 /** A test's name as written, in a test file's quotes or in TAP, with what was escaped there put back. */
@@ -571,13 +571,18 @@ function fillCopy(copy: string): void {
 
 type Ran = { passed: Set<string>; failed: Set<string> };
 
-/** The tests that passed and those that failed, by name, running `files` in `copy`; it throws when the run did not end. */
-function run(copy: string, files: string[], alone: boolean): Ran {
-  const ran = spawnSync(
-    'node',
-    ['--test', '--test-reporter=tap', `--test-timeout=${TEST_TIMEOUT_MS}`, '--test-force-exit', ...(alone ? ['--test-isolation=none'] : []), ...files],
-    { cwd: copy, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: alone ? FILE_TIMEOUT_MS : WHOLE_TIMEOUT_MS, killSignal: 'SIGKILL' },
-  );
+/**
+ * What `node` is handed to run the test file `file` alone, in the process of its runner. Every test at once is not run
+ * here: no mutation is judged by such a run, and in CI one once stopped this script, the named tests of the last files
+ * by name not passing in less time than such a run takes, whether failed or missing not told (#125).
+ */
+export function nodeArgs(file: string): string[] {
+  return ['--test', '--test-reporter=tap', `--test-timeout=${TEST_TIMEOUT_MS}`, '--test-force-exit', '--test-isolation=none', `test/${file}`];
+}
+
+/** The tests that passed and those that failed, by name, running the test file `file` alone in `copy`; it throws when the run did not end. */
+function run(copy: string, file: string): Ran {
+  const ran = spawnSync('node', nodeArgs(file), { cwd: copy, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: FILE_TIMEOUT_MS, killSignal: 'SIGKILL' });
   if (ran.signal !== null || ran.error !== undefined) throw new Error(`the tests did not end (${ran.signal ?? ran.error?.message})`);
   const passed = new Set<string>();
   const failed = new Set<string>();
@@ -595,10 +600,15 @@ export function verdictOf(ran: Ran, name: string): 'killed' | 'survived' {
   throw new Error(`the run says nothing of "${name}": the tests were stopped, or its file did not load`);
 }
 
+/** Each named test that did not pass, said as failed or as not in the run at all: a runner that ended early says neither. */
+export function notPassing(ran: Ran, names: Iterable<string>): string[] {
+  return [...names].filter((name) => !ran.passed.has(name)).map((name) => `"${name}" ${ran.failed.has(name) ? 'failed' : 'is not in the run'}`);
+}
+
 /** Stops before anything is broken when a test named is not there passing: it would be counted as caught by every mutation, or by none. */
-function passing(ran: Ran, names: Iterable<string>, how: string): void {
-  const not = [...names].filter((name) => !ran.passed.has(name));
-  if (not.length > 0) throw new Error(`before anything is broken, ${how}, these named tests do not pass: ${not.join('; ')}`);
+function passing(ran: Ran, names: Iterable<string>, file: string): void {
+  const not = notPassing(ran, names);
+  if (not.length > 0) throw new Error(`before anything is broken, with ${file} run alone (${ran.passed.size} passed, ${ran.failed.size} failed): ${not.join('; ')}`);
 }
 
 // Started as the script, not imported by a test. Not `import.meta.main`, which an early Node 24 does not have: there
@@ -615,8 +625,7 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathS
   const copy = mkdtempSync(join(tmpdir(), 'lossless-mutate-'));
   try {
     fillCopy(copy);
-    passing(run(copy, ['test/**/*.test.ts'], false), chosen.map((one) => one.killedBy), 'with every test run');
-    for (const [file, names] of byFile) passing(run(copy, [`test/${file}`], true), names, `with ${file} run alone`);
+    for (const [file, names] of byFile) passing(run(copy, file), names, file);
     let survived = 0;
     for (const mutation of chosen) {
       const path = join(copy, mutation.file);
@@ -625,7 +634,7 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathS
       writeFileSync(path, original.replace(mutation.find, () => mutation.replace));
       let ran: Ran;
       try {
-        ran = run(copy, [`test/${fileFor.get(mutation.killedBy)}`], true);
+        ran = run(copy, fileFor.get(mutation.killedBy) ?? '');
       } catch (error) {
         throw new Error(`with ${mutation.promise} ${mutation.breaks}: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
