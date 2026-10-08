@@ -258,8 +258,8 @@ export const MUTATIONS: readonly Mutation[] = [
     promise: 'I5',
     breaks: 'a text whose hash is no longer its name is read as the one stored, a part it is not taken for',
     file: 'src/store.ts',
-    find: "    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };",
-    replace: '    return { ok: true, text };',
+    find: "    return (await idOf(text)) === id ? { ok: true, text, dir } : { ok: false, why: 'text-changed' };",
+    replace: '    return { ok: true, text, dir };',
     killedBy: 'a kept part whose entry does not read, its text the one stored, is read as a part: what it names comes back from the trash and is counted as named (ADR 0033)',
   },
   {

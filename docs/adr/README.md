@@ -112,3 +112,6 @@ Why the plugin is built the way it is, one record a decision.
 - [0043](0043-precompact-hooks-a-compaction-skips-are-named.md): why a
   compaction the plugin makes itself names the settings files whose
   `PreCompact` hooks did not run, and does not run them.
+- [0044](0044-a-person-reads-what-left-without-the-model.md): why what
+  `/lossless-list` and `/lossless-show` find is said on the screen alone, and
+  a result's file is named for the person to open, not shown.

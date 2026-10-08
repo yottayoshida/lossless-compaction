@@ -68,10 +68,36 @@ export type FindInput = {
 /**
  * A ticket of the conversation, or of a part of a conversation kept before a
  * summary, with what it stands for in words: the call that made the result, or
- * which messages the part holds.
+ * which messages the part holds. `brief` is that call as one short phrase, for a
+ * person's list (#138). `attached`: a part of what Claude Code attached to the
+ * messages as it sent them, looked through here and never sent to Jev (#105).
  */
-/** `attached`: a part of what Claude Code attached to the messages as it sent them, looked through here and never sent to Jev (#105). */
-export type Stored = Ticket & { line: string; about: string; follow?: false; attached?: true };
+export type Stored = Ticket & { line: string; about: string; brief?: string; follow?: false; attached?: true };
+
+/** The input fields that say what a call was about, the first that holds text named first: a file, a command, what was searched for. */
+const BRIEF_FIELDS = ['file_path', 'notebook_path', 'command', 'pattern', 'url', 'query', 'path', 'description', 'prompt'];
+
+/**
+ * A call as a person reads it in a list: the tool and the first of its input's fields that says what it was about
+ * (#138). A value that left, and stands as this plugin's ticket, says nothing of the call: the next field does.
+ */
+export function briefOf(tool: string, input: Readonly<Record<string, unknown>>): string {
+  const says = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '' && !value.trimStart().startsWith('[moved out] ');
+  const field = [...BRIEF_FIELDS, ...Object.keys(input)].find((name) => says(input[name]));
+  return field === undefined ? tool : `${tool} ${(input[field] as string).replace(/\s+/g, ' ').trim()}`;
+}
+
+/** The brief of a call a kept part names (`<tool> called with <input>`, src/keep.ts), where its input reads as an object. */
+function briefOfCall(tool: string, call: string | undefined): { brief?: string } {
+  const at = call?.indexOf(' called with ') ?? -1;
+  if (call === undefined || at < 0) return {};
+  try {
+    const input: unknown = JSON.parse(call.slice(at + ' called with '.length));
+    return typeof input === 'object' && input !== null && !Array.isArray(input) ? { brief: briefOf(tool, input as Record<string, unknown>) } : {};
+  } catch {
+    return {};
+  }
+}
 
 /**
  * The phrases the question puts in double quotes, long enough to narrow by.
@@ -157,7 +183,7 @@ export function ticketsIn(messages: readonly Message[]): Stored[] {
       if (!ticket || isOwnTool(ticket.tool) || seen.has(ticket.id)) continue;
       seen.add(ticket.id);
       const input = uses.get(result.tool_use_id)?.input ?? {};
-      tickets.push({ ...ticket, line: result.text, about: `${ticket.tool} called with ${inputLine(input)}` });
+      tickets.push({ ...ticket, line: result.text, about: `${ticket.tool} called with ${inputLine(input)}`, brief: briefOf(ticket.tool, input) });
     }
     // A long value of a call's input that left (ADR 0020). It is told by the call it was handed to, as it stands now:
     // its other values, and the ticket where the value was, so that nothing of the value is in what Jev is shown.
@@ -166,7 +192,7 @@ export function ticketsIn(messages: readonly Message[]): Stored[] {
         const ticket = readInputTicket(line);
         if (!ticket || seen.has(ticket.id)) continue;
         seen.add(ticket.id);
-        tickets.push({ ...ticket, line, about: `the ${ticket.field} handed to ${ticket.tool}, called with ${inputLine(use.input)}` });
+        tickets.push({ ...ticket, line, about: `the ${ticket.field} handed to ${ticket.tool}, called with ${inputLine(use.input)}`, brief: `the ${ticket.field} handed to ${briefOf(ticket.tool, use.input)}` });
       }
     }
     if (message.role === 'user' && (message.toolResults?.length ?? 0) === 0) {
@@ -211,7 +237,7 @@ function ticketsInPart(text: string, seen: Set<string>): Stored[] {
     const ticket = readTicket(line);
     if (!ticket || isOwnTool(ticket.tool) || seen.has(ticket.id)) continue;
     seen.add(ticket.id);
-    out.push({ ...ticket, line, about: call ?? `${ticket.tool} called` });
+    out.push({ ...ticket, line, about: call ?? `${ticket.tool} called`, ...briefOfCall(ticket.tool, call) });
   }
   return [...out, ...partsIn(text, seen)];
 }
@@ -221,7 +247,7 @@ function ticketsInPart(text: string, seen: Set<string>): Stored[] {
  * the lines in place of the middles of long messages, in the conversation and in the parts read: a message that went
  * into a part kept its line there (ADR 0024).
  */
-async function everyTicket(files: Files, dirs: readonly string[], messages: readonly Message[]): Promise<{ tickets: Stored[]; middles: Stored[]; own: number }> {
+export async function everyTicket(files: Files, dirs: readonly string[], messages: readonly Message[]): Promise<{ tickets: Stored[]; middles: Stored[]; own: number }> {
   const seenMiddles = new Set<string>();
   const middles = middlesOf(messages.flatMap((message) => message.text.split('\n').map((line) => ({ line, role: message.role }))), seenMiddles);
   // What Claude Code attached is looked through as a middle is, wherever its ticket stands, and not followed (#105): it
@@ -328,7 +354,7 @@ function firstLineIn(tool: string, text: string): string {
  * What the list with no key shows of a result: its first line that says anything (`firstLineIn`, #149). One that holds
  * an id or a line of this plugin's own is not shown.
  */
-function firstLineOf(ticket: Stored, text: string): string {
+export function firstLineOf(ticket: Stored, text: string): string {
   if (ticket.tool === PART) return '';
   // No more than could be shown is looked at: `redact` takes time that grows faster than a line.
   const line = head(firstLineIn(ticket.tool, text).trim(), FIRST_CHARS * 4);
