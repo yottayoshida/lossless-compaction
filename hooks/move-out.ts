@@ -50,6 +50,7 @@ import {
   type StoreDirs,
 } from '../src/store.ts';
 import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
+import { SETTINGS_SOURCES, preCompactHooksIn, unrunLine, unrunNotice, type SettingsSource } from '../src/precompact.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, variableTaints, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
 import type { DirEntry, Exec, FileStat, Files, HttpResponse, Message } from '../src/types.ts';
@@ -110,7 +111,7 @@ type WithProcess = {
     ) => Promise<{ exitCode: number; stdout: string; isStdoutTruncated?: boolean | undefined }>;
   };
 };
-type WithSettings = { settings: { read: (args: { source: 'project' | 'local' | 'user' }) => Promise<unknown> } };
+type WithSettings = { settings: { read: (args: { source: 'project' | 'local' | 'user' | 'flag' | 'policy' }) => Promise<unknown> } };
 type WithStore = { store: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> } };
 type WithSession = {
   session: {
@@ -321,15 +322,18 @@ let toldLate = false;
 /** What this process said of the number settings it does not use as they were set: each line once, a changed setting anew. */
 const toldSettings = new Set<string>();
 
-/** What this process told each session of why find cannot ask Jev: each line once a session, anew once the settings change (#143). */
+/**
+ * What this process told each session of why find cannot ask Jev (#143), and of the PreCompact hooks a compaction did
+ * not run (#126): each line once a session, anew once the plugin's settings change.
+ */
 const toldUnasked = new Set<string>();
 
 /**
  * Tells the person `line` once a session: a key refused stays refused at every call, and the line would pile up. Another
  * line, requests limited after a key refused say, is told too. Where the session cannot be told apart, nothing is said,
- * as a surface that cannot show a line changes nothing the plugin does.
+ * as a surface that cannot show a line changes nothing the plugin does. `toast`, where given, is the notice's shorter form.
  */
-export async function tellOnce($: WithUi & { session: { id: () => Promise<string> } }, line: string): Promise<void> {
+export async function tellOnce($: WithUi & { session: { id: () => Promise<string> } }, line: string, toast?: string): Promise<void> {
   let id: string;
   try {
     id = await $.session.id();
@@ -339,7 +343,30 @@ export async function tellOnce($: WithUi & { session: { id: () => Promise<string
   const told = `${id}\n${line}`;
   if (toldUnasked.has(told)) return;
   toldUnasked.add(told);
-  say($, line);
+  say($, line, toast ?? true);
+}
+
+/**
+ * Names, once a session, the settings files holding a PreCompact hook, after a compaction that did not use Claude
+ * Code's summary, inside which alone they run (#126, ADR 0043). A file that cannot be read names nothing, and nothing
+ * here changes the compaction.
+ */
+async function tellUnrun($: WithUi & WithSettings & { session: { id: () => Promise<string> } }, trigger: string, signal: AbortSignal): Promise<void> {
+  try {
+    const read: Partial<Record<SettingsSource, unknown>> = {};
+    for (const source of SETTINGS_SOURCES) {
+      try {
+        read[source] = await $.settings.read({ source });
+      } catch {
+        // Left unread.
+      }
+    }
+    const where = preCompactHooksIn(read, trigger);
+    // Claude Code gone on without the hook, before the settings were read or while they were.
+    if (where.length > 0 && !signal.aborted) await tellOnce($, unrunLine(where), unrunNotice(where));
+  } catch {
+    // Said or not, the compaction stands.
+  }
 }
 
 /**
@@ -1268,10 +1295,16 @@ export const register: Register = (on, options) => {
     // Claude Code went on without this hook meanwhile (out of its time, or interrupted), and what it answers now is
     // not read: nothing more is said, written or handed on, after what its handler said.
     if (next.signal.aborted) return { skip: `${PLUGIN} went on without this compaction` };
+    // Whether the conversation went to Claude Code's summary, inside which it runs the PreCompact hooks (#126).
+    let summarized = false;
+    const toSummary = (handed: SessionCompactInput): Promise<SessionCompactResult> => {
+      summarized = true;
+      return next(handed);
+    };
     let result: SessionCompactResult;
     if ('why' in tried) {
       say($, builtInLine(tried.why));
-      result = await summarizeKeeping($, e, next, tried.keep);
+      result = await summarizeKeeping($, e, toSummary, tried.keep);
     } else {
       const step = nextStep({
         trigger: e.trigger,
@@ -1296,15 +1329,19 @@ export const register: Register = (on, options) => {
         result = { skip: step.otherwise.why };
       } else if ('why' in ready) {
         say($, builtInLine(ready.why));
-        result = await summarizeKeeping($, e, next, ready.keep);
+        result = await summarizeKeeping($, e, toSummary, ready.keep);
       } else {
-        result = await carryOut($, e, next, ready, step);
+        result = await carryOut($, e, toSummary, ready, step);
       }
     }
     // The newest ticket of the conversation handed back, this compaction's among them, else of the one handed in:
     // what a clean-up looks for in its transcript before it moves anything (ADR 0027).
     const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;
     await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);
+    // A conversation the plugin rebuilt or cut itself ran no PreCompact hook; one left as it was is no compaction. Where
+    // Claude Code went on without this hook meanwhile, its handler hands the conversation to the summary: tellUnrun
+    // then says nothing.
+    if (!summarized && 'messages' in result) await tellUnrun($, e.trigger, next.signal);
     return result;
   }).catch(async ($, e, next) => {
     // A compaction computed ahead, or a subagent's, is what the hook above makes of it: the hook is absent.

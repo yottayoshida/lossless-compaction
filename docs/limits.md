@@ -87,6 +87,9 @@ What the plugin does not do, and what a repository or a version can change.
   Code's own figures: where results were moved out it came within 20 % of
   what the next request sent, and within 3 % in five long working
   sessions. `keepTokens` is turned into characters at three to a token.
+- **Your `PreCompact` hooks do not run** at a compaction the plugin makes
+  itself, only before Claude Code's summary; `SessionStart` with the
+  matcher `compact` runs after either ([below](#other-hooks-at-a-compaction)).
 
 Each of these in full, and the rest, below.
 
@@ -722,6 +725,44 @@ to Jev, its text included. `recall` reads it by the id in its line.
 Images make the store grow faster: 621 of them in two months of one
 person's transcripts came to 120.8 MB in base64. They are kept and cleaned
 up as results are.
+
+## Other hooks at a compaction
+
+Claude Code runs `PreCompact` hooks inside its own summary. A compaction
+the plugin answers itself, moving results out, folding old calls or
+cutting, does not use the summary, and no `PreCompact` hook runs: not
+yours, in a settings file, and not another plugin's. A hook that copies
+the transcript first, writes notes, or holds automatic compactions back
+by exiting 2 stops running once the plugin is installed. Where a settings
+file holds one, the plugin says so once a session, naming the file:
+`your PreCompact hooks did not run: …`. It names where a hook is set, not
+whether Claude Code would have run it there. Another plugin's it cannot
+read, and it cannot run them itself.
+
+Measured on Claude Code 2.1.293 with a hook of each kind in a project's
+settings, by `/compact`, and the first row by an automatic compaction too:
+
+| At a compaction | `PreCompact` | `PostCompact` | `SessionStart` (`compact`) |
+| --- | --- | --- | --- |
+| The plugin moved results out | Does not run | Runs, with an empty `compact_summary` | Runs |
+| Handed to Claude Code's summary (`/compact` with instructions) | Runs | Runs | Runs |
+| Left undone (`Not compacted`) | Does not run | Does not run | Does not run |
+
+What runs after either is a `SessionStart` hook with the matcher
+`compact`, or a `PostCompact` hook. The transcript then still holds what
+was said before the compaction, above its boundary, so a hook that copies
+it there copies what one in `PreCompact` would have. Nothing after a
+compaction can hold it back: a `PreCompact` hook that exits 2 holds only
+Claude Code's own.
+
+Beside another plugin that hooks `session.compact`, the one nearer the
+outside runs first: one outside this plugin that hands the conversation on
+reaches it, and one inside it is not reached when this plugin answers
+itself. Plugins loaded with `--plugin-dir` nest in the order given, the
+first outermost; the order of plugins installed from a marketplace was not
+measured. A function hook on `classic.PreCompact` or
+`classic.PostCompact` did not run in any of these compactions, even where
+the hook of the settings file did.
 
 ## Function hooks
 

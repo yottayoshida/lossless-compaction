@@ -113,6 +113,10 @@ left: nothing is done, and nothing is lost
 ([ADR 0015](adr/0015-a-compact-with-nothing-to-move-and-room-left-is-not-summarized.md)).
 To have Claude Code summarize anyway, give `/compact` instructions.
 
+## Your PreCompact hooks did not run
+
+`your PreCompact hooks did not run: …`: they run only before Claude Code's summary; use `SessionStart` with the matcher `compact` ([other hooks at a compaction](limits.md#other-hooks-at-a-compaction)).
+
 ## find is not there, or does not ask Jev
 
 `/lossless-status` says whether `find` is registered, where its key came from
