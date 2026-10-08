@@ -460,9 +460,12 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   assert.ok(madePrivate > 0 && subagent.indexOf('await noteRootOf($, store, options);') > madePrivate, 'recorded once private');
   assert.ok(subagent.includes('await restoreFor($, store, ticketIds(messages), partIds(messages));'), 'put back first');
   assert.ok(!/\bnext\(/.test(carrying), 'no step is handed on but through summarizeKeeping, which keeps first');
-  assert.ok(handler.includes('result = await summarizeKeeping($, e, next, tried.keep);'), 'why the compaction did not run');
+  assert.ok(handler.includes('result = await summarizeKeeping($, e, toSummary, tried.keep);'), 'why the compaction did not run');
+  // What notes that the summary ran (#126) is handed on only through summarizeKeeping and carryOut, which keep first.
+  assert.ok(handler.includes('const toSummary = (handed: SessionCompactInput): Promise<SessionCompactResult> => {\n      summarized = true;\n      return next(handed);\n    };'));
+  assert.ok(!/toSummary\(/.test(handler), 'never called here');
   // Whatever the step, the newest ticket of the conversation handed back, else of the one handed in, is noted after (ADR 0027).
-  assert.ok(handler.includes("const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;\n    await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);\n    return result;"), 'the witness, after, this compaction\'s tickets first');
+  assert.ok(handler.includes("const standing = 'messages' in result && Array.isArray(result.messages) ? result.messages : e.messages;\n    await noteWitnessOf($, newestOf(standing as readonly Message[], e.messages as readonly Message[]), options);\n"), 'the witness, after, this compaction\'s tickets first');
   assert.ok(
     carrying.includes(
       "return step.of === 'given'\n        ? summarizeKeeping($, e, next, { store, messages: [...(e.messages as readonly Message[]), ...(tried.attached === undefined ? [] : [tried.attached])] })",
@@ -471,7 +474,7 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   );
   // What Claude Code attached is kept for every step but a skip, and where it cannot be, the conversation goes over as sent (#105).
   assert.ok(handler.includes("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);"), 'kept before the step is carried out');
-  assert.ok(handler.includes("say($, `built-in compaction: ${ready.why}`);\n        result = await summarizeKeeping($, e, next, ready.keep);"), 'or handed over, kept as sent');
+  assert.ok(handler.includes("say($, `built-in compaction: ${ready.why}`);\n        result = await summarizeKeeping($, e, toSummary, ready.keep);"), 'or handed over, kept as sent');
   assert.ok(carrying.includes(': summarizeKeeping($, { ...e, messages: outcome.messages }, next, { store, messages: outcome.messages });'), 'too much left: what is left');
   // The line is said before the summary runs, as it was said before a hand-over.
   const summarizing = carrying.slice(carrying.indexOf("case 'summarize':"));
@@ -1112,6 +1115,66 @@ test('handed to the built-in summary as it was, the conversation is kept with th
   const conversationKept = await partsNamed(files, answer.messages?.[1]?.text ?? '');
   assert.ok(conversationKept.includes(ATTACHED_KEPT), conversationKept.slice(-400));
   assert.ok((await partsNamed(files, conversationKept)).includes('PROBE-HOOK-WORD: walrus'));
+});
+
+/** Settings as `$.settings.read` gives them, a repository's project file holding a PreCompact hook. */
+const withProjectPreCompact = async ({ source }: { source: string }) => (source === 'project' ? { hooks: { PreCompact: [{ hooks: [{ type: 'command', command: 'cp "$1" backup/' }] }] } } : {});
+const UNRUN = /^your PreCompact hooks did not run: .*\(\.claude\/settings\.json\)/;
+
+/** A host whose project settings hold a PreCompact hook, handed a conversation of sentWithAttached. */
+function preCompactHost() {
+  const { handed, api } = sentWithAttached();
+  const made = mainHost(new MemoryFiles(), handed, api);
+  Object.assign(made.host.settings, { read: withProjectPreCompact });
+  return { handed, made };
+}
+
+/** The compaction hook registered anew, so that nothing is told yet, beside such a host. */
+async function preCompactScene(options: Record<string, unknown>) {
+  forgetMove();
+  return { hook: await compactionHook(options), ...preCompactHost() };
+}
+
+test('a compaction the plugin made itself names, once a session, the settings file whose PreCompact hook did not run; one handed to the summary, and one left undone, name none (#126)', async () => {
+  // Rebuilt: every result leaves, and nothing is handed to the summary.
+  let { hook, handed, made } = await preCompactScene({ keepTokens: 0 });
+  const never = nextOn(async () => {
+    throw new Error('no summary is asked for');
+  });
+  assert.ok((await hook(made.host, { trigger: 'manual', messages: handed }, never)).messages !== undefined);
+  assert.equal(made.logged.filter((line) => UNRUN.test(line.replace(`${PLUGIN_NAME}: `, ''))).length, 1, made.logged.join('\n'));
+  // The notice in its short form, which a notice cut at the width of the screen still shows the file of.
+  assert.equal(made.toasted.filter((line) => line === 'your PreCompact hooks did not run (.claude/settings.json)').length, 1, made.toasted.join('\n'));
+  // Once a session: the next compaction of it, by the same hook, says it no more.
+  const second = preCompactHost();
+  await hook(second.made.host, { trigger: 'manual', messages: second.handed }, never);
+  assert.equal(second.made.logged.filter((line) => line.includes('PreCompact')).length, 0);
+
+  // Given instructions, what is left goes to the summary (ADR 0036), and Claude Code runs the hook there.
+  ({ hook, handed, made } = await preCompactScene({ keepTokens: 0 }));
+  let summaries = 0;
+  await hook(made.host, { trigger: 'manual', instructions: 'Keep the API notes.', messages: handed }, nextOn(async () => ((summaries += 1), { messages: [SUMMARY] })));
+  assert.equal(summaries, 1);
+  assert.equal(made.logged.filter((line) => line.includes('PreCompact')).length, 0, made.logged.join('\n'));
+
+  // Nothing may leave and nothing was asked for: left as it was, no compaction, nothing said of the hook.
+  ({ hook, handed, made } = await preCompactScene({ minChars: 10_000_000 }));
+  const left = await hook(made.host, { trigger: 'manual', messages: handed }, never);
+  assert.ok(left.skip !== undefined, JSON.stringify(left).slice(0, 200));
+  assert.equal(made.logged.filter((line) => line.includes('PreCompact')).length, 0);
+
+  // Claude Code went on without the hook while it rebuilt the conversation: its handler hands it to the summary, where
+  // the hook runs, and nothing to the contrary is said.
+  ({ hook, handed, made } = await preCompactScene({ keepTokens: 0 }));
+  const went = new AbortController();
+  const log = made.host.ui.log;
+  made.host.ui.log = (text: string) => {
+    if (text.includes('moved out')) went.abort();
+    log(text);
+  };
+  const late = await hook(made.host, { trigger: 'manual', messages: handed }, Object.assign(async () => ({ messages: [SUMMARY] }), { signal: went.signal }));
+  assert.ok(went.signal.aborted && late.messages !== undefined, 'aborted after the conversation was rebuilt');
+  assert.equal(made.logged.filter((line) => line.includes('PreCompact')).length, 0, made.logged.join('\n'));
 });
 
 test('a /compact given instructions hands what is left, once moved out, to the summary with them, though it fits; an automatic compaction handed the same instructions is handed back rebuilt (ADR 0036)', async () => {
