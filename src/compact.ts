@@ -4,6 +4,7 @@ import { bodyText, selectBodies, type BodyCandidate } from './body.ts';
 import { fold, runsIn, type Run } from './fold.ts';
 import { messagesFromApi } from './keep.ts';
 import { IMAGE_TOKENS, encodeMedia, type MediaPart } from './media.ts';
+import { WHY, type Why } from './reasons.ts';
 import { lastSaid, ruleOrder, select, selectInputs, type Candidate, type InputCandidate } from './select.ts';
 import { WHY_NOT_STORED, isStored, moveBodyOut, moveInputOut, moveOut, readTicket, ticketText, whyNotStored, type BodyTicket, type Moved, type MovedInput, type NotMoved, type StoreDirs, type Ticket } from './store.ts';
 import type { Files, Message, ToolResult, ToolUse } from './types.ts';
@@ -112,7 +113,7 @@ export type Outcome = {
    * Why nothing was rebuilt: a result that holds an image could not be moved
    * out. `messages` are then the ones handed in, untouched, handles and all.
    */
-  abandoned?: string;
+  abandoned?: Why;
   /**
    * The size results were moved out to reach, in tokens: `targetPercent` of the window, and never more
    * than half of what was in use. Where the oldest messages are kept in place of a summary, they are cut
@@ -478,7 +479,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
   if (held.size > 0) {
     const tools = new Map(input.messages.flatMap((message) => message.toolUses.map((use) => [use.tool_use_id, use.tool] as const)));
     const here = new Set(input.messages.flatMap((message) => (message.toolResults ?? []).map((result) => result.tool_use_id)));
-    const abandon = (why: string): Outcome => ({
+    const abandon = (why: Why): Outcome => ({
       messages: [...input.messages],
       enough: false,
       abandoned: why,
@@ -503,7 +504,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     });
     // Whatever the hook's messages say of them: what holds an image as it was sent is moved out.
     const ids = [...held.keys()];
-    if (ids.some((id) => !here.has(id))) return abandon('a tool result that holds an image is not among the messages shown');
+    if (ids.some((id) => !here.has(id))) return abandon(WHY.imageNotShown());
     // The same image returned twice is one text: the first of each is written side by side
     // with the others, and the rest after, when the text is there and only the ticket is made.
     // Two writes of one file at a time can spoil each other.
@@ -517,7 +518,7 @@ export async function compact(input: Input, config: Config, host: Host): Promise
     for (const id of ids) {
       const result = firsts.get(id) ?? (await store(id));
       if ('reason' in result) {
-        return abandon(`a tool result that holds an image could not be moved out: ${whyNotStored(result)}`);
+        return abandon(WHY.imageNotMoved(whyNotStored(result)));
       }
       moved.set(id, result);
       images += (held.get(id) as readonly MediaPart[]).filter((part) => part.type === 'image').length;

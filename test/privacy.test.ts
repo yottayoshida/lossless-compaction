@@ -74,11 +74,11 @@ function callAround(text: string, at: number): string | undefined {
 const named = (word: string) => PRIVACY.includes(`\`${word}\``);
 
 test('every address the code can send to is named in PRIVACY.md', () => {
-  // The address of the plugin's own documentation is written into what the agent and the person are told, and is never
-  // fetched (#143): it is in the one line that names it, and nothing below hands it to the host's fetch.
+  // The addresses of the plugin's own documentation are written into what the agent and the person are told, and are
+  // never fetched (#143, #140): each is in the one line that names it, and nothing below hands it to the host's fetch.
   const DOCS = 'https://github.com';
   const docLines = CODE.flatMap((path) => code(path).split('\n').filter((line) => hostsIn(line).includes(DOCS)).map((line) => `${path}: ${line.trim().split(' = ')[0]}`));
-  assert.deepEqual(docLines, ['src/find.ts: export const GETTING_A_KEY']);
+  assert.deepEqual(docLines, ['src/find.ts: export const GETTING_A_KEY', 'src/status.ts: export const TROUBLESHOOTING']);
   const hosts = new Set(CODE.flatMap((path) => hostsIn(code(path))).filter((host) => host !== DOCS));
   // The two Jev providers: a code without them would make this test hold nothing.
   assert.deepEqual([...hosts].sort(), ['https://api.cloudflare.com', 'https://api.typesafe.ai']);

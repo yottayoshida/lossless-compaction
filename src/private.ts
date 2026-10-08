@@ -8,6 +8,7 @@
 // compaction does. What cannot be made private is not written to.
 
 import { exitOf, type Start } from './commands.ts';
+import { WHY, type Why } from './reasons.ts';
 import type { FileStat, Files } from './types.ts';
 
 /** Runs a command by its argument vector and resolves with its exit code; rejects when it cannot be started. */
@@ -34,30 +35,30 @@ const parentOf = (dir: string): string => dir.slice(0, Math.max(dir.lastIndexOf(
  * for the owner is what says the directory is yours. On Windows nothing is
  * changed: the profile's access control is what keeps others out.
  */
-export async function ensurePrivate(files: Files, run: Run, dir: string): Promise<string | null> {
+export async function ensurePrivate(files: Files, run: Run, dir: string): Promise<Why | null> {
   if (WINDOWS.test(dir)) return null;
   const found = await statOf(files, dir);
-  if (found?.isLink === true) return `${dir} is a symbolic link`;
-  if (found && found.kind !== 'dir') return `${dir} is not a directory`;
+  if (found?.isLink === true) return WHY.link(dir);
+  if (found && found.kind !== 'dir') return WHY.notDirectory(dir);
   if (!found) {
     const parent = await exitOf(run, 'mkdir', ['-p', '--', parentOf(dir)]);
-    if (parent === null) return 'no mkdir could be run to make it';
+    if (parent === null) return WHY.noMkdir();
     const made = await exitOf(run, 'mkdir', ['-m', '700', '--', dir]);
     // Another session may have made it meanwhile; what counts is what is there now.
     const now = await statOf(files, dir);
-    if (made !== 0 && (now === null || now.isLink === true || now.kind !== 'dir')) return `${dir} could not be made`;
+    if (made !== 0 && (now === null || now.isLink === true || now.kind !== 'dir')) return WHY.notMade(dir);
   }
   // `--` before the mode: BSD chmod stops reading options at the mode and takes a `--` after it for a file.
   const closed = await exitOf(run, 'chmod', ['--', '700', dir]);
-  if (closed === null) return 'no chmod could be run to make it readable by you alone';
-  if (closed !== 0) return `${dir} could not be made readable by you alone (not yours?)`;
+  if (closed === null) return WHY.noChmod();
+  if (closed !== 0) return WHY.notYours(dir);
   const after = await statOf(files, dir);
-  if (after === null || after.isLink === true || after.kind !== 'dir') return `${dir} changed while it was being made private`;
+  if (after === null || after.isLink === true || after.kind !== 'dir') return WHY.changedMeanwhile(dir);
   return null;
 }
 
 /** What `closeStore` found: why nothing may be written, if so, and what could not be closed besides. */
-export type Closed = { refused: string | null; warnings: string[] };
+export type Closed = { refused: Why | null; warnings: Why[] };
 
 /**
  * The directory written to, made private or refused: nothing is written
@@ -70,7 +71,7 @@ export type Closed = { refused: string | null; warnings: string[] };
 export async function closeStore(files: Files, run: Run, store: { write: string; read: readonly string[]; owned?: readonly string[] }): Promise<Closed> {
   const refused = await ensurePrivate(files, run, store.write);
   if (refused !== null) return { refused, warnings: [] };
-  const warnings: string[] = [];
+  const warnings: Why[] = [];
   // Those of the settings in use: an earlier place is read, and left as it is (#116).
   for (const dir of store.owned ?? store.read) {
     if (dir === store.write) continue;

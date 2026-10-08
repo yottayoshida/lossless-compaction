@@ -5,6 +5,7 @@
 // one ticket stands in the result's place, as for any result that was moved out.
 
 import { isImage, type MediaPart } from './encoded.ts';
+import { WHY, type Why } from './reasons.ts';
 
 export { decodeMedia, encodeMedia, isImage, textOf, type MediaPart } from './encoded.ts';
 
@@ -31,7 +32,7 @@ export type Media = {
   results: Map<string, MediaPart[]>;
   images: number;
   /** Why one of them cannot be moved out, or null. */
-  why: string | null;
+  why: Why | null;
 };
 
 /**
@@ -51,14 +52,14 @@ export function mediaIn(api: unknown): Media {
       if (block['type'] !== 'tool_result') continue;
       if (!Array.isArray(block['content'])) {
         // An image that is the whole content and not one of a list: not a form to take one from.
-        if ((block['content'] as { type?: unknown } | null)?.type === 'image') media.why = 'an image in a tool result that is not a list of blocks';
+        if ((block['content'] as { type?: unknown } | null)?.type === 'image') media.why = WHY.imageNotInList();
         continue;
       }
       const inside = block['content'] as unknown[];
       if (!inside.some((b) => (b as { type?: unknown } | null)?.type === 'image')) continue;
       const id = block['tool_use_id'];
       if (typeof id !== 'string') {
-        media.why = 'an image in a tool result without the id of its call';
+        media.why = WHY.imageWithoutCall();
         continue;
       }
       const parts: MediaPart[] = [];
@@ -70,11 +71,11 @@ export function mediaIn(api: unknown): Media {
         }
         const source = one['source'] as Record<string, unknown> | undefined;
         if (one['type'] !== 'image') {
-          media.why = 'an image in a tool result next to a block that is not text';
+          media.why = WHY.imageBesideOther();
         } else if (typeof source !== 'object' || source === null || source['type'] !== 'base64' || typeof source['data'] !== 'string') {
-          media.why = 'an image that is not held as its bytes';
+          media.why = WHY.imageNotBytes();
         } else if (!isImage(source['media_type'], source['data'])) {
-          media.why = 'an image of a kind that is not kept';
+          media.why = WHY.imageOfAnotherKind();
         } else {
           parts.push({ type: 'image', media_type: source['media_type'] as string, data: source['data'] });
           media.images += 1;

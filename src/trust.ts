@@ -13,6 +13,7 @@
 // them was not measured.
 
 import { filled } from './ask.ts';
+import { WHY } from './reasons.ts';
 import { PLUGIN } from './store.ts';
 
 /** The settings files a repository can bring, as Claude Code names them. */
@@ -129,6 +130,6 @@ export function sendTaints(taints: readonly Taint[], options: Seen['options']): 
 
 /** Names the values and the files they came from, for the line that says why something was not done. */
 export function describeTaints(taints: readonly Taint[] | null): string {
-  if (taints === null) return "the repository's settings files could not be read, so no value is known to be yours";
+  if (taints === null) return WHY.settingsUnread();
   return taints.map((taint) => `${taint.kind === 'env' ? `env.${taint.name}` : taint.name} from ${FILE[taint.source]}`).join(', ');
 }

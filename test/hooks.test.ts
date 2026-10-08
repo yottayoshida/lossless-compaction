@@ -471,7 +471,7 @@ test("every way a conversation reaches the built-in summary keeps it first: a su
   );
   // What Claude Code attached is kept for every step but a skip, and where it cannot be, the conversation goes over as sent (#105).
   assert.ok(handler.includes("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);"), 'kept before the step is carried out');
-  assert.ok(handler.includes("say($, `built-in compaction: ${ready.why}`);\n        result = await summarizeKeeping($, e, next, ready.keep);"), 'or handed over, kept as sent');
+  assert.ok(handler.includes("say($, builtInLine(ready.why));\n        result = await summarizeKeeping($, e, next, ready.keep);"), 'or handed over, kept as sent');
   assert.ok(carrying.includes(': summarizeKeeping($, { ...e, messages: outcome.messages }, next, { store, messages: outcome.messages });'), 'too much left: what is left');
   // The line is said before the summary runs, as it was said before a hand-over.
   const summarizing = carrying.slice(carrying.indexOf("case 'summarize':"));
@@ -584,10 +584,10 @@ test('a /compact left undone is decided in src/: by who asked, with what, what C
   assert.ok(attempted > 0 && aborted > attempted && aborted < handler.indexOf('say($,'), 'right after the attempt, before anything is said or handed on');
   const kept = handler.indexOf("const ready = step.step === 'skip' ? tried : await withAttached($, e, tried);");
   const abortedAgain = handler.indexOf(abort, aborted + 1);
-  assert.ok(kept > 0 && abortedAgain > kept && abortedAgain < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'and right after what was attached is kept');
+  assert.ok(kept > 0 && abortedAgain > kept && abortedAgain < handler.indexOf("say($, builtInLine(ready.why));"), 'and right after what was attached is kept');
   // A `/compact` by hand that would have been left undone, cut for its length, is left undone where what was attached cannot be kept (ADR 0034).
   const undone = handler.indexOf("if ('why' in ready && step.step === 'cut' && step.otherwise.step === 'skip') {\n        say($, `not cut for its length: ${ready.why}`);\n        result = { skip: step.otherwise.why };");
-  assert.ok(undone > abortedAgain && undone < handler.indexOf("say($, `built-in compaction: ${ready.why}`);"), 'before what was attached sends it to the summary');
+  assert.ok(undone > abortedAgain && undone < handler.indexOf("say($, builtInLine(ready.why));"), 'before what was attached sends it to the summary');
   assert.equal(carrying.match(/return \{ skip: /g)?.length, 1);
 });
 
