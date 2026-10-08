@@ -166,6 +166,29 @@ resume it from there, resume the conversation and type `/lossless-import`
 with the directory
 ([what is written and checked](limits.md#to-another-machine)).
 
+**`/lossless-list` and `/lossless-show`.** `/lossless-list` lists what was
+moved out of this conversation, the last 50 (`all` for every one, or a word
+to keep the lines that hold it): a line each, with its id's first 12
+characters, its size, its lines, the call and its first line. They are the
+tickets the conversation names, gathered as `find` gathers them, up to 64
+kept parts and 1,200 tickets: those read out of kept parts first, in the
+order they are read, then the conversation's own, oldest first, by the
+message each ticket stands in, so that the newest is at the bottom. Each line
+is cut to the screen, on a screen of 40 columns or more.
+`/lossless-show <id>` names, on a line of its own, the file one is kept in:
+`blobs/<id>.txt` in the place results are kept in (`/lossless-store` names
+it), named by the id on its ticket, with its lines and bytes; a result that
+held images is a line of the plugin's, then JSON with each image in base64.
+Both say what they find on the screen
+alone: Claude Code does not send those lines to the model, and what the
+model reads of either is one line that names no result (measured on Claude
+Code 2.1.293, [ADR 0044](adr/0044-a-person-reads-what-left-without-the-model.md)).
+Open the file to read only: saved, it no longer has the hash it is named by,
+and `recall` refuses it. Typed with `!`, pasted, handed over with `@` or
+opened by the agent, it goes into the conversation. To hand a result to the
+agent, give the whole id: `recall` takes the start of one only where the id
+is written in the conversation.
+
 **A compaction.** A line starting `lossless-compaction:` says what each one
 did, in the transcript, and a shorter one shows over it for a few seconds.
 From the host check (`npm run check:host`), a session that read six files of

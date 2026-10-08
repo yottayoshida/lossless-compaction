@@ -9,7 +9,8 @@ plugin up in [Usage](usage.md#setting-it-up).
 First, type `/lossless-store` at the prompt. If Claude Code answers
 `Unknown command: /lossless-store`, the plugin is not running in this
 session: see [installed and not running](#installed-and-not-running).
-Otherwise, search this page for the line you saw.
+Otherwise, search this page for the line you saw. To read a moved-out result
+yourself: `/lossless-list` and `/lossless-show` ([usage](usage.md#using-it)).
 
 ## Installed and not running
 
@@ -23,8 +24,7 @@ The plugin needs Claude Code 2.1.287 or later (`claude --version`) and mods
 that are not turned off for you: `claude plugin test`, run in an empty
 directory, says when Anthropic or a setting turned them off
 ([function hooks](limits.md#function-hooks), [systems](limits.md#systems)).
-With both, start a new session. If both hold already, run `claude --debug`
-and look for `lossless-compaction`.
+With both, start a new session. If both hold already, run `claude --debug` and look for `lossless-compaction`.
 
 ## Claude Code's summary ran
 

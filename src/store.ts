@@ -38,6 +38,9 @@ export const FIND = 'find';
 export const STORE_COMMAND = 'lossless-store';
 /** The slash command that says the plugin runs, its version, its settings in use and whether `find` is there (#108). */
 export const STATUS_COMMAND = 'lossless-status';
+/** The slash commands that list what left the conversation and name the file of one, on the screen alone (#138, src/list.ts). */
+export const LIST_COMMAND = 'lossless-list';
+export const SHOW_COMMAND = 'lossless-show';
 /** The slash commands that take one conversation's results to another machine (#116, src/carry.ts). */
 export const EXPORT_COMMAND = 'lossless-export';
 export const IMPORT_COMMAND = 'lossless-import';
@@ -381,7 +384,7 @@ export type TextWhy = 'text-missing' | 'text-unreadable' | 'text-changed';
  * The text stored under `id` in the first of `dirs` that holds an entry for it, readable or not, and its text, as
  * `recall` finds it; or why not. Its hash is checked: a text that is not what was stored is never read as it.
  */
-export async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string } | { ok: false; why: TextWhy }> {
+export async function storedText(files: Files, dirs: readonly string[], id: string): Promise<{ ok: true; text: string; dir: string } | { ok: false; why: TextWhy }> {
   for (const dir of dirs) {
     if ((await look(files, entryPath(dir, id))) !== 'file' || (await look(files, blobPath(dir, id))) !== 'file') continue;
     let text: string;
@@ -390,7 +393,7 @@ export async function storedText(files: Files, dirs: readonly string[], id: stri
     } catch {
       return { ok: false, why: 'text-unreadable' };
     }
-    return (await idOf(text)) === id ? { ok: true, text } : { ok: false, why: 'text-changed' };
+    return (await idOf(text)) === id ? { ok: true, text, dir } : { ok: false, why: 'text-changed' };
   }
   return { ok: false, why: 'text-missing' };
 }

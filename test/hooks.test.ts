@@ -10,7 +10,7 @@ import { KEPT } from '../src/keep.ts';
 import type { Message } from '../src/types.ts';
 import { MemoryFiles, conversation, enospc, sized } from './helpers.ts';
 import { FIND_IN_RECALL, recallDescription } from '../src/tools.ts';
-import { ATTACHED_KEPT, EXPORT_COMMAND, FIND_TOOL, IMPORT_COMMAND, PLUGIN as PLUGIN_NAME, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
+import { ATTACHED_KEPT, EXPORT_COMMAND, FIND_TOOL, IMPORT_COMMAND, LIST_COMMAND, PLUGIN as PLUGIN_NAME, SHOW_COMMAND, RECALL_TOOL, STATUS_COMMAND, STORE_COMMAND, readPartTicket, readTicket, recall, ticketText } from '../src/store.ts';
 import { refusal } from '../src/guard.ts';
 import { KEY_VARIABLES, PLACE_VARIABLES, ROUTE_VARIABLES } from '../src/trust.ts';
 
@@ -184,11 +184,11 @@ test("where results are kept and where find sends both go through the repository
   assert.ok(hooks.includes('placeTaints(taints, options)'), 'the place');
   assert.ok(hooks.includes('sendTaints(taints, options)'), 'the sending');
   // Each of recall, find, the compaction, a subagent's compaction (ADR 0026), the clean-up, /lossless-store, a message
-  // sent again from a rewind (ADR 0024), /lossless-export and /lossless-import (#116) takes the place from storeOf and
-  // gives up on its reason.
+  // sent again from a rewind (ADR 0024), /lossless-export and /lossless-import (#116), /lossless-list and /lossless-show
+  // (#138) takes the place from storeOf and gives up on its reason.
   const givingUp = hooks.split("if (typeof store === 'string')").length - 1;
   // The compaction calls it `place` until the place is known to be private (it keeps the conversation after that).
-  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 9, 'nine callers');
+  assert.equal(givingUp + (hooks.split("if (typeof place === 'string')").length - 1), 11, 'eleven callers');
   const collecting = hooks.slice(hooks.indexOf('async function collectOnce('), hooks.indexOf('type HandedOver'));
   assert.ok(collecting.includes("const store = await storeOf($, options);\n    if (typeof store === 'string') return;"), 'the clean-up too');
 });
@@ -666,6 +666,20 @@ test('recall names find in its description when find is registered, and only the
   }
   assert.match((await run({ error: 'no' })).said.join('\n'), /: the find tool is not registered: no$/m);
   assert.match((await run(provider, true)).said.join('\n'), /: the find tool could not be registered: refused$/m);
+});
+
+test('/lossless-list and /lossless-show are commands registered at the start: what they find goes to the screen alone, and their answer is one line (#138, ADR 0044)', () => {
+  for (const name of [LIST_COMMAND, SHOW_COMMAND]) assert.ok(hooks.includes(`on('command.run', { command: '${name}' }`), `the matcher is spelled as ${name}`);
+  const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('command.run'"));
+  assert.ok(start.includes('[LIST_COMMAND,') && start.includes('[SHOW_COMMAND,') && start.includes('await $.command.register({ name, description, argumentHint });'), 'registered at the start');
+  for (const name of [LIST_COMMAND, SHOW_COMMAND]) {
+    const at = hooks.indexOf(`on('command.run', { command: '${name}' }`);
+    const handler = hooks.slice(at, hooks.indexOf('\n  });\n', at));
+    assert.ok(handler.includes('const store = await storeOf($, options);'), `${name}: the place as the repository cannot decide it`);
+    assert.ok(handler.includes('await restoreFor($, store, ticketIds(messages), partIds(messages));'), `${name}: put back from the trash first`);
+    assert.ok(handler.includes('$.ui.log(line)') && !handler.includes('say('), `${name}: on the screen alone`);
+    assert.match(handler, /return \{ text: (listed|shown)\.text \};/, `${name}: answers its one line`);
+  }
 });
 
 test('/lossless-store is a command, not a tool: registered at the start, answered from storeOf over every place read, with nothing of a result read but under check (ADR 0016, #116, #117)', () => {

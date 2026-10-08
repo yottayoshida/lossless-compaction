@@ -32,6 +32,8 @@ import {
   PLUGIN,
   RECALL,
   STATUS_COMMAND,
+  LIST_COMMAND,
+  SHOW_COMMAND,
   EXPORT_COMMAND,
   IMPORT_COMMAND,
   STORE_COMMAND,
@@ -80,6 +82,7 @@ import { checkWitnesses, newestOf, noteWitness, witnessCandidates } from '../src
 import { idIn, machineFileFrom, machineIdOf, markName, marksIn, noteMachine, readMarks, readableSessions, sharedWith, takeOffMarks, unreadMarks } from '../src/machine.ts';
 import { countStore, lateLine, lateSince, oldestResult, skipped, storeReport } from '../src/health.ts';
 import { checkAsked, checkPlaces, checkReport } from '../src/check.ts';
+import { listedOf, showOf } from '../src/list.ts';
 
 const FALLBACK_WINDOW = 200_000;
 
@@ -1025,6 +1028,18 @@ export const register: Register = (on, options) => {
     } catch (error) {
       say($, `the /${STATUS_COMMAND} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
     }
+    // The two that show a person what left the conversation, on the screen alone (#138, ADR 0044): not mid-turn, since
+    // what a recall would put back from the trash they put back too.
+    for (const [name, description, argumentHint] of [
+      [LIST_COMMAND, `Lists, on the screen alone, the results ${PLUGIN} moved out of this conversation: id, size, call and first line`, '[all | word]'],
+      [SHOW_COMMAND, `Names, on the screen alone, the file a result moved out of this conversation is kept in, for you to read`, '<id>'],
+    ] as const) {
+      try {
+        await $.command.register({ name, description, argumentHint });
+      } catch (error) {
+        say($, `the /${name} command could not be registered: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     // The two that take one conversation's results to another machine (#116): not mid-turn, since they write.
     for (const [name, description] of [
       [EXPORT_COMMAND, `Writes the results this conversation names into a new directory, to take to another machine`],
@@ -1298,6 +1313,40 @@ export const register: Register = (on, options) => {
     } catch {
       // What an error says may name a path: it is not shown.
       return { text: 'the status could not be read' };
+    }
+  });
+
+  // Spelled out, not imported: a test holds them to LIST_COMMAND and SHOW_COMMAND. What each finds is said on the screen
+  // alone, a `ui.log` row a line, which Claude Code does not send to the model; the answer, which it does, names no result
+  // (#138, ADR 0044). Put back from the trash first, as recall and find do: what the conversation names is there to read.
+  on('command.run', { command: 'lossless-list' }, async ($, e, next) => {
+    try {
+      const store = await storeOf($, options);
+      if (typeof store === 'string') return { text: `nothing can be read: ${store}` };
+      const messages = (await $.session.messages()) as readonly Message[];
+      if (!Array.isArray(messages)) return { text: 'the conversation could not be read' };
+      await restoreFor($, store, ticketIds(messages), partIds(messages));
+      const listed = await listedOf(filesOf($), store.read, messages, e.args, e.presentation.columns, () => next.budget.remainingMs > BUDGET_LEFT_MS);
+      for (const line of listed.lines) $.ui.log(line);
+      return { text: listed.text };
+    } catch {
+      // What an error says may name a path: it is not shown.
+      return { text: 'the list could not be made' };
+    }
+  });
+
+  on('command.run', { command: 'lossless-show' }, async ($, e) => {
+    try {
+      const store = await storeOf($, options);
+      if (typeof store === 'string') return { text: `nothing can be read: ${store}` };
+      const messages = (await $.session.messages()) as readonly Message[];
+      if (!Array.isArray(messages)) return { text: 'the conversation could not be read' };
+      await restoreFor($, store, ticketIds(messages), partIds(messages));
+      const shown = await showOf(filesOf($), store.read, messages, e.args);
+      for (const line of shown.lines) $.ui.log(line);
+      return { text: shown.text };
+    } catch {
+      return { text: 'the file could not be named' };
     }
   });
 
