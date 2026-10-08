@@ -504,14 +504,6 @@ export const MUTATIONS: readonly Mutation[] = [
     replace: '  if (false) {',
     killedBy: 'a conversation of as many messages as the host shows at most is not rebuilt: older ones may be missing',
   },
-  {
-    promise: 'I2',
-    breaks: 'a probe that its named test does not catch, to see the required check fail on a mutation that survives (#125, reverted next)',
-    file: 'src/status.ts',
-    find: "export const VERSION = '0.7.1';",
-    replace: "export const VERSION = '0.7.1-probe';",
-    killedBy: 'recall answers only to an id it stored, and only with text that still has that hash',
-  },
 ];
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
