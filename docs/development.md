@@ -211,7 +211,7 @@ only that this line was set. `VERSION` in `src/status.ts`, which
 `/lossless-status` prints, is held to the same version by
 `test/status.test.ts`.
 
-README read against version: `0.7.1`
+README read against version: `0.8.0`
 
 To read it, for the release being made:
 

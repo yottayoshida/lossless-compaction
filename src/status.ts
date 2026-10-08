@@ -19,7 +19,7 @@ import { FIND_TOOL, PLUGIN } from './store.ts';
 import type { Message } from './types.ts';
 
 /** The plugin's version, as `.claude-plugin/plugin.json` gives it; a test holds the two together. */
-export const VERSION = '0.7.1';
+export const VERSION = '0.8.0';
 
 /**
  * The page a line of the plugin's can be looked up on (#140): said last, since what this command says is read by the
