@@ -1,7 +1,8 @@
 // What `/lossless-status` says (#108): that the plugin runs in this session,
 // its version and Claude Code's, the value each number setting is used at
 // and, where that is not what was set, what was set, whether the others are
-// set, whether `find` was registered, and how many tickets the conversation
+// set, whether `find` was registered or Claude Code's permissions keep it from
+// the agent (#127), and how many tickets the conversation
 // holds. It is told what the hook found and opens nothing: no stored result,
 // no index entry. Of the settings it prints the numbers, and `provider` where
 // it is one of its three values, and of the others only whether they are set,
@@ -13,6 +14,8 @@ import { CUT_AT } from './cut.ts';
 import { configFrom } from './flow.ts';
 import { HOST_SHOWS } from './select.ts';
 import { ticketIds } from './lifetime.ts';
+import { SETTINGS_SOURCES, SOURCE_NAMES, type SettingsSource } from './precompact.ts';
+import { FIND_TOOL, PLUGIN } from './store.ts';
 import type { Message } from './types.ts';
 
 /** The plugin's version, as `.claude-plugin/plugin.json` gives it; a test holds the two together. */
@@ -33,6 +36,28 @@ export type Find = { registered: true; kind: Provider['kind'] } | { registered: 
 /** Why `find` is not there when the settings gave a key and Claude Code did not take the tool: what it said was said at the start. */
 export const NOT_TAKEN = 'Claude Code did not take it, as a line at the start of the session said';
 
+/** The rules of Claude Code's permissions that keep `find` from the agent: the tool, or every tool of the plugin. */
+const DENYING = new Set([FIND_TOOL, `mcp__${PLUGIN}`, `mcp__${PLUGIN}__*`]);
+
+/**
+ * The settings sources whose permissions deny `find`, named as a person knows them (#127). Claude Code then leaves the
+ * tool out of what the agent is offered, though the plugin registered it; measured on 2.1.293. Started in your home
+ * directory, the project file is your user file: it is named once. A rule is counted as it is written, one of the
+ * three forms above: what is not counted is said as registered, the side that does not claim nothing is sent.
+ */
+export function findDeniedIn(read: Partial<Record<SettingsSource, unknown>>): string[] {
+  // Managed settings that keep to their own permission rules leave those of every other file out of effect.
+  const managedOnly = (read.policy as { allowManagedPermissionRulesOnly?: unknown } | null | undefined)?.allowManagedPermissionRulesOnly === true;
+  const named: string[] = [];
+  for (const source of SETTINGS_SOURCES) {
+    if (managedOnly && source !== 'policy') continue;
+    if (source === 'project' && read.user !== undefined && JSON.stringify(read.project) === JSON.stringify(read.user)) continue;
+    const deny = (read[source] as { permissions?: { deny?: unknown } } | null | undefined)?.permissions?.deny;
+    if (Array.isArray(deny) && deny.some((rule) => typeof rule === 'string' && DENYING.has(rule))) named.push(SOURCE_NAMES[source]);
+  }
+  return named;
+}
+
 /** What the lookup for `find`'s key came to, as `find` would be registered from it. Undefined: the lookup failed. */
 export function findFrom(provider: Provider | null | { error: string } | undefined): Find {
   if (provider === undefined) return { registered: true, local: true, why: 'looking for its key failed' };
@@ -50,6 +75,8 @@ export type StatusInput = {
   atStart: Find | undefined;
   /** What the settings give now. */
   now: Find;
+  /** The settings files whose permissions deny `find` (findDeniedIn). */
+  deniedIn: readonly string[];
   /** Which key variables hold something: never their values. */
   keysIn: { TYPESAFE_API_KEY: boolean; CLOUDFLARE_API_TOKEN: boolean };
   messages: readonly Message[];
@@ -124,6 +151,8 @@ const same = (one: Find, other: Find) => JSON.stringify(one) === JSON.stringify(
  */
 function findLine(input: StatusInput): string {
   const { atStart, now } = input;
+  // Registered or not, a tool the permissions deny is not one the agent can call.
+  if (input.deniedIn.length > 0) return `find: denied in Claude Code's permissions (${input.deniedIn.join(', ')}): the agent is not offered it, and nothing is sent`;
   if (atStart === undefined) return `find: not known for this session; ${wouldBe(now)}: ${findText(now, input)}`;
   const then = `find: ${atStart.registered ? 'registered in this session' : 'not registered in this session'}: ${findText(atStart, input)}`;
   const notTaken = !atStart.registered && atStart.why === NOT_TAKEN && now.registered;

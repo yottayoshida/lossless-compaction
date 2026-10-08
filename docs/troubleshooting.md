@@ -119,7 +119,7 @@ To have Claude Code summarize anyway, give `/compact` instructions.
 
 ## find is not there, or does not ask Jev
 
-`/lossless-status` says whether `find` is registered, where its key came from
+`/lossless-status` says whether `find` is registered or denied ([stopping it](limits.md#stopping-find)), where its key came from
 or why not. With no key it is there all the same, and looks on this machine
 ([getting a key](usage.md#getting-a-key)).
 

@@ -13,7 +13,7 @@ export const SETTINGS_SOURCES = ['user', 'project', 'local', 'flag', 'policy'] a
 export type SettingsSource = (typeof SETTINGS_SOURCES)[number];
 
 /** Each source as a person knows it: the user file is where CLAUDE_CONFIG_DIR says, so it is not named by a path. */
-const NAMED: Record<SettingsSource, string> = {
+export const SOURCE_NAMES: Record<SettingsSource, string> = {
   user: 'your user settings',
   project: '.claude/settings.json',
   local: '.claude/settings.local.json',
@@ -38,7 +38,7 @@ export function preCompactHooksIn(read: Partial<Record<SettingsSource, unknown>>
     const groups = preCompactOf(read[source]).filter((group) => hasHook(group) && !(typeof group['matcher'] === 'string' && group['matcher'] === OTHER[trigger]));
     const unseen = groups.map((group) => JSON.stringify(group)).filter((group) => !seen.has(group));
     for (const group of unseen) seen.add(group);
-    if (unseen.length > 0) named.push(NAMED[source]);
+    if (unseen.length > 0) named.push(SOURCE_NAMES[source]);
   }
   return named;
 }

@@ -738,6 +738,8 @@ test('/lossless-status is a command, registered at the start, that opens no plac
   assert.ok(handler.includes("keysIn: { TYPESAFE_API_KEY: (env.TYPESAFE_API_KEY ?? '').trim() !== '', CLOUDFLARE_API_TOKEN: (env.CLOUDFLARE_API_TOKEN ?? '').trim() !== '' },"));
   assert.ok(!/env\.(TYPESAFE_API_KEY|CLOUDFLARE_API_TOKEN)(?! \?\? '')/.test(handler), 'no key variable is handed on');
   assert.ok(handler.includes('now: findFrom(now),') && handler.includes('atStart: findAtStart,'), 'find as registered, and as the settings give it now');
+  // And whether Claude Code's permissions keep it from the agent, read from every settings source (#127).
+  assert.ok(handler.includes('deniedIn: findDeniedIn(await readSettings($)),'));
   assert.ok(handler.includes('claudeCode = (await $.session.version()).version;'));
   assert.ok(!handler.includes('error.message'), 'what an error says is not shown');
 

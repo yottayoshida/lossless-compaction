@@ -1378,6 +1378,9 @@ repository you trust can run: its settings hooks, MCP servers, and the
 plugins it enables, mods among them, run code of their own, which can read
 the files directly or change the environment without a settings file.
 
+What a repository can do is stop `find`, with a `permissions.deny` of it
+in its settings ([stopping `find`](#stopping-find)).
+
 ## `find`
 
 `find` offers Jev the tickets it finds in the conversation, so after the
@@ -1454,6 +1457,54 @@ a line are listed with it, Jev being told nothing (#110): there the values
 are taken from the question as it is asked, cut at 2,000 characters, and a
 shape blanked in what would be sent is looked for all the same (#131). The
 call and the line shown with each are blanked.
+
+### Stopping `find`
+
+A key is set once, in your user settings, and `find` then sends from every
+repository you open. To keep it from being called, deny the tool in Claude
+Code's permissions:
+
+```json
+{ "permissions": { "deny": ["mcp__lossless-compaction__find"] } }
+```
+
+Where that is written decides where it holds:
+
+- a repository's `.claude/settings.local.json`: for you alone, in that
+  repository and in any directory under it you start Claude Code in;
+- its `.claude/settings.json`: for everyone who starts Claude Code in that
+  directory, and not in a directory under it;
+- managed settings: for every session on the machines they reach, a
+  person's own repositories included. Where they set
+  `allowManagedPermissionRulesOnly`, theirs are the only rules in effect,
+  and a repository's deny holds nowhere.
+
+Claude Code then leaves `find` out of the tools the agent is offered: it
+cannot be called, and nothing is sent. `recall` stays. Denied, `find` is
+gone whole, and with it what it looks for on this machine with no key.
+
+`/lossless-status` says it is denied, and in which settings. It counts a
+rule written as `mcp__lossless-compaction__find`, `mcp__lossless-compaction`
+or `mcp__lossless-compaction__*`, and, where managed settings keep to their
+own rules, only theirs. It reads each settings file as written, whether or
+not the session loaded it, so a session started with `--setting-sources`
+leaving a file out is told of that file's deny all the same. A rule of
+another form (`mcp__*`, or a pattern in the tool's name) and one given with
+`--disallowedTools` may deny `find` without its saying so.
+
+Measured on Claude Code 2.1.293, with the project and local settings loaded
+and not the user settings: denied in a repository's `.claude/settings.json`,
+`find` was not among the tools of a session started there, and was among
+those of one started in a directory under it; denied in its
+`.claude/settings.local.json`, it was among the tools of neither; denied
+with `--settings`, an agent asked to call it found no such tool. Managed
+settings were not measured, nor a deny beside an `allow` of the tool in
+other settings.
+
+No setting of the plugin's own does this: a repository's `pluginConfigs`
+do not reach the plugin's options (measured again on 2.1.293), and the key
+and where `find` sends are not a repository's to decide
+([what a repository can change](#what-a-repository-can-change)).
 
 ## What an agent does not fetch
 

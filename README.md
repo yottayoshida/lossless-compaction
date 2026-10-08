@@ -39,8 +39,8 @@ asked), with nothing to set, unless mods are off ([how to tell](docs/limits.md#f
 - **Compacts without a summary.** Each result is written to a file named by
   its SHA-256 and read back before a ticket replaces it;
   nothing is sent anywhere ([how it works](docs/how-it-works.md)).
-- **Gives a result back as it was.** The agent calls `recall` with the id on
-  a ticket. It can also ask `find` in words; with a key,
+- **Gives a result back as it was.** The agent calls `recall` with a ticket's
+  id. It can also ask `find` in words; with a key,
   [Jev](https://typesafe.ai) chooses ([getting a key](docs/usage.md#getting-a-key)).
 - **Saves the conversation before a summary.** When Claude Code's summary
   runs, the plugin keeps what it replaces first, for `recall` to read:
@@ -78,7 +78,7 @@ questions one after another:
 
 - **A `/compact` you type can do nothing**, with nothing to move out and room left ([limits](docs/limits.md#when-the-built-in-compaction-runs-instead)).
 - **Results stay on disk as plain files while a conversation names them, with no limit on how much**, a secret in a tool result among them ([the files](docs/limits.md#the-files)).
-- **`find` sends excerpts of the conversation** to the Jev provider you choose, from every repository once a key is set ([what it sends](docs/usage.md)).
+- **`find` sends excerpts of the conversation** to your Jev provider, from every repository once a key is set, unless denied ([what it sends](docs/usage.md), [stopping it](docs/limits.md#stopping-find)).
 - **Your `PreCompact` hooks run only before a summary** ([why](docs/limits.md#other-hooks-at-a-compaction)).
 
 ## Docs

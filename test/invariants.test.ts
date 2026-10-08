@@ -61,6 +61,10 @@ test('each line test/mutate.ts breaks is in the code once, and breaking it chang
     assert.match(mutation.file, /^src\//);
   }
   assert.equal(JSON.parse(read('package.json')).scripts.mutate, 'node test/mutate.ts');
+  // CI runs it as the last step of the required `test` job, as this page says (#125).
+  const job = read('.github/workflows/ci.yml').split('\njobs:\n')[1] ?? '';
+  assert.match(job, /^  test:\n/);
+  assert.match(job.trimEnd(), /\n {8}run: npm run mutate$/, 'the last step of test');
 });
 
 test('how the page is read: a promise with its tests, and nothing under what is not promised', () => {
