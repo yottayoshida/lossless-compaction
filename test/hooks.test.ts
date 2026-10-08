@@ -224,6 +224,9 @@ test("the place a session's transcript is looked for in is read from Claude Code
 test('the clean-up runs after the session starts, unwaited, and recall, find and the compaction put back from the trash first', () => {
   const start = hooks.slice(hooks.indexOf("on('session.start'"), hooks.indexOf("on('tool.call'"));
   assert.ok(start.includes('void collectOnce($, options);'), 'not waited for');
+  // What a release changed is said before it, waited for, and told whether a person is at the session (#139).
+  const told = start.indexOf('await tellChanges($, options, e.isInteractive);');
+  assert.ok(told > 0 && told < start.indexOf('void collectOnce($, options);'), 'what changed, said first');
   // Every id the recall hook reads, the one given and the one meant by it, is read through `recalled`, which puts back and reads again.
   const recallHook = hooks.slice(hooks.indexOf(hookOn('tool.call', RECALL_TOOL)), hooks.indexOf(hookOn('tool.call', FIND_TOOL)));
   assert.ok(recallHook.includes('(one) => recalled($, store, one),') && !recallHook.includes('recall(filesOf('), 'recall, through recalled alone');

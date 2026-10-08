@@ -49,7 +49,8 @@ import {
   type Recalled,
   type StoreDirs,
 } from '../src/store.ts';
-import { NOT_TAKEN, findFrom, statusReport, type Find } from '../src/status.ts';
+import { NOT_TAKEN, VERSION, findFrom, statusReport, type Find } from '../src/status.ts';
+import { TOLD_KEY, changesNotice, changesToTell, setupFrom } from '../src/changes.ts';
 import { SETTINGS_SOURCES, preCompactHooksIn, unrunLine, unrunNotice, type SettingsSource } from '../src/precompact.ts';
 import { recallDescription } from '../src/tools.ts';
 import { describeTaints, placeTaints, sendTaints, taintsFrom, variableTaints, type RepoSettings, type Seen, type Taint } from '../src/trust.ts';
@@ -492,6 +493,38 @@ async function plainDirsOf($: WithFiles, places: readonly string[]): Promise<str
     if (found && found.kind === 'dir' && found.isLink !== true) dirs.push(dir);
   }
   return dirs;
+}
+
+/**
+ * What the releases since the version last told changed for this setup, said once, in a session a person is at (#139;
+ * src/changes.ts decides). Where the record holds this version, only it is read. What fails says nothing, and moves
+ * nothing on: the next start tries again.
+ */
+async function tellChanges($: WithUi & WithEnv & WithFiles & WithSettings & WithStore, options: PluginOptions, interactive: boolean): Promise<void> {
+  try {
+    const lines = await changesToTell(
+      {
+        read: () => $.store.get(TOLD_KEY),
+        write: (version) => $.store.set(TOLD_KEY, version),
+        used: async () => {
+          const store = await storeOf($, options);
+          return typeof store === 'string' ? null : (await plainDirsOf($, store.read)).length > 0;
+        },
+        // Settings files that cannot be read decide nothing here: thrown, so that nothing is moved on and the next start tries.
+        setup: async () => {
+          const env = await envOf($);
+          const taints = await taintsOf($, env, options);
+          if (taints === null) throw new Error("the repository's settings files could not be read");
+          return setupFrom(options, env, taints);
+        },
+      },
+      VERSION,
+      interactive,
+    );
+    lines.forEach((line, at) => say($, line, at === 0 ? changesNotice(VERSION, lines.length) : false));
+  } catch {
+    // Said nothing.
+  }
 }
 
 async function collectOnce($: WithUi & WithEnv & WithFiles & WithSettings & WithProcess & WithSession & WithStore, options: PluginOptions): Promise<void> {
@@ -956,6 +989,8 @@ export const register: Register = (on, options) => {
       toldSettings.add(line);
       say($, line);
     }
+    // What a release changed for this setup, in the first session a person is at after the version went up (#139).
+    await tellChanges($, options, e.isInteractive);
     let provider: Awaited<ReturnType<typeof providerOf>> | undefined;
     try {
       provider = await providerOf($, options);
