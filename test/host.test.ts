@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -99,8 +99,9 @@ test('a conversation cut in place of a summary is told from the line of a real r
   assert.deepEqual(judged(cut, [`--- user\n${first}\n${part}`]), [stays]);
 });
 
-test('the parts of a store are told by their entries: a result is not one, nor an entry that cannot be read', () => {
+test('the parts of a store are told by their entries: a result is not one, nor an entry that cannot be read', (t) => {
   const store = mkdtempSync(join(tmpdir(), 'lossless-parts-'));
+  t.after(() => rmSync(store, { recursive: true, force: true }));
   assert.deepEqual(partsIn(store), [], 'a store nothing was written to');
   mkdirSync(join(store, 'index'));
   mkdirSync(join(store, 'blobs'));
@@ -223,10 +224,11 @@ test("the parts a session's record names after its last compaction are read from
   assert.deepEqual(namedAfterCompaction(JSON.stringify(rows[0])), [], 'no compaction, no part after it');
 });
 
-test('each copy test/fixtures/failing makes is of the hook file as it is: its patch applies, and to the compaction hook (#102)', () => {
+test('each copy test/fixtures/failing makes is of the hook file as it is: its patch applies, and to the compaction hook (#102)', (t) => {
   const hook = readFileSync(new URL('../hooks/move-out.ts', import.meta.url), 'utf8');
   for (const { patch } of FAILING) {
     const copy = mkdtempSync(join(tmpdir(), `lossless-failing-${patch}-`));
+    t.after(() => rmSync(copy, { recursive: true, force: true }));
     mkdirSync(join(copy, 'hooks'));
     writeFileSync(join(copy, 'hooks/move-out.ts'), hook);
     const applied = spawnSync('patch', ['-p1', '-s', '-N', '-d', copy, '-i', fileURLToPath(new URL(`fixtures/failing/${patch}.patch`, import.meta.url))], { encoding: 'utf8' });
@@ -234,4 +236,21 @@ test('each copy test/fixtures/failing makes is of the hook file as it is: its pa
     const changed = readFileSync(join(copy, 'hooks/move-out.ts'), 'utf8');
     assert.ok(changed !== hook && changed.includes('on purpose by bench/host.ts'), patch);
   }
+});
+
+test('the host tests remove their temporary stores and patched copies when they end (#164)', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'lossless-host-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  // Start an independent runner, selecting only the two fixture tests, not this test again.
+  const env: Record<string, string | undefined> = { ...process.env, TMPDIR: root, TMP: root, TEMP: root };
+  delete env['NODE_TEST_CONTEXT'];
+  const ran = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-name-pattern=^(the parts of a store|each copy test/fixtures/failing makes)', fileURLToPath(import.meta.url)], {
+    env,
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  assert.equal(ran.status, 0, `${ran.error?.message ?? ''}\n${ran.stdout}${ran.stderr}`);
+  assert.match(ran.stdout, /ok \d+ - the parts of a store/);
+  assert.match(ran.stdout, /ok \d+ - each copy test\/fixtures\/failing makes/);
+  assert.deepEqual(readdirSync(root), [], 'no temporary fixture directories remain after the tests');
 });
