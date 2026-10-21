@@ -104,6 +104,14 @@ test('the README: every link of its own reaches a file, and a heading where it n
   assert.ok(others.length > 5 && linksOf(README).length > 10);
 });
 
+test('the README links what "lossless" holds to before its first table and from its Docs list (#158)', () => {
+  const table = README.indexOf('\n|');
+  assert.ok(table >= 0, 'README.md has a comparison table');
+  assert.ok(linksOf(README.slice(0, table)).includes('docs/invariants.md'), 'README.md links what "lossless" holds to before its first table');
+  const docs = README.split('\n## Docs\n')[1]?.split('\n## ')[0] ?? '';
+  assert.ok(linksOf(docs).includes('docs/invariants.md'), 'README.md lists what "lossless" holds to under Docs');
+});
+
 test('PRIVACY.md, which the README links to: every link of its own reaches a file, and a heading where it names one', () => {
   const page = read('PRIVACY.md');
   assertLinksReach('PRIVACY.md');
