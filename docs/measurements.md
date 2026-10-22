@@ -2519,11 +2519,14 @@ compactions.
   and at 1 in one run. Every other answer about a removed or rewritten log came back through
   `recall`, 5 to 11 calls a run.
 - **The rule tells the plugin's targets apart in nothing.** At 40, 20 and 1
-  the long message kept its middle in every run: moving results out reached
-  the target each time, and a message's middle leaves only after that. The
-  built-in summary wrote the rule out, and under `hybrid` the agent fetched
-  it from the conversation kept before the summary, with 2 and 4 calls to
-  `recall`. The question was answered right in all ten runs.
+  the long message kept its middle in every run. At 40 and 20, moving results
+  out reached the target before any message's middle could leave. At 1 the
+  1,670-token target was not reached: the newest long messages stay up to
+  `keepTokens` of their own, the newest whatever its size, and this was the
+  only one. The built-in summary wrote the rule out, and under `hybrid` the
+  agent fetched it from the conversation kept before the summary, with 2 and
+  4 calls to `recall`. The question was answered right in all ten runs; this
+  does not measure following the rule unasked once it is out of sight.
 
 What this does not show: a window of 1,000,000, where what 40 leaves is
 larger still and 20 and 1 differ; Opus 5.5; a session that writes files or

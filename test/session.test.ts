@@ -4,7 +4,9 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { logLine } from '../bench/fixtures.ts';
+import { selectBodies } from '../src/body.ts';
 import { NOT_AN_ID, NOT_STORED } from '../src/store.ts';
+import type { Message } from '../src/types.ts';
 import { ASKS, defaultFrom, AUTO_LINE, LOGS, MARKS, REMOVED, REWRITTEN, RULE, SESSION_VERSION, SETTINGS, type SessionRun, type Turn, callsIn, figuresOf, logPath, longMessage, recalledIn, recallsTable, scriptOf, sessionReport, sessionTable, sessionsUnder } from '../bench/session.ts';
 
 const usage = (costUSD: number) => ({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD, thinkingTokens: 0 });
@@ -164,6 +166,28 @@ test('the sessions that were measured: the table made from them, and every figur
     const [a, b] = figures(setting).map((one) => one.costUSD) as [number, number];
     assert.ok(Math.abs(a - b) / Math.min(a, b) < 0.05, setting);
   }
+});
+
+test('at 1 the measured session missed its target, and the rule stayed as the newest long message (#151)', () => {
+  const runs = sessionsUnder(SESSION_AT).filter((run) => run.setting === 'target-1');
+  const lines = runs.flatMap((run) => run.turns.flatMap((turn) => turn.compaction === undefined ? [] : [turn.compaction.line]));
+  assert.equal(lines.length, 7);
+  for (const line of lines) {
+    assert.ok(line !== null && line.estimate !== undefined && line.window !== undefined);
+    assert.equal(line.window / 100, 1670);
+    assert.ok(line.estimate > line.window / 100, 'moving results out did not reach the target at 1');
+    assert.equal(line.bodies ?? 0, 0);
+  }
+  // The benchmark's only long message stays even with no allowance: the newest is protected on its own, not by the results.
+  const messages: Message[] = scriptOf('').filter((step) => step.kind === 'say').map((step) => ({ role: 'user', text: step.text, toolUses: [] }));
+  const options = { keepChars: 0, minChars: 2000 };
+  assert.deepEqual(selectBodies(messages, options), []);
+  assert.deepEqual(selectBodies(messages, { ...options, keepNewest: false }).map((one) => one.text), [longMessage()]);
+
+  const measurements = readFileSync(fileURLToPath(new URL('../docs/measurements.md', import.meta.url)), 'utf8');
+  const section = measurements.slice(measurements.indexOf('## One session that compacts several times, under each setting'), measurements.indexOf('## Ids copied wrong in one session that compacts several times')).replace(/\s+/g, ' ');
+  assert.ok(section.includes('At 1 the 1,670-token target was not reached'), 'the measurement must distinguish the unreached target at 1');
+  assert.ok(section.includes('the newest long messages stay up to `keepTokens` of their own, the newest whatever its size'), 'the measurement must name the independent long-message allowance');
 });
 
 test('the calls of a turn are those of the responses it was sent: what a compaction prints again of earlier turns is not', () => {
