@@ -5,8 +5,9 @@ page says what it reads, what it keeps and where, what it sends and to whom,
 and how to remove what it kept. It reads and keeps these for one purpose: to
 compact a conversation without a summary, and to give back, exact, what it
 moved out. `test/privacy.test.ts` reads the plugin's code for the addresses,
-the programs and the places under its directory that are written there, and
-fails when this page does not name one; it does not see one that the code
+the programs, the environment variables and the places under its directory
+that are written there, and fails when this page (or the variable list it
+links to in Limits) does not name one; it does not see one that the code
 puts together some other way.
 
 ## In short

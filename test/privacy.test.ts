@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { OLD_PLUGIN, PLUGIN } from '../src/store.ts';
 
 // PRIVACY.md says what the plugin reads, keeps, sends and runs. It is written from the code, and the code can change under it:
-// here an address the code can send to, a way to send that does not go through the one call there is, a program it runs and a
-// place it writes, each has to be named on that page, so that one added to the code without the page fails here.
+// here an address the code can send to, a way to send that does not go through the one call there is, a program it runs, a
+// variable it reads or sets and a place it writes, each has to be named on that page, so that one added without the page fails here.
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -44,6 +44,25 @@ function programsIn(text: string): string[] {
     /\$\{place\}\/([\w-]+)/g, // `${place}/sh`
   ];
   return shapes.flatMap((shape) => [...text.matchAll(shape)].map((match) => match[1] ?? ''));
+}
+
+/** The variables the host reads or sets by a literal name, as Claude Code requires. */
+function variablesIn(text: string): string[] {
+  return [...text.matchAll(/\$\.env\.(?:get|set)\s*\(\s*(['"`])([A-Za-z_]\w*)\1\s*[,)]/g)].map((match) => match[2] ?? '');
+}
+
+/** The shell's uppercase variable references, not its lowercase locals or positional parameters. */
+function shellVariablesIn(text: string): string[] {
+  return [...text.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\b/g)].map((match) => match[1] ?? '');
+}
+
+/** Names written as code; lowercase variants only where the prose explicitly says "in either case". */
+function variablesNamedIn(text: string): Set<string> {
+  const names = new Set([...text.matchAll(/`([A-Za-z_]\w*)`/g)].map((match) => match[1] ?? ''));
+  for (const match of text.matchAll(/((?:`[A-Z_][A-Z0-9_]*`,?\s*)+)in either\s+case/g)) {
+    for (const name of variablesNamedIn(match[1] ?? '')) names.add(name.toLowerCase());
+  }
+  return names;
 }
 
 /** The names the store writes right under its directory, wherever the code spells one. */
@@ -103,6 +122,17 @@ test('every program the code runs is named in PRIVACY.md, and the code runs comm
   assert.deepEqual(runners, ['hooks/move-out.ts', 'hooks/move-out.ts']);
 });
 
+test('every environment variable the code reads or sets is named in PRIVACY.md or its linked Limits section', () => {
+  const host = CODE.flatMap((path) => variablesIn(code(path)));
+  const shell = CODE.filter((path) => path.endsWith('.sh')).flatMap((path) => shellVariablesIn(code(path)));
+  assert.ok(host.length > 0, 'the host variable finder found nothing');
+  assert.ok(shell.length > 0, 'the shell variable finder found nothing');
+  assert.ok(PRIVACY.includes('[Limits](docs/limits.md#what-a-repository-can-change)'), 'PRIVACY.md no longer links to the variable list in Limits');
+  const limits = read('docs/limits.md').split('## What a repository can change\n')[1]?.split('\n## ')[0] ?? '';
+  const names = variablesNamedIn(`${PRIVACY}\n${limits}`);
+  for (const name of new Set([...host, ...shell])) assert.ok(names.has(name), `PRIVACY.md does not name ${name}, which the code reads or sets`);
+});
+
 test('every place the plugin writes is named in PRIVACY.md', () => {
   const places = CODE.flatMap((path) => placesIn(code(path)));
   // `.local` is this machine's id, under the home directory rather than the store (ADR 0032), named in full below.
@@ -122,6 +152,12 @@ test('what each check reads out of the code: the shapes it knows, and a shape it
   assert.deepEqual(hostsIn("const a = 'https://API.example.com/v1'; // http://b.test"), ['https://api.example.com', 'https://b.test']);
   assert.deepEqual(waysOutIn("import x from 'node:https';\nawait import('node:net');\nawait fetch(url);\nglobalThis.fetch(url);\n$.http.fetch(url);\nnew WebSocket(u)"), ['import https', 'import net', 'fetch', 'fetch', 'WebSocket']);
   assert.deepEqual(programsIn("exitOf(run, 'mkdir', []); run('mv', []); runIn(exec, 'rm', []); const G = ['/usr/bin/grep']; `${place}/sh`"), ['mkdir', 'mv', 'rm', 'grep', 'sh']);
+  assert.deepEqual(variablesIn('$.env.get(\'HOME\'); $.env.set ( "RUNNING" , "1"); $.env.get(`https_proxy`)'), ['HOME', 'RUNNING', 'https_proxy']);
+  assert.deepEqual(variablesIn('$.env.get(name); other.env.get("IGNORED"); $.env.get(`NOT_${literal}`); $.env.get("NOT_" + name)'), []);
+  assert.deepEqual(shellVariablesIn('${MARK:-} $CLAUDE_PID ${CLAUDE_PLUGIN_DATA} $NAME1'), ['MARK', 'CLAUDE_PID', 'CLAUDE_PLUGIN_DATA', 'NAME1']);
+  assert.deepEqual(shellVariablesIn('$pid ${mark:-} ${1:-} $1 $((lines + 1)) $(pwd) $LOCALsuffix'), []);
+  assert.deepEqual([...variablesNamedIn('`PROXY`, `OTHER_PROXY` in either\ncase; `UPPER_ONLY`')].sort(), ['OTHER_PROXY', 'PROXY', 'UPPER_ONLY', 'other_proxy', 'proxy']);
+  assert.deepEqual([...variablesNamedIn('PROXY, other_proxy')], []);
   assert.deepEqual(placesIn('export const a = (dir: string) => `${dir}/blobs`;\nconst g = (dir: string) => `${dir}/gc.json`;'), ['blobs', 'gc.json']);
   assert.deepEqual(dataFilesIn('told=$CLAUDE_PLUGIN_DATA/told\nheld=$CLAUDE_PLUGIN_DATA/held'), ['told', 'held']);
   const around = (text: string) => callAround(text, text.indexOf('$.http'));

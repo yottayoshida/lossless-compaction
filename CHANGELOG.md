@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `test/privacy.test.ts` checks that every environment variable the plugin reads or sets by name is named in `PRIVACY.md` or its linked Limits section (#136). It reads the host's literal `$.env.get` and `$.env.set` calls and the shell's uppercase variable references, with examples that check the finders themselves.
+
 ### Changed
 
 - The marketplace points at the tag of the latest release, `v0.8.0`, and its commit: a new install takes that release, and what is merged after it waits for the next one, where it took the tip of `main` under the last release's number (#106, ADR 0031). CI asks this repository that the tag is that commit (`test/marketplace-tag.sh`).
