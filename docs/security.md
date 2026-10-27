@@ -120,8 +120,8 @@ this plugin is what is marked.
 
 ## Reporting a vulnerability
 
-Report it privately, through the repository's Security tab ("Report a
-vulnerability") where GitHub offers it. Where it does not, open
+GitHub's private vulnerability reporting is not turned on for this
+repository yet (#134). Until it is, open
 [an issue](https://github.com/yottayoshida/lossless-compaction/issues) that
 says you have one to report, without its details, and ask for a way to send
 them.
