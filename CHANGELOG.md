@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The marketplace points at the tag of the latest release, `v0.8.0`, and its commit: a new install takes that release, and what is merged after it waits for the next one, where it took the tip of `main` under the last release's number (#106, ADR 0031). CI asks this repository that the tag is that commit (`test/marketplace-tag.sh`).
 
+### Added
+
+- `docs/security.md` gathers, for a security review, what the plugin handles, what it defends against and what it does not, what an organization can enforce through Claude Code (each line marked measured or not checked: none of the managed settings is checked yet), settings recommended on a work machine, how to see and remove what was kept, and how to report a vulnerability, linking to the sections that say each (#135). The README's Docs list and `PRIVACY.md` link to it.
+
 ## [0.8.0] - 2026-10-08
 
 ### Added

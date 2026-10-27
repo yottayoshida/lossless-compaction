@@ -110,6 +110,27 @@ test('PRIVACY.md, which the README links to: every link of its own reaches a fil
   assert.ok(linksOf(page).some((target) => target.includes('#')), 'PRIVACY.md names the sections of the docs it draws on');
 });
 
+test('docs/security.md: every link reaches a file and a heading, the README and PRIVACY.md link to it, and each thing an organization can enforce says whether it was measured (#135)', () => {
+  const page = read('docs/security.md');
+  assertLinksReach('docs/security.md');
+  // It gathers what other pages say, by linking to their sections rather than saying it again.
+  assert.ok(linksOf(page).filter((target) => target.includes('#')).length >= 10, 'docs/security.md links to the sections it draws on');
+  for (const document of ['README.md', 'PRIVACY.md']) {
+    assert.ok(linksOf(read(document)).some((target) => join(dirname(document), target) === 'docs/security.md'), `${document} links to docs/security.md`);
+  }
+  // A line of what an organization can do is a claim about Claude Code: it says the version it was measured on, or that it was not checked.
+  const at = page.indexOf('\n## What an organization can enforce\n');
+  assert.ok(at >= 0, 'docs/security.md has a section on what an organization can enforce');
+  const section = page.slice(at + 1, page.indexOf('\n## ', at + 1));
+  const lines = section.split(/\n(?=- )/).filter((item) => item.startsWith('- '));
+  assert.ok(lines.length >= 5, `${lines.length} lines`);
+  for (const line of lines) {
+    const flat = line.replace(/\s+/g, ' ').trim();
+    assert.ok(flat.startsWith('- **An organization can '), flat);
+    assert.match(flat, /(?:Not checked\.|not checked\.|[Mm]easured on Claude Code \d+\.\d+\.\d+\.)$/, flat);
+  }
+});
+
 test("every setting's description fits under 250 characters, gives its default and names the Settings section of docs/usage.md, which is there (#142)", () => {
   // What the settings dialog shows below the setting chosen, all of it, wrapped: at 100 columns a description of 766 characters took eight lines.
   const manifest = JSON.parse(read('.claude-plugin/plugin.json')) as { userConfig: Record<string, { description: string; default?: unknown }> };
