@@ -7,7 +7,8 @@ compact a conversation without a summary, and to give back, exact, what it
 moved out. `test/privacy.test.ts` reads the plugin's code for the addresses,
 the programs and the places under its directory that are written there, and
 fails when this page does not name one; it does not see one that the code
-puts together some other way.
+puts together some other way. What the plugin trusts, and what an
+organization can enforce, is in [Security](docs/security.md).
 
 ## In short
 
