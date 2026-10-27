@@ -67,7 +67,7 @@ export const MUTATIONS: readonly Mutation[] = [
     promise: 'I2',
     breaks: 'recall returns text that no longer has the hash it is named by',
     file: 'src/blobs.ts',
-    find: "    if ((await idOf(text)) !== id) return { error: 'The stored result has changed on disk and is not returned.' };\n",
+    find: "    if ((await idOf(text)) !== id) return { error: CHANGED_ANSWER };\n",
     replace: '',
     killedBy: 'recall answers only to an id it stored, and only with text that still has that hash',
   },

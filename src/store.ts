@@ -9,7 +9,7 @@ import { decodeMedia, textOf } from './encoded.ts';
 import { blobPath, entryPath } from './layout.ts';
 import type { Files, Message } from './types.ts';
 
-export { MAX_BYTES, NOT_AN_ID, NOT_STORED, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
+export { CHANGED_ANSWER, MAX_BYTES, NOT_AN_ID, NOT_STORED, NOT_STORED_ANSWER, UNREADABLE_ANSWER, bytesOf, codeOf, holds, idOf, recall, storedAs, type NotMoved, type Recalled } from './blobs.ts';
 
 export const PLUGIN = 'lossless-compaction';
 

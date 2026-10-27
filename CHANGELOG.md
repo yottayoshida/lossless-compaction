@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - The marketplace points at the tag of the latest release, `v0.8.0`, and its commit: a new install takes that release, and what is merged after it waits for the next one, where it took the tip of `main` under the last release's number (#106, ADR 0031). CI asks this repository that the tag is that commit (`test/marketplace-tag.sh`).
+- When `recall` finds nothing stored under an id, or finds the stored result changed on disk, its answer now says what to try, naming no path: the call that made the result may still be in the conversation and can be run again, and results kept before `storeDir` was changed are found once it is set back (#145). It said only that nothing was stored, or that the result had changed. A test holds the wording of each of `recall`'s refusals.
 
 ## [0.8.0] - 2026-10-08
 

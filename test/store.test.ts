@@ -3,8 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import {
+  CHANGED_ANSWER,
   ID_LEAST,
   MAX_BYTES,
+  NOT_AN_ID,
+  NOT_STORED,
+  NOT_STORED_ANSWER,
+  UNREADABLE_ANSWER,
   RECALL_TOOL,
   holds,
   idMeant,
@@ -293,9 +298,42 @@ test('recall answers only to an id it stored, and only with text that still has 
   assert.ok('error' in (await recall(files, DIR, 'a'.repeat(64))));
 
   files.files.set(`${DIR}/blobs/${ticket.id}.txt`, `${text} changed`);
-  assert.deepEqual(await recall(files, DIR, ticket.id), {
-    error: 'The stored result has changed on disk and is not returned.',
-  });
+  assert.deepEqual(await recall(files, DIR, ticket.id), { error: CHANGED_ANSWER });
+});
+
+test("each of recall's refusals says what can be known and what to try, naming no path (#145)", async () => {
+  const files = new MemoryFiles();
+  const text = output('config', 70);
+  const ticket = await moved(files, text);
+  const refusals: string[] = [];
+  const refused = async (id: unknown) => {
+    const got = await recall(files, DIR, id);
+    assert.ok('error' in got, String(id));
+    refusals.push(got.error);
+    return got.error;
+  };
+
+  assert.equal(await refused('not an id'), 'That id is not 64 hexadecimal characters. Copy it from the ticket in the conversation.');
+  assert.equal(
+    await refused('a'.repeat(64)),
+    'Nothing is stored under that id on this machine.\n' +
+      'The call that made it may still be in the conversation: if it is, and what it read is still there, run it again.\n' +
+      'If the place results are kept in was changed (storeDir), results kept in the old place are found once it is set back.',
+  );
+  files.files.set(`${DIR}/blobs/${ticket.id}.txt`, `${text} changed`);
+  assert.equal(
+    await refused(ticket.id),
+    'The stored result has changed on disk: it was written over or damaged, and is not returned.\n' +
+      'The call that made it may still be in the conversation: if it is, and what it read is still there, run it again.',
+  );
+  const read = files.read.bind(files);
+  files.read = async (path) => (path.endsWith(`${ticket.id}.txt`) ? Promise.reject(new Error('EACCES')) : read(path));
+  assert.equal(await refused(ticket.id), 'The stored result could not be read.');
+
+  assert.deepEqual(refusals, [NOT_AN_ID, NOT_STORED_ANSWER, CHANGED_ANSWER, UNREADABLE_ANSWER]);
+  // A transcript's refusal is still told by how it began before it said what to try.
+  assert.ok(NOT_STORED_ANSWER.startsWith(`${NOT_STORED}\n`));
+  for (const refusal of refusals) assert.ok(!refusal.includes('/') && !refusal.includes(DIR), refusal);
 });
 
 test('an id that is not an id reaches no file, inside the store or outside it', async () => {
