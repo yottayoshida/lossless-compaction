@@ -207,7 +207,15 @@ export async function storedAs(files: Files, dirs: readonly string[], id: string
 
 /** The two refusals of an id that may have been copied wrong: not an id at all, or one nothing is stored under. */
 export const NOT_AN_ID = 'That id is not 64 hexadecimal characters. Copy it from the ticket in the conversation.';
+/** How a refusal of an id nothing is stored under begins, as it began before it said what to try: what tells one in a transcript. */
 export const NOT_STORED = 'Nothing is stored under that id on this machine.';
+// What a refusal says to try, naming no path (#145): only the result left the conversation, and running its call
+// again often gives it back; a store moved elsewhere is found again once it is set back.
+const RUN_AGAIN = 'The call that made it may still be in the conversation: if it is, and what it read is still there, run it again.';
+export const NOT_STORED_ANSWER =
+  `${NOT_STORED}\n${RUN_AGAIN}\n` + 'If the place results are kept in was changed (storeDir), results kept in the old place are found once it is set back.';
+export const CHANGED_ANSWER = `The stored result has changed on disk: it was written over or damaged, and is not returned.\n${RUN_AGAIN}`;
+export const UNREADABLE_ANSWER = 'The stored result could not be read.';
 
 /** What is stored under an id. For a result that held images, `text` is its text without their bytes, and `parts` is all of it in order. */
 export type Recalled = { text: string; parts?: MediaPart[] } | { error: string };
@@ -223,13 +231,13 @@ export async function recall(files: Files, dirs: string | readonly string[], id:
     try {
       text = await files.read(blobPath(dir, id));
     } catch {
-      return { error: 'The stored result could not be read.' };
+      return { error: UNREADABLE_ANSWER };
     }
-    if ((await idOf(text)) !== id) return { error: 'The stored result has changed on disk and is not returned.' };
+    if ((await idOf(text)) !== id) return { error: CHANGED_ANSWER };
     // Told by how the stored text begins, never by its entry: the bytes of an image
     // are not handed on as text to anything that reads through here.
     const media = decodeMedia(text);
     return media === null ? { text } : { text: textOf(media), parts: media };
   }
-  return { error: NOT_STORED };
+  return { error: NOT_STORED_ANSWER };
 }

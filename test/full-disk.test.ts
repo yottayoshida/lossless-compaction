@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { compact } from '../src/compact.ts';
 import { keepThenSummarize } from '../src/keep.ts';
 import { noteRoot, stateIn } from '../src/lifetime.ts';
-import { codeOf, isStored, moveOut, recall } from '../src/store.ts';
+import { CHANGED_ANSWER, codeOf, isStored, moveOut, recall } from '../src/store.ts';
 import { DiskFiles, MemoryFiles, conversation, output } from './helpers.ts';
 
 const DIR = '/home/u/.claude/lossless-compaction';
@@ -36,7 +36,7 @@ test('without a move into place, a refused write of the same text destroys what 
   const second = results.find((result) => 'reason' in result);
   if (!first || 'reason' in first) return assert.fail('one was stored');
   assert.ok(second && 'reason' in second && second.reason === 'write-failed');
-  assert.deepEqual(await recall(files, [DIR], first.id), { error: 'The stored result has changed on disk and is not returned.' });
+  assert.deepEqual(await recall(files, [DIR], first.id), { error: CHANGED_ANSWER });
 });
 
 test('with a move into place, a refused write of the same text leaves what an earlier write had stored whole', async () => {

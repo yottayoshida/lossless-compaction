@@ -27,7 +27,7 @@ import { goalOf, whyNotRebuilt } from '../src/select.ts';
 import {
   FIND,
   NOT_AN_ID,
-  NOT_STORED,
+  NOT_STORED_ANSWER,
   PLACES_KEY,
   PLUGIN,
   RECALL,
@@ -1200,7 +1200,7 @@ export const register: Register = (on, options) => {
     const found = await recallMeant((one) => recalled($, store, one), id, messages);
     if ('error' in found) {
       // Refused as copied wrong: the tickets it may stand for are named, read from the same conversation (#107).
-      const copied = found.error === NOT_AN_ID || found.error === NOT_STORED;
+      const copied = found.error === NOT_AN_ID || found.error === NOT_STORED_ANSWER;
       let named = '';
       try {
         if (copied) named = mayStandFor(id, await messages());
