@@ -224,7 +224,7 @@ again, and makes no file); `mkdir`, `chmod` and `mv` on the new
 directory you give `/lossless-export`, and `sh` to resolve where it is
 (`cd` there and `pwd -P`, in the nearest directory of it that is there); `ln` and `rm` on this machine's id under
 `~/.local/state/lossless-compaction/`, the first time it is made; `grep` on
-transcripts as above; and `sh` to read its own process id. Claude Code runs `hooks/notice.sh` with `sh` at each message you
+transcripts as above; and `sh` to read its own process id. Claude Code runs `hooks/notice.sh` with `/bin/sh` at each message you
 send and around a compaction. None of them connects to a network.
 
 ## How safe the files are

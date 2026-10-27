@@ -881,8 +881,8 @@ The plugin is checked in Claude Code on macOS only: `npm run check:host`
 and every figure in [the measurements](measurements.md). What it needs of a
 system is [the commands it runs](../PRIVACY.md#commands-it-runs), which it
 starts by an absolute path, from `/bin` or `/usr/bin` (`grep` from
-`/usr/bin` first) and never through `PATH`, and an `sh` found in `PATH` for
-its notices (`hooks/hooks.json`).
+`/usr/bin` first) and never through `PATH`; Claude Code starts its notices
+with `/bin/sh` (`hooks/hooks.json`).
 
 | System | How it was checked | What does not work |
 | --- | --- | --- |
@@ -890,7 +890,7 @@ its notices (`hooks/hooks.json`).
 | Linux with GNU tools: Debian 13, Ubuntu 24.04 | Not run in Claude Code. CI on Ubuntu installs Claude Code, checks the hook file and its types, runs the notices with `/bin/sh` and `/bin/dash`, and runs the tests, whose files and other commands are mostly stand-ins. On 2026-10-07 each command line the plugin starts, with its arguments, was run in Docker's `debian:stable-slim` (13.7) and `ubuntu:24.04` (24.04.5) and did what the plugin expects. Other distributions and versions were not checked | Nothing known |
 | Alpine, or another system whose `grep` is BusyBox's | Not run in Claude Code. The same command lines in Docker's `alpine:3` (3.24, BusyBox 1.37.0) on 2026-10-07: the clean-up's `grep` refused `--include` and exited 2; the others did what the plugin expects | The clean-up stops each time before anything moves, so nothing kept is removed. A GNU `grep` at `/usr/bin/grep` or `/bin/grep` would be used instead; not checked |
 | WSL | Not checked | From the code, as Linux. A store on a Windows drive (`/mnt/c`) may not hold the mode it is given |
-| Windows | Not checked | From the code: where `mv` cannot be started, results are written in place, with no move. A store whose place starts with a drive letter is given no mode; one that starts with `/` cannot be made private, as on NixOS. With no `grep` to start, the clean-up stops each time, so nothing kept is removed. `/lossless-export` and `/lossless-import` do not run. Whether a hook there finds an `sh` for the notices was not checked |
+| Windows | Not checked | From the code: where `mv` cannot be started, results are written in place, with no move. A store whose place starts with a drive letter is given no mode; one that starts with `/` cannot be made private, as on NixOS. With no `grep` to start, the clean-up stops each time, so nothing kept is removed. `/lossless-export` and `/lossless-import` do not run. Whether a hook there can start `/bin/sh` for the notices was not checked |
 | NixOS | Not checked | From what NixOS ships, `sh` in `/bin` and `env` in `/usr/bin` alone: no `mkdir` or `chmod` can be started, so the store cannot be made private, nothing is moved out or kept, and each compaction is Claude Code's summary; its line says why |
 
 ## The files
@@ -1351,8 +1351,8 @@ value it would use that one of them holds stops it:
   hold no key and choose the provider ([Setting it up](usage.md#setting-it-up));
   `apiKey`, `provider`,
   `cloudflareAccountId` or `model` under its `pluginConfigs`; or a proxy or
-  certificate variable (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` in either
-  case, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`,
+  certificate variable (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`
+  in either case, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`,
   `SSL_CERT_FILE`, `SSL_CERT_DIR`): there is no `find` that asks Jev.
 
 Each time, the line the plugin prints names the value and the file. Set the
@@ -1371,7 +1371,10 @@ Measured on Claude Code 2.1.286: `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`
 and `pluginConfigs` from those files did not reach the plugin, and a key
 variable and `HTTPS_PROXY` did, the latter for the plugin's requests and
 Claude Code's own. The checks above stay for a version that hands the rest
-over.
+over. Measured on Claude Code 2.1.311: the plugin's requests read `NO_PROXY`
+and `no_proxy`, `no_proxy` first when both are set, and went around the proxy
+for a host either names, so a repository could have `find`'s request go
+around a proxy you rely on.
 
 This covers what a repository's settings change quietly, not what a
 repository you trust can run: its settings hooks, MCP servers, and the

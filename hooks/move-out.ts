@@ -215,6 +215,8 @@ async function envOf($: WithEnv): Promise<Seen['env']> {
     http_proxy: await $.env.get('http_proxy'),
     ALL_PROXY: await $.env.get('ALL_PROXY'),
     all_proxy: await $.env.get('all_proxy'),
+    NO_PROXY: await $.env.get('NO_PROXY'),
+    no_proxy: await $.env.get('no_proxy'),
     NODE_TLS_REJECT_UNAUTHORIZED: await $.env.get('NODE_TLS_REJECT_UNAUTHORIZED'),
     NODE_EXTRA_CA_CERTS: await $.env.get('NODE_EXTRA_CA_CERTS'),
     SSL_CERT_FILE: await $.env.get('SSL_CERT_FILE'),

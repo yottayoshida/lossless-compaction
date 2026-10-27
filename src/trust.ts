@@ -10,7 +10,9 @@
 // the repository's only when one of those files holds it and the plugin sees
 // that same value, and it stops something only where it would be used.
 // Certificate variables are judged too: whether the host's requests read
-// them was not measured.
+// them was not measured. `NO_PROXY` and `no_proxy` were, on Claude Code
+// 2.1.311: a host either names is fetched around the proxy, `no_proxy` first
+// when both are set.
 
 import { filled } from './ask.ts';
 import { WHY } from './reasons.ts';
@@ -33,6 +35,8 @@ export const ROUTE_VARIABLES = [
   'http_proxy',
   'ALL_PROXY',
   'all_proxy',
+  'NO_PROXY',
+  'no_proxy',
   'NODE_TLS_REJECT_UNAUTHORIZED',
   'NODE_EXTRA_CA_CERTS',
   'SSL_CERT_FILE',
