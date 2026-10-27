@@ -5,10 +5,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { OLD_PLUGIN, PLUGIN } from '../src/store.ts';
+import { ROUTE_VARIABLES } from '../src/trust.ts';
 
 // PRIVACY.md says what the plugin reads, keeps, sends and runs. It is written from the code, and the code can change under it:
-// here an address the code can send to, a way to send that does not go through the one call there is, a program it runs and a
-// place it writes, each has to be named on that page, so that one added to the code without the page fails here.
+// here an address the code can send to, a way to send that does not go through the one call there is, a program it runs, a
+// place it writes and an environment variable it reads or sets, each has to be named on that page, so that one added to the
+// code without the page fails here.
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
@@ -54,6 +56,25 @@ function placesIn(text: string): string[] {
 /** The files hooks/notice.sh keeps in Claude Code's data directory for the plugin. */
 function dataFilesIn(notice: string): string[] {
   return [...notice.matchAll(/\$CLAUDE_PLUGIN_DATA\/(\w+)/g)].map((match) => match[1] ?? '');
+}
+
+/** The environment variables a module reads or sets, through the host or Node's own: `$.env.get('…')`, `$.env.set('…', …)`, `process.env.…`. */
+function variablesIn(text: string): string[] {
+  const shapes = [/\$\.env\.(?:get|set)\(\s*['"`](\w+)['"`]/g, /\bprocess\.env(?:\.(\w+)|\[\s*['"`](\w+)['"`]\s*\])/g];
+  return shapes.flatMap((shape) => [...text.matchAll(shape)].map((match) => match[1] ?? match[2] ?? ''));
+}
+
+/** The environment variables a shell script reads or exports: every `$name` or `${name…}` it does not assign itself, and each name it exports. */
+function shellVariablesIn(script: string): string[] {
+  const lines = script.split('\n').filter((line) => !/^\s*#/.test(line));
+  const text = lines.join('\n');
+  const assigned = new Set([
+    ...[...text.matchAll(/(?:^|[\s;{(])([A-Za-z_]\w*)=/g)].map((match) => match[1] ?? ''),
+    ...[...text.matchAll(/\bread[ \t]+(?:-\w+[ \t]+)*((?:[A-Za-z_]\w*[ \t]*)+)/g)].flatMap((match) => (match[1] ?? '').trim().split(/\s+/)),
+  ]);
+  const read = [...text.matchAll(/\$\{?([A-Za-z_]\w*)/g)].map((match) => match[1] ?? '').filter((name) => !assigned.has(name));
+  const exported = [...text.matchAll(/\bexport\s+([A-Za-z_]\w*)/g)].map((match) => match[1] ?? '');
+  return [...read, ...exported];
 }
 
 /** The function whose call `at` stands inside: back from `at` to the first bracket left open, past those opened and closed. */
@@ -118,12 +139,58 @@ test('every place the plugin writes is named in PRIVACY.md', () => {
   assert.ok(PRIVACY.includes('~/.claude/plugins/data/'), 'PRIVACY.md does not say where Claude Code keeps the plugin data');
 });
 
+test('every environment variable the code reads or sets is named in PRIVACY.md', () => {
+  const variables = new Set(CODE.flatMap((path) => (path.endsWith('.sh') ? shellVariablesIn(code(path)) : variablesIn(code(path)))));
+  // The list of today: a finder that saw none would make this test hold nothing.
+  assert.deepEqual([...variables].sort(), [
+    'ALL_PROXY',
+    'CLAUDE_CONFIG_DIR',
+    'CLAUDE_PID',
+    'CLAUDE_PLUGIN_DATA',
+    'CLOUDFLARE_ACCOUNT_ID',
+    'CLOUDFLARE_API_TOKEN',
+    'HOME',
+    'HTTPS_PROXY',
+    'HTTP_PROXY',
+    'LOSSLESS_COMPACTION_RUNNING',
+    'NODE_EXTRA_CA_CERTS',
+    'NODE_TLS_REJECT_UNAUTHORIZED',
+    'NO_PROXY',
+    'SSL_CERT_DIR',
+    'SSL_CERT_FILE',
+    'TYPESAFE_API_KEY',
+    'USERPROFILE',
+    'all_proxy',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+  ]);
+  // PRIVACY.md names the proxy and certificate variables by a link to "What a repository can change", which names each of
+  // them, the lower-case spellings as the upper-case ones "in either case". Only a variable the plugin judges there counts.
+  assert.ok(PRIVACY.includes('(docs/limits.md#what-a-repository-can-change)'), 'PRIVACY.md does not point to where the proxy and certificate variables are named');
+  const limits = read('docs/limits.md');
+  const start = limits.indexOf('\n## What a repository can change\n');
+  assert.ok(start >= 0, 'docs/limits.md has no section "What a repository can change"');
+  const section = limits.slice(start, limits.indexOf('\n## ', start + 1));
+  const inSection = (name: string) =>
+    section.includes(`\`${name}\``) || (name !== name.toUpperCase() && section.includes(`\`${name.toUpperCase()}\``) && /in either\s+case/.test(section));
+  const route = new Set<string>(ROUTE_VARIABLES);
+  for (const variable of variables) {
+    assert.ok(named(variable) || (route.has(variable) && inSection(variable)), `PRIVACY.md does not name ${variable}, which the code reads or sets`);
+  }
+});
+
 test('what each check reads out of the code: the shapes it knows, and a shape it does not know shows as nothing', () => {
   assert.deepEqual(hostsIn("const a = 'https://API.example.com/v1'; // http://b.test"), ['https://api.example.com', 'https://b.test']);
   assert.deepEqual(waysOutIn("import x from 'node:https';\nawait import('node:net');\nawait fetch(url);\nglobalThis.fetch(url);\n$.http.fetch(url);\nnew WebSocket(u)"), ['import https', 'import net', 'fetch', 'fetch', 'WebSocket']);
   assert.deepEqual(programsIn("exitOf(run, 'mkdir', []); run('mv', []); runIn(exec, 'rm', []); const G = ['/usr/bin/grep']; `${place}/sh`"), ['mkdir', 'mv', 'rm', 'grep', 'sh']);
   assert.deepEqual(placesIn('export const a = (dir: string) => `${dir}/blobs`;\nconst g = (dir: string) => `${dir}/gc.json`;'), ['blobs', 'gc.json']);
   assert.deepEqual(dataFilesIn('told=$CLAUDE_PLUGIN_DATA/told\nheld=$CLAUDE_PLUGIN_DATA/held'), ['told', 'held']);
+  assert.deepEqual(variablesIn("await $.env.get('HOME');\nawait $.env.set( 'MARK', id);\nprocess.env.PATH;\nprocess.env['TZ'];\n$.env.get(name)"), ['HOME', 'MARK', 'PATH', 'TZ']);
+  assert.deepEqual(
+    shellVariablesIn('# $IN_A_COMMENT\nmark=${MARK:-}\nIFS= read -r line\nwhile read -r a _; do echo "$a $line $mark"; done < "$DATA/told"\nexport OUT\n[ "$1" = x ]'),
+    ['MARK', 'DATA', 'OUT'],
+  );
   const around = (text: string) => callAround(text, text.indexOf('$.http'));
   assert.equal(around('await find({ a: 1, http: (u, i) => $.http.fetch(u, i), b: [2] })'), 'find');
   assert.equal(around('await other({ http: (u) => g(u) }); find({}); x($.http)'), 'x');

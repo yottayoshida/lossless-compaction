@@ -349,9 +349,9 @@ test('the hook file wires the module, the three classic hooks and the name of th
   const before = wiring.hooks['PreCompact']?.[0];
   const after = wiring.hooks['SessionStart']?.[0];
   const prompt = wiring.hooks['UserPromptSubmit']?.[0];
-  assert.equal(before?.hooks[0]?.command, 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" before');
-  assert.equal(after?.hooks[0]?.command, 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" after');
-  assert.equal(prompt?.hooks[0]?.command, 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" prompt');
+  assert.equal(before?.hooks[0]?.command, '/bin/sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" before');
+  assert.equal(after?.hooks[0]?.command, '/bin/sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" after');
+  assert.equal(prompt?.hooks[0]?.command, '/bin/sh "${CLAUDE_PLUGIN_ROOT}/hooks/notice.sh" prompt');
   // Only after a compaction: at startup the classic hook runs before the module has set the mark.
   assert.equal(after?.matcher, 'compact');
   assert.equal(before?.matcher, undefined);

@@ -32,11 +32,13 @@ test('the variables judged are these, written out here so that one dropped from 
       'HTTP_PROXY',
       'NODE_EXTRA_CA_CERTS',
       'NODE_TLS_REJECT_UNAUTHORIZED',
+      'NO_PROXY',
       'SSL_CERT_DIR',
       'SSL_CERT_FILE',
       'all_proxy',
       'http_proxy',
       'https_proxy',
+      'no_proxy',
     ],
   );
 });

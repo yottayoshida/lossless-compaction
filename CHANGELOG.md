@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- A `NO_PROXY` or `no_proxy` that a repository's settings set stops `find`, as a proxy variable there does: measured on Claude Code 2.1.311, the plugin's requests read both and go around the proxy for a host either names (#136). The notices start with `/bin/sh` rather than an `sh` found in `PATH`, and a test holds the environment variables the code reads or sets to `PRIVACY.md`.
 - The marketplace points at the tag of the latest release, `v0.8.0`, and its commit: a new install takes that release, and what is merged after it waits for the next one, where it took the tip of `main` under the last release's number (#106, ADR 0031). CI asks this repository that the tag is that commit (`test/marketplace-tag.sh`).
 
 ## [0.8.0] - 2026-10-08
